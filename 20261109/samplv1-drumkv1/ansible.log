@@ -1,0 +1,73 @@
+
+PLAY [Requalify plugins on a Zynthian device, one set per cell] ****************
+
+TASK [The run names its plugins] ***********************************************
+ok: [zynthian.local] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+TASK [Run directory] ***********************************************************
+[WARNING]: Host 'zynthian.local' is using the discovered Python interpreter at '/zynthian/venv/bin/python3.13', but future installation of another Python interpreter could cause a different interpreter to be discovered. See https://docs.ansible.com/ansible-core/2.20/reference_appendices/interpreter_discovery.html for more information.
+changed: [zynthian.local]
+
+TASK [The cell script] *********************************************************
+changed: [zynthian.local]
+
+TASK [Zynthian's state before the stop] ****************************************
+changed: [zynthian.local]
+
+TASK [Stop Zynthian and its JACK server] ***************************************
+changed: [zynthian.local] => (item=zynthian)
+changed: [zynthian.local] => (item=a2jmidid)
+changed: [zynthian.local] => (item=jack2)
+
+TASK [One cell at a time] ******************************************************
+changed: [zynthian.local] => (item=48000/256)
+changed: [zynthian.local] => (item=96000/256)
+
+TASK [What each cell said] *****************************************************
+ok: [zynthian.local] => (item=48000/256) => {
+    "msg": [
+        "cell 48000/256 pass 1 exit 0",
+        "qualified 2, skipped 0, refused 0, crashed 0, hung 0, unmeasured 0, distributed 0, 23.2 s",
+        "plugins 2 (lv2 2), offered 2 (lv2 2), not offered 0",
+        "plugin-qualify-sync: pins in /root/requalify/20261109-samplv1-drumkv1/b48000-256/qualified.pins",
+        "cell 48000/256: 2 records"
+    ]
+}
+ok: [zynthian.local] => (item=96000/256) => {
+    "msg": [
+        "cell 96000/256 pass 1 exit 0",
+        "qualified 2, skipped 0, refused 0, crashed 0, hung 0, unmeasured 0, distributed 0, 13.1 s",
+        "plugins 2 (lv2 2), offered 2 (lv2 2), not offered 0",
+        "plugin-qualify-sync: pins in /root/requalify/20261109-samplv1-drumkv1/b96000-256/qualified.pins",
+        "cell 96000/256: 2 records"
+    ]
+}
+
+TASK [Stop Zynthian (stopping rewrites last_state.zss)] ************************
+ok: [zynthian.local]
+
+TASK [Zynthian's state back] ***************************************************
+changed: [zynthian.local]
+
+TASK [Start JACK, the MIDI bridge and Zynthian] ********************************
+changed: [zynthian.local] => (item=jack2)
+changed: [zynthian.local] => (item=a2jmidid)
+changed: [zynthian.local] => (item=zynthian)
+
+TASK [Pack the cells] **********************************************************
+[ERROR]: Task failed: Module failed: non-zero return code
+Origin: /home/pau/Devel/zeroconfigsignage/wt-plat-pi-requalify/playbooks/services/omx-pi-requalify.yml:69:7
+
+67           loop: "{{ zynthian_units | reverse | list }}"
+68
+69     - name: Pack the cells
+         ^ column 7
+
+fatal: [zynthian.local]: FAILED! => {"changed": true, "cmd": "tar -C /root/requalify/20261109-samplv1-drumkv1 -czf /root/requalify/20261109-samplv1-drumkv1.tgz --exclude=lv2 --exclude=clap b*", "delta": "0:00:00.006975", "end": "2026-11-08 23:20:16.380733", "msg": "non-zero return code", "rc": 2, "start": "2026-11-08 23:20:16.373758", "stderr": "tar: bench-1105: Cannot stat: No such file or directory\ntar: bench-1105b: Cannot stat: No such file or directory\ntar: bench-1105c: Cannot stat: No such file or directory\ntar: bench-1105d: Cannot stat: No such file or directory\ntar: bench-logs: Cannot stat: No such file or directory\ntar: bench-results: Cannot stat: No such file or directory\ntar: bench-run.log: Cannot stat: No such file or directory\ntar: Exiting with failure status due to previous errors", "stderr_lines": ["tar: bench-1105: Cannot stat: No such file or directory", "tar: bench-1105b: Cannot stat: No such file or directory", "tar: bench-1105c: Cannot stat: No such file or directory", "tar: bench-1105d: Cannot stat: No such file or directory", "tar: bench-logs: Cannot stat: No such file or directory", "tar: bench-results: Cannot stat: No such file or directory", "tar: bench-run.log: Cannot stat: No such file or directory", "tar: Exiting with failure status due to previous errors"], "stdout": "", "stdout_lines": []}
+
+PLAY RECAP *********************************************************************
+zynthian.local             : ok=10   changed=7    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

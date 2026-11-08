@@ -50,7 +50,7 @@ R
 echo 'excludepkgs=pipewire-jack-audio-connection-kit*' >> /etc/dnf/dnf.conf
 dnf -y -q makecache
 dnf -y install plugin-qualify omx-clap-host plugin-hostd jack-audio-connection-kit lilv-devel util-linux procps-ng tar xz \
-  git openssh-clients curl omx-plugins-clap omx-plugins-lv2 ${INCLUDED:-}
+  mod-host mod-host-protocol git openssh-clients curl omx-plugins-clap omx-plugins-lv2 ${INCLUDED:-}
 bash /script/channel-check.sh || exit 1
 plugin-hostd --version
 ! rpm -q pipewire-jack-audio-connection-kit-libs

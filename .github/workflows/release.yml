@@ -65,9 +65,12 @@ jobs:
           if [ -f "records/$class/$set_/provenance.json" ]; then echo "rpm-set=true" >> "$GITHUB_OUTPUT"
           else echo "records/$class/$set_ is not in the tree: no RPM"; echo "rpm-set=false" >> "$GITHUB_OUTPUT"; fi
 
+  # A release is one wave: the DEB waits for the RPM job and runs only when it passed (the organisation's release-order
+  # check). While the tree holds no Fedora set the RPM job is skipped and the DEB goes alone; with one, the DEB runs
+  # only after the RPM succeeded.
   deb:
-    needs: plan
-    if: needs.plan.outputs.from == ''
+    needs: [plan, rpm]
+    if: ${{ !cancelled() && needs.plan.outputs.from == '' && (needs.plan.outputs.rpm-set != 'true' || needs.rpm.result == 'success') }}
     uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian

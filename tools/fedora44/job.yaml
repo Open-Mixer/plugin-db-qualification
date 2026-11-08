@@ -3,23 +3,28 @@
 #
 # The Job that measured records/x86-64/fedora44 (see measure.sh). The script goes in first as a ConfigMap:
 #
-#   kubectl -n omx-worker create configmap omx-qualify-fedora44-script --from-file=tools/fedora44/measure.sh
-#   kubectl apply -f tools/fedora44/job.yaml
-#   # when /out/done exists:
-#   kubectl -n omx-worker cp <pod>:/out ./fedora44-run
+#   RUN=20261108   # the set's name; the Job, the ConfigMap, the cache directory and the branch are named for it
+#   kubectl -n omx-worker create configmap omx-qualify-fedora44-script-$RUN --from-file=tools/fedora44/measure.sh --from-file=tools/fedora44/channel-check.sh
+#   sed "s/__RUN__/$RUN/g" tools/fedora44/job.yaml | kubectl apply -f -
+#
+# The Job delivers its own records: after every stage and base it commits them to the branch records/fedora44/<RUN>
+# of this repository with the deploy key mounted at /keys, and it ends red when it could not. The state is on the
+# node-cache volume (/cache/omx-qualify/<RUN>); to continue a Job that stopped, delete it and apply it again with the
+# same RUN: the sync's state skips the plugins measured and a stamp skips the stages finished. DRY=2 in the env
+# measures two plugins and pushes to records/fedora44/dry-<RUN>.
 #
 # The namespace's pod security is baseline: no CAP_SYS_NICE and RLIMIT_RTPRIO 0, so nothing in the pod gets
 # SCHED_FIFO (the records say realtime none). PLUGINS is the worker image's set, lv2-plugins then clap-plugins.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: omx-qualify-fedora44
+  name: omx-qualify-fedora44-__RUN__
   namespace: omx-worker
   labels: {app: omx-qualify-records}
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 50400
-  ttlSecondsAfterFinished: 86400
+  activeDeadlineSeconds: 172800
+  ttlSecondsAfterFinished: 604800
   template:
     metadata:
       labels: {app: omx-qualify-records}
@@ -38,7 +43,11 @@ spec:
         command: [/bin/bash, /script/measure.sh]
         env:
         - {name: HOST_CLASS, value: x86-64}
-        - {name: GRID, value: "48000/512"}
+        - {name: SET, value: "__RUN__"}
+        - {name: BASES, value: "48000/512 96000/256"}
+        - {name: REPO, value: "git@github.com:FreeMixer/plugin-db-qualification.git"}
+        # the omx effects come with omx-plugins; these are the instruments the console ships, measured with them first
+        - {name: INCLUDED, value: "clap-surge-xt clap-dexed clap-obxf clap-six-sines clap-monique-monosynth clap-ultramaster-kr106 clap-jc303 clap-openwurli clap-aeolus_plugin clap-rustydrumgizmo"}
         - {name: MEMORY_LIMIT, value: "6G"}
         - name: PLUGINS
           value: >-
@@ -195,8 +204,15 @@ spec:
         # JACK keeps its servers in /dev/shm: the runtime's 64 MiB holds one, and a second (the isolated step's private
         # server beside the pod's own) dies of SIGBUS, taking the other with it
         - {name: shm, mountPath: /dev/shm}
+        - {name: cache, mountPath: /cache}
+        - {name: key, mountPath: /keys, readOnly: true}
       volumes:
       - name: script
-        configMap: {name: omx-qualify-fedora44-script}
+        configMap: {name: omx-qualify-fedora44-script-__RUN__}
       - name: shm
         emptyDir: {medium: Memory, sizeLimit: 2Gi}
+      - name: cache
+        persistentVolumeClaim: {claimName: node-cache-h2}
+      # the deploy key of this repository (write access), mounted not read
+      - name: key
+        secret: {secretName: omx-worker-omx-qualification-records-deploy-key, defaultMode: 0400}

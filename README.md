@@ -19,7 +19,7 @@ until it is measured again.
 | host class | machine | arch | distribution | package | records | plugin-qualify |
 | --- | --- | --- | --- | --- | --- | --- |
 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | arm64 | Debian trixie and bookworm | `plugin-db-qualification-rpi5-zynthian-vangelis` (deb) | 1863 | 0.19.0, with the adapter, isolated, pool and memory steps under 0.19.1 |
-| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44` (rpm) | none | not current: the 0.18.5 set was dropped |
+| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44` (rpm) | 1109, at 96000/256 | 0.19.1 |
 
 There is no Debian x86-64 class and no Fedora rpi5 class, so there is no `.deb` for x86-64 and no `.rpm` for rpi5.
 
@@ -91,7 +91,7 @@ run; `--force` measures everything.
 
 The channel is `https://www.openmixer.org/deb/debian/trixie/`; add it with the `openmixer-release` package.
 
-On Fedora 44 x86_64, once the x86-64 set is current again:
+On Fedora 44 x86_64:
 
 ```
 dnf install https://www.openmixer.org/rpm/openmixer-release.noarch.rpm
@@ -128,7 +128,7 @@ date. Commit, then tag `v<version>`: the tag must equal the `debian/changelog` v
 The x86-64 set is measured in a pod, not on a desk: `tools/fedora44/job.yaml` is a Job in the cluster's
 `omx-worker` namespace, and `tools/fedora44/measure.sh` installs the channel's plugin-qualify, plugin-hostd and
 omx-clap-host with the worker image's plugin set (platform `baked-versions.yml`) in `fedora:44`, starts a JACK
-server of the pod's own (dummy driver, 48000/512) and runs `plugin-qualify-sync --system`. Copy `/out` out of the pod
+server of the pod's own per base (dummy driver; 48000/512, then 96000/256) and runs `plugin-qualify-sync --system`. Copy `/out` out of the pod
 and feed the qualification directory of its `var-lib-omx.tar.xz` to
 
 ```

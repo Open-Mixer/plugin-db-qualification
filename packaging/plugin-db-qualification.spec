@@ -10,7 +10,7 @@
 %global set_dir %{_datadir}/omx/qualification/%{host_class}/%{set_name}
 
 Name: plugin-db-qualification
-Version: 2026110602
+Version: 2026110901
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later

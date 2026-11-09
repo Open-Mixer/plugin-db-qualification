@@ -13,7 +13,7 @@
 # tree holds. An empty list (%%{nil}) builds no package, and the release then skips the RPM.
 
 %global host_class x86-64
-%global sets fedora44-48000-512 fedora44-48000-64 fedora44-96000-128 fedora44-96000-256
+%global sets fedora44-48000-512 fedora44-48000-64 fedora44-96000-128 fedora44-96000-256 fedora44-96000-512
 %global qual_dir %{_datadir}/omx/qualification/%{host_class}
 # the plugin-qualify that measured the sets, up to its next minor
 %global qualify_requires (plugin-qualify >= 0.19.0 with plugin-qualify < 0.20)

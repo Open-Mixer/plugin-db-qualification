@@ -1,0 +1,189 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "in.lsp-plug.return_stereo"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+    "files": [
+      {
+        "path": "lsp-plugins.clap",
+        "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "9f8c378d8832bfbe0ed6b7746afe341b71d3d8a3fff7c30308306e8157fadd03"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
+  },
+  "cost": [
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 4.07031,
+          "percentile": {
+            "p": 95,
+            "value": 5.9375
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 17780,
+          "afterActivateKb": 18132,
+          "atRestKb": 18336,
+          "secondInstanceKb": 120,
+          "firstInstanceKb": 18336,
+          "perInstanceKb": 120
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T09:38:23+00:00",
+  "probe": {
+    "file": "in.lsp-plug.return_stereo@unversioned-823d2c8dab8c.default.probe.json",
+    "sha256": "a458a485ae7273275fe906911dfbbb01ef722c94c585a403f7b8a695e1ce84d9",
+    "bytes": 10385,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 15.85,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T093823Z-6687-a03cc231",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
+      }
+    ]
+  }
+}

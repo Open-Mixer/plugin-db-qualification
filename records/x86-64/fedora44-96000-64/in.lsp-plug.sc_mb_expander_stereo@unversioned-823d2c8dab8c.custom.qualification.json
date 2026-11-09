@@ -1,0 +1,196 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "in.lsp-plug.sc_mb_expander_stereo"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+    "files": [
+      {
+        "path": "lsp-plugins.clap",
+        "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "144636be1ea7ce98828d8c62429dc8d708ac0def1cb4320bad824f1907e3cc56"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 1,
+            "syscalls": 1,
+            "locks": 1
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 1798.53,
+          "percentile": {
+            "p": 95,
+            "value": 2522.41
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 1,
+          "locks": 1,
+          "syscalls": 1,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "malloc",
+            "pthread_mutex_lock",
+            "nanosleep"
+          ]
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 19556,
+          "afterActivateKb": 24716,
+          "atRestKb": 26792,
+          "secondInstanceKb": 6748,
+          "firstInstanceKb": 26792,
+          "perInstanceKb": 6748
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T09:39:59+00:00",
+  "probe": {
+    "file": "in.lsp-plug.sc_mb_expander_stereo@unversioned-823d2c8dab8c.custom.probe.json",
+    "sha256": "5af381eef79c61a2fb899730a861060c454faadedd86b15e7292bc1c3bc7a9d1",
+    "bytes": 10506,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 12.77,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T093959Z-7537-a0a66c23",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 5,
+          "xruns": 2,
+          "midiInputsLinked": 0
+        }
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

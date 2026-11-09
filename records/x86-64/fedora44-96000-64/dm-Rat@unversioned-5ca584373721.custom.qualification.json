@@ -1,0 +1,177 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "dm-Rat"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/dm_rat.clap",
+    "sha256": "5ca5843737213ab1a8775fd9256699a0a051bfb60ec710a449cf1660270bb897",
+    "files": [
+      {
+        "path": "dm_rat.clap",
+        "sha256": "5ca5843737213ab1a8775fd9256699a0a051bfb60ec710a449cf1660270bb897"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "76a8503b9f7b0a746b241b596325811b276d76b59f87bd0bf04972beab725bd2"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 71.0625,
+          "percentile": {
+            "p": 95,
+            "value": 82.5789
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 4784,
+          "afterActivateKb": 4860,
+          "atRestKb": 5072,
+          "secondInstanceKb": 160,
+          "firstInstanceKb": 5072,
+          "perInstanceKb": 160
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T09:30:08+00:00",
+  "probe": {
+    "file": "dm-Rat@unversioned-5ca584373721.custom.probe.json",
+    "sha256": "50ce9c0cc82d3b8d2a2816e4fcdebe84b614dab9c10b7ef0dff736deaf06f6b7",
+    "bytes": 10385,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 15.27,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T093008Z-34c9-014342ea",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

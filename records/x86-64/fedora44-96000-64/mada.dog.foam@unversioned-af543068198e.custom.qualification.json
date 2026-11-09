@@ -1,0 +1,195 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "mada.dog.foam"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/Foam.clap",
+    "sha256": "af543068198e6b18fba043c0c1467975a8f7f0af4378289e2bc0126b6f446976",
+    "files": [
+      {
+        "path": "Foam.clap",
+        "sha256": "af543068198e6b18fba043c0c1467975a8f7f0af4378289e2bc0126b6f446976"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "d8e5bdeeb2ddf104e0f6030e1e74c6067e7c3d7f0d06eb6e04a1831ff31faad5"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 3,
+            "syscalls": 0,
+            "locks": 0
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 1
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "clap",
+          "allocations": 3,
+          "locks": 0,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 5104,
+          "afterActivateKb": 5108,
+          "atRestKb": 5172,
+          "secondInstanceKb": 332,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T09:18:55+00:00",
+  "probe": {
+    "file": "mada.dog.foam@unversioned-af543068198e.custom.probe.json",
+    "sha256": "6767b85a2460e34a26c882ce11e9c0d2b58baf342879b600ce5b48a85e6d3aaa",
+    "bytes": 10481,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 5.21,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T091855Z-1986-60a42e4f",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 13.666666666666666,
+          "xruns": 0,
+          "midiInputsLinked": 1
+        }
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

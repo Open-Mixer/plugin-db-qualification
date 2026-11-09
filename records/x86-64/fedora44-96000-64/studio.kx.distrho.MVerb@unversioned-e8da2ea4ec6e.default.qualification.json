@@ -1,0 +1,202 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "studio.kx.distrho.MVerb"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/MVerb.clap",
+    "sha256": "e8da2ea4ec6e3284bdd817e98e4d7470ef24fe497c74a6eeb01c85c3909b560d",
+    "files": [
+      {
+        "path": "MVerb.clap",
+        "sha256": "e8da2ea4ec6e3284bdd817e98e4d7470ef24fe497c74a6eeb01c85c3909b560d"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "d373d683727a79813b07355cd46ffe03b10cb4e8db9baa8422351b05eea5ceea"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 0,
+            "syscalls": 0,
+            "locks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
+  },
+  "cost": [
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 481.367,
+          "percentile": {
+            "p": 95,
+            "value": 521.664
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 512,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock"
+          ]
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 15632,
+          "afterActivateKb": 15632,
+          "atRestKb": 15632,
+          "secondInstanceKb": 5632,
+          "firstInstanceKb": 15632,
+          "perInstanceKb": 5632
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T09:20:00+00:00",
+  "probe": {
+    "file": "studio.kx.distrho.MVerb@unversioned-e8da2ea4ec6e.default.probe.json",
+    "sha256": "6e2b12ceb3f0bca274e112d22a6d1651494593d6619211fac4ad4af82eace0e0",
+    "bytes": 10758,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 4.72,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T092000Z-1d29-5fc6363c",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      }
+    ]
+  }
+}

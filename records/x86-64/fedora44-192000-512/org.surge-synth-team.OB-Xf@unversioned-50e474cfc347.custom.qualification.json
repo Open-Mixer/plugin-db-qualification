@@ -1,0 +1,214 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "org.surge-synth-team.OB-Xf"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/OB-Xf.clap",
+    "sha256": "50e474cfc347fc49c9ce2212f82ae8cfecb5537b9a7a0371020ada21f613ae27",
+    "files": [
+      {
+        "path": "OB-Xf.clap",
+        "sha256": "50e474cfc347fc49c9ce2212f82ae8cfecb5537b9a7a0371020ada21f613ae27"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "971fa4b0a4c2419aac412ea0f0549c980f015168f2bf5e8d74ddcd9a508b011c"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 131584,
+            "syscalls": 0,
+            "locks": 65536
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 513,
+            "syscalls": 0,
+            "locks": 0
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 192000,
+        "quantum": 512,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 42
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 131584,
+          "locks": 65536,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock"
+          ]
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "midi",
+          "allocations": 513,
+          "locks": 0,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 11200,
+          "afterActivateKb": 11720,
+          "atRestKb": 11856,
+          "secondInstanceKb": 2552,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T10:26:04+00:00",
+  "probe": {
+    "file": "org.surge-synth-team.OB-Xf@unversioned-50e474cfc347.custom.probe.json",
+    "sha256": "7482eedf1265e43b44747083ab6db776c232dc6dafb2edb9438d7582b8284dda",
+    "bytes": 10891,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 23.17,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T102604Z-759-02757fc5",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 4,
+          "xruns": 0,
+          "midiInputsLinked": 1
+        }
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

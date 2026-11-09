@@ -1,0 +1,207 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.AaronAnderson.WaveTerrainSynth"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/Terrain.clap",
+    "sha256": "a4a150f6b795057e64ea0440043b4c62bf6e35305c3965fc7ed2c6938b809760",
+    "files": [
+      {
+        "path": "Terrain.clap",
+        "sha256": "a4a150f6b795057e64ea0440043b4c62bf6e35305c3965fc7ed2c6938b809760"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "c27892af2fb80e638718ce525836c218ac1397d496459e3ed836c164ad139e21"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 2048,
+            "syscalls": 0,
+            "locks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 11540,
+            "syscalls": 9,
+            "locks": 11299
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
+  },
+  "cost": [
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 192000,
+        "quantum": 512,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 900
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 2048,
+          "locks": 512,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "malloc",
+            "pthread_mutex_lock",
+            "free",
+            "free",
+            "free",
+            "malloc",
+            "pthread_mutex_lock",
+            "free",
+            "free",
+            "free",
+            "malloc",
+            "pthread_mutex_lock",
+            "free",
+            "free",
+            "free",
+            "malloc"
+          ]
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "midi",
+          "allocations": 11540,
+          "locks": 11299,
+          "syscalls": 9
+        },
+        "memory": {
+          "afterInstantiateKb": 30100,
+          "afterActivateKb": 30344,
+          "atRestKb": 156764,
+          "secondInstanceKb": 147700,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T10:41:14+00:00",
+  "probe": {
+    "file": "com.AaronAnderson.WaveTerrainSynth@unversioned-a4a150f6b795.default.probe.json",
+    "sha256": "3f08d954c9db87fbcd29c1c286dde1ed4fa6f1c613a143d64b22388e84ffaf92",
+    "bytes": 10734,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 3.33,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T104114Z-29c5-aa3e2522",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      }
+    ]
+  }
+}

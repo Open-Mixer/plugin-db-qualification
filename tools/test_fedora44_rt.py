@@ -27,7 +27,8 @@ class RealTime(unittest.TestCase):
             self.assertNotIn("-r", args.split())
 
     def test_a_base_without_sched_fifo_is_refused(self):
-        self.assertIn('chrt -p "$jpid" | grep -q SCHED_FIFO', MEASURE)
+        self.assertIn("for t in /proc/${jpid:-0}/task/*; do chrt -p", MEASURE)
+        self.assertIn('[ "$fifo" -eq 0 ]', MEASURE)
         self.assertRegex(MEASURE, r"not SCHED_FIFO[^\n]*\n\s*kill \$sup; pkill -x jackd; return 1")
 
 

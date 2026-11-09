@@ -138,10 +138,15 @@ C
   sup=$!
   sleep 3
   jpid=$(pgrep -x jackd | head -1)
-  { echo "base $cell: jackd pid ${jpid:-none}"; [ -n "$jpid" ] && chrt -p "$jpid"; echo "ulimit -r $(ulimit -r) -l $(ulimit -l)"; } >> $out/rt.txt 2>&1
+  # jack2 keeps its main thread at SCHED_OTHER and runs its audio and driver threads at SCHED_FIFO: every thread is
+  # read; memory is locked through IPC_LOCK, which lifts the memlock limit for mlock whatever ulimit -l says
+  fifo=$(for t in /proc/${jpid:-0}/task/*; do chrt -p "${t##*/}" 2>/dev/null; done | grep -c 'SCHED_FIFO')
+  { echo "base $cell: jackd pid ${jpid:-none}, $fifo thread(s) at SCHED_FIFO"
+    for t in /proc/${jpid:-0}/task/*; do echo "  tid ${t##*/} $(cat $t/comm 2>/dev/null): $(chrt -p "${t##*/}" 2>/dev/null | tr '\n' ' ')"; done
+    echo "ulimit -r $(ulimit -r) -l $(ulimit -l); CapEff $(grep CapEff /proc/self/status | awk '{print $2}')"; } >> $out/rt.txt 2>&1
   cp $out/rt.txt $dir/rt.txt 2>/dev/null || true
-  if [ -z "$jpid" ] || ! chrt -p "$jpid" | grep -q SCHED_FIFO; then
-    echo "stage $stage $cell: jackd is not SCHED_FIFO ($(chrt -p "${jpid:-0}" 2>&1 | tail -1)); not measured: the reference tier needs real-time priority"
+  if [ -z "$jpid" ] || [ "$fifo" -eq 0 ]; then
+    echo "stage $stage $cell: jackd is not SCHED_FIFO (no thread of pid ${jpid:-none} is); not measured: the reference tier needs real-time priority"
     kill $sup; pkill -x jackd; return 1
   fi
   # a plugin whose admission or isolated step found no JACK server (resp -201, isolated.no-host) is dropped from the

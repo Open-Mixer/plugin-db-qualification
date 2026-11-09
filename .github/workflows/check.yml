@@ -1,8 +1,9 @@
 name: check
 
 # Every record set under records/ read as plugin-qualify-sync reads it (tools/check-records.py): its provenance names
-# its set and host class, every record has its probe output beside it with the size and SHA-256 it names, and nothing
-# else is shipped. The RPM's %check and the release run the same script.
+# its set and host class, every record has its probe output beside it with the size and SHA-256 it names, a set named
+# for a cell holds only that cell, and nothing else is shipped. The RPM's %check and the release run the same script.
+# tools/sets.py check holds the packages to the sets: one package per set, for every set.
 
 on:
   push:
@@ -22,18 +23,14 @@ jobs:
       - run: python3 -m unittest tools/test_check_records.py
       - run: python3 -m unittest tools/test_fedora44_channel_check.py
       - run: python3 -m unittest tools/test_fedora44_deliver.py
-      - name: The spec names a set this tree holds
-        run: |
-          set -euo pipefail
-          spec=packaging/plugin-db-qualification.spec
-          class=$(sed -n 's/^%global host_class //p' "$spec")
-          set_=$(sed -n 's/^%global set_name //p' "$spec")
-          # a set that is not current is dropped and the spec then builds nothing (release.yml skips the RPM)
-          test -f "records/$class/$set_/provenance.json" || echo "records/$class/$set_ is not in the tree: no RPM this release"
-          # one version for both formats: the tag must equal both
-          deb=$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' debian/changelog)
-          rpm=$(sed -n 's/^Version: *//p' "$spec")
-          [ "$deb" = "$rpm" ] || { echo "::error::debian/changelog is $deb but the spec is $rpm; a tag must equal both"; exit 1; }
+      - run: python3 -m unittest tools/test_build_package.py
+      - run: python3 -m unittest tools/test_sets.py
+      - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
+      # every set under records/ is built by one package (the spec's %global sets, or a debian/control stanza with its
+      # own install file), every set they name is in the tree, and the spec's Version is debian/changelog's: a tag
+      # must equal both
+      - name: The packages build the sets this tree holds
+        run: python3 tools/sets.py check
 
   # the commit messages, private references and layout every FreeMixer repository is held to
   public-sources:

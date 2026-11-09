@@ -1,11 +1,12 @@
 name: release
 
-# A version tag builds the records package (Architecture: all, from debian/), lints it, proves it installs
-# in Debian trixie on arm64 beside plugin-qualify from the channel and that plugin-qualify-sync --system takes
-# plugins from it, then signs it and publishes it into the deb/ tree of the FreeMixer Pages repository, and
-# attaches it to the GitHub release. The same tag builds the Fedora set's RPM (noarch, from
-# packaging/plugin-db-qualification.spec, whose Version is the tag's too), publishes it into the rpm/ tree, and
-# proves in Fedora 44 that plugin-qualify-sync --system takes the channel's own plugins from it. A manual run builds and proves the same and publishes nothing unless
+# A version tag builds the records packages, one per set (a set is per machine class, per sample rate and per
+# quantum; tools/sets.py names them): the Debian sets' (Architecture: all, from debian/) are linted, each is proven
+# alone in Debian trixie on arm64 beside plugin-qualify from the channel (plugin-qualify-sync --system takes plugins
+# from it), then signed, published into the deb/ tree of the FreeMixer Pages repository, and attached to the GitHub
+# release. The same tag builds the Fedora sets' RPMs (noarch, one subpackage per set of
+# packaging/plugin-db-qualification.spec, whose Version is the tag's too), publishes them into the rpm/ tree, and
+# proves each alone in Fedora 44 the same way (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves the same and publishes nothing unless
 # `publish` is set, and even then only on a tag. The build and the publish are in FreeMixer/.github; the
 # secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
@@ -42,6 +43,8 @@ jobs:
       from: ${{ steps.read.outputs.from }}
       at: ${{ steps.read.outputs.at }}
       rpm-set: ${{ steps.read.outputs.rpm-set }}
+      rpm-names: ${{ steps.read.outputs.rpm-names }}
+      deb-names: ${{ steps.read.outputs.deb-names }}
     steps:
       - uses: actions/checkout@v4
       - id: read
@@ -53,17 +56,18 @@ jobs:
             [ -n "$from" ] && [ -n "$at" ] || { echo "::error::debian/republish needs a from and an at line"; exit 1; }
             echo "from=$from" >> "$GITHUB_OUTPUT"
             echo "at=$at" >> "$GITHUB_OUTPUT"
+            # the repack takes one package by name (the repack job's PKG); the proofs after it prove every Debian set
+            debs=$(python3 tools/sets.py names deb)
+            [ "$debs" = plugin-db-qualification-rpi5-zynthian-vangelis ] ||
+              { echo "::error::a republish repacks plugin-db-qualification-rpi5-zynthian-vangelis alone; this tree's Debian sets are: $debs"; exit 1; }
             echo "republish $from (channel $at)"
           else
             echo "build from debian/"
           fi
-          # the RPM is built only while the tree holds the set its spec names: a class whose set is not current ships
-          # nothing until it is measured again
-          spec=packaging/plugin-db-qualification.spec
-          class=$(sed -n 's/^%global host_class //p' "$spec")
-          set_=$(sed -n 's/^%global set_name //p' "$spec")
-          if [ -f "records/$class/$set_/provenance.json" ]; then echo "rpm-set=true" >> "$GITHUB_OUTPUT"
-          else echo "records/$class/$set_ is not in the tree: no RPM"; echo "rpm-set=false" >> "$GITHUB_OUTPUT"; fi
+          # every set is its own package; the RPM is built only while the spec lists a set: a class whose sets are not
+          # current ships nothing until it is measured again
+          python3 tools/sets.py check
+          python3 tools/sets.py github-output
 
   # A release is one wave: the DEB waits for the RPM job and runs only when it passed (the organisation's release-order
   # check). While the tree holds no Fedora set the RPM job is skipped and the DEB goes alone; with one, the DEB runs
@@ -75,7 +79,8 @@ jobs:
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
-      binary-names: plugin-db-qualification-rpi5-zynthian-vangelis
+      # every Debian set's package (tools/sets.py names deb)
+      binary-names: ${{ needs.plan.outputs.deb-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
       # the records are data for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
       # bookworm images before it):
@@ -231,7 +236,7 @@ jobs:
     needs: [deb, repack]
     if: ${{ !cancelled() && (needs.deb.result == 'success' || needs.repack.result == 'success') }}
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
     container:
@@ -255,43 +260,25 @@ jobs:
 
       - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
 
-      - name: Install the package
+      # each set alone: installed, plugin-qualify-sync --system takes plugins from it and measures none of the set's,
+      # removed (tools/prove-set.sh; a container has no device tree, so the host class is the settings file's, and a
+      # set of one cell sets the sync's grid to it)
+      - name: Each set installed, and plugin-qualify-sync --system applies its records
         run: |
           set -euo pipefail
-          chmod -R a+rX pkgs
-          apt-get install -y --no-install-recommends ./pkgs/trixie/plugin-db-qualification-rpi5-zynthian-vangelis_*_all.deb lv2vocoder
-          have=$(dpkg-query -W -f '${Version}' plugin-qualify)
-          echo "plugin-qualify $have"
-          dpkg --compare-versions "$have" ge 0.19.0
-          test -f /usr/share/omx/qualification/rpi5/zynthian-vangelis/provenance.json
-          n=$(ls /usr/share/omx/qualification/rpi5/zynthian-vangelis/*.qualification.json | wc -l)
-          echo "$n records installed"
-          [ "$n" -eq "$(ls records/rpi5/zynthian-vangelis/*.qualification.json | wc -l)" ]
+          apt-get install -y --no-install-recommends python3
+          python3 tools/sets.py prove deb pkgs
 
-      # a container has no device tree, so the host class is the settings file's; no plugin-hostd listens
-      - name: plugin-qualify-sync --system applies the records
-        run: |
-          set -euo pipefail
-          mkdir -p /etc/omx
-          printf 'host_class rpi5\nlv2_extra\nhostd_port 0\n' > /etc/omx/qualify.conf
-          plugin-qualify-sync --system 2>&1 | tee sync.log
-          applied=$(grep -c 'distributed: .*: applied' sync.log || true)
-          echo "applied: $applied"
-          [ "$applied" -gt 0 ] || { echo "::error::no plugin was taken from the records"; exit 1; }
-          if grep -E 'distributed: .*(binary differs|not applied|measured here)' sync.log; then
-            echo "::error::a plugin of the set was measured instead of taken from the records"; exit 1
-          fi
-          ls /var/lib/omx/qualification/*.qualification.json | wc -l
-
-  # The Fedora set: one noarch RPM, built from packaging/ by the organisation's RPM path (its %check runs
-  # tools/check-records.py over the installed set), signed and published into the rpm/ tree on a tag.
+  # The Fedora sets: one noarch RPM per set, built from packaging/ by the organisation's RPM path (its %check runs
+  # tools/check-records.py over each installed set), signed and published into the rpm/ tree on a tag.
   rpm:
     needs: plan
     if: needs.plan.outputs.rpm-set == 'true'
     uses: FreeMixer/.github/.github/workflows/build-rpm.yml@v1
     with:
       package-name: plugin-db-qualification
-      binary-names: plugin-db-qualification-x86-64-fedora44
+      # every Fedora set's subpackage (tools/sets.py names rpm)
+      binary-names: ${{ needs.plan.outputs.rpm-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
       # noarch data: built once; no mod-host, no channel BuildRequires
       arch-matrix: '["x86_64"]'
@@ -299,17 +286,17 @@ jobs:
       channel-deps: false
     secrets: inherit
 
-  # The RPM installed where it is used: Fedora 44 x86_64 with plugin-qualify and the channel's omx-plugins at the
-  # version the set measured (provenance.json). A container has no device tree, and an x86_64 machine never has one,
-  # so the host class is the settings file's. The sync takes the omx plugins from the records and measures nothing.
-  # When the channel's omx-plugins of that version is rebuilt with other bytes this step fails with `binary
-  # differs`: the set is then due to be measured again.
+  # Each RPM installed where it is used, one set at a time: Fedora 44 x86_64 with plugin-qualify and the channel's
+  # omx-plugins at the version the set measured (its provenance.json). A container has no device tree, and an x86_64
+  # machine never has one, so the host class is the settings file's. The sync takes the omx plugins from the records
+  # and measures nothing. When the channel's omx-plugins of that version is rebuilt with other bytes this step fails
+  # with `binary differs`: the set is then due to be measured again.
   rpm-installed:
     name: Install and sync (Fedora 44, x86_64)
     needs: rpm
     if: ${{ !cancelled() && needs.rpm.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
     container:
@@ -327,31 +314,9 @@ jobs:
 
       - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
 
-      - name: Install the package
+      - name: Each set installed, and plugin-qualify-sync --system applies its records
         run: |
           set -euo pipefail
-          set_dir=records/x86-64/fedora44
-          # fedora:44 has no python3; the next line reads provenance.json with it
+          # fedora:44 has no python3; tools/sets.py and the provenance read need it
           dnf install -y --setopt=install_weak_deps=False python3
-          ver=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1].rsplit("-",1)[0])' "$set_dir/provenance.json")
-          dnf install -y --setopt=install_weak_deps=False ./pkgs/plugin-db-qualification-x86-64-fedora44-*.noarch.rpm \
-            "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
-          rpm -q plugin-qualify omx-plugins-clap omx-plugins-lv2
-          test -f /usr/share/omx/qualification/x86-64/fedora44/provenance.json
-          n=$(ls /usr/share/omx/qualification/x86-64/fedora44/*.qualification.json | wc -l)
-          echo "$n records installed"
-          [ "$n" -eq "$(ls "$set_dir"/*.qualification.json | wc -l)" ]
-
-      - name: plugin-qualify-sync --system applies the records
-        run: |
-          set -euo pipefail
-          mkdir -p /etc/omx
-          printf 'host_class x86-64\nclap_extra /usr/lib64/clap\nhostd_port 0\n' > /etc/omx/qualify.conf
-          plugin-qualify-sync --system 2>&1 | tee sync.log
-          applied=$(grep -c 'distributed: .*: applied' sync.log || true)
-          echo "applied: $applied"
-          [ "$applied" -gt 0 ] || { echo "::error::no plugin was taken from the records"; exit 1; }
-          if grep -E 'distributed: .*(binary differs|not applied|measured here)' sync.log; then
-            echo "::error::a plugin of the set was measured instead of taken from the records"; exit 1
-          fi
-          ls /var/lib/omx/qualification/*.qualification.json | wc -l
+          python3 tools/sets.py prove rpm pkgs

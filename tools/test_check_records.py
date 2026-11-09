@@ -134,5 +134,65 @@ class ComparisonRecords(unittest.TestCase):
         self.assertEqual(self.problems(), [])
 
 
+class OneCellSets(unittest.TestCase):
+    """A set named <set>-<rate>-<quantum> holds only that cell: its records measured it and its provenance names it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.set = os.path.join(self.tmp.name, "x86-64", "t-48000-512")
+        os.makedirs(self.set)
+        self.prov = {"schema": check.PROVENANCE_SCHEMA, "set": "t-48000-512", "hostClass": "x86-64", "grid": "48000/512",
+                     "package": {"name": "plugin-db-qualification-x86-64-t-48000-512"}, "hostProfile": "omx-clap-host"}
+        self.write("provenance.json", self.prov)
+        self.add_record("a", [(48000, 512)])
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write(self, name, obj):
+        with open(os.path.join(self.set, name), "w", encoding="utf-8") as f:
+            json.dump(obj, f)
+
+    def add_record(self, name, cells):
+        probe = name.encode()
+        with open(os.path.join(self.set, f"{name}.probe.json"), "wb") as f:
+            f.write(probe)
+        self.write(f"{name}.default.qualification.json", {
+            "schema": check.RECORD_SCHEMA, "binary": {"path": "a.so", "files": [{"path": "a.so", "sha256": "0" * 64}]},
+            "verdicts": [{"host": "omx-clap-host"}],
+            "measurements": {"grid": [{"rate": r, "quantum": q, "outcome": "probe.ok"} for r, q in cells]},
+            "probe": {"file": f"{name}.probe.json", "bytes": len(probe), "sha256": hashlib.sha256(probe).hexdigest()}})
+
+    def problems(self):
+        return check.check_set(self.set)[0]
+
+    def test_a_set_of_its_cell_passes(self):
+        self.assertEqual(self.problems(), [])
+
+    def test_a_record_of_another_cell_is_refused(self):
+        self.add_record("b", [(96000, 256)])
+        self.assertTrue(any("b.default.qualification.json: measured 96000/256, not 48000/512" in p for p in self.problems()))
+
+    def test_a_record_with_no_grid_is_refused(self):
+        self.add_record("c", [])
+        self.assertTrue(any("c.default.qualification.json: measured no cell, not 48000/512" in p for p in self.problems()))
+
+    def test_a_record_that_also_measured_other_cells_passes(self):
+        self.add_record("d", [(48000, 256), (48000, 512)])
+        self.assertEqual(self.problems(), [])
+
+    def test_the_provenance_names_the_cell(self):
+        self.write("provenance.json", {**self.prov, "grid": "96000/256"})
+        self.assertTrue(any("its grid '96000/256' does not name 48000/512" in p for p in self.problems()))
+        self.write("provenance.json", {k: v for k, v in self.prov.items() if k != "grid"})
+        self.assertTrue(any("its grid None does not name 48000/512" in p for p in self.problems()))
+
+    def test_a_set_that_names_no_cell_is_not_held_to_one(self):
+        self.assertIsNone(check.set_cell("zynthian-vangelis"))
+        self.assertEqual(check.set_cell("zynthian-vangelis-48000-256"), (48000, 256))
+        self.assertEqual(check.grid_cells("48000/256,96000/256; adapter passes at 48000/128"), {(48000, 256), (96000, 256), (48000, 128)})
+        self.assertEqual(check.grid_cells([{"rate": 48000, "quantum": 512}, "96000/256"]), {(48000, 512), (96000, 256)})
+
+
 if __name__ == "__main__":
     unittest.main()

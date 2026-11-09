@@ -17,13 +17,16 @@ Without arguments every set under records/ is checked. A set passes when:
   omx-clap-host, plugin-hostd, mod-host and jalv with the same checks), and a set that holds them holds their
   comparison-summary.json, a publishable plugin-qualify.comparison-summary/1 of exactly those records, in which mod-host
   and jalv ran: a comparison without its references is never shipped;
-- nothing else is in the directory (no *.unmeasured.json: an unmeasured record never applies).
+- nothing else is in the directory (no *.unmeasured.json: an unmeasured record never applies);
+- a set of one cell, named <set>-<rate>-<quantum> (fedora44-48000-512), holds only records whose measurement grid
+  holds that cell, and its provenance's grid names it: a set is per machine class, per sample rate and per quantum.
 
 The exit code is 0 when every set passes and 1 otherwise; each problem is printed on its own line.
 """
 import hashlib
 import json
 import os
+import re
 import sys
 
 RECORD = ".qualification.json"
@@ -40,7 +43,32 @@ CHECKS = {"loads", "instantiates", "output", "cycles", "soak", "rtSafe"}
 FIGURES = {"cpu", "latency"}
 CHECK_RESULTS = {"pass", "fail", "not-observable", "not-run"}
 FIGURE_RESULTS = {"measured", "not-observable", "not-run"}
+CELL_SET = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 COUNTS = ("loads", "instantiates", "output", "runsClean", "rtSafe", "rtObserved", "crashes")
+
+
+def set_cell(set_name):
+    """The (rate, quantum) a set of one cell is named for (fedora44-48000-512), or None for a set that names none."""
+    m = CELL_SET.search(set_name)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def grid_cells(grid):
+    """The cells a provenance's grid names: "48000/512", "48000/256,96000/256", or a list of those or of {rate, quantum}."""
+    if isinstance(grid, str):
+        return {(int(r), int(q)) for r, q in re.findall(r"([0-9]+)/([0-9]+)", grid)}
+    cells = set()
+    for g in grid if isinstance(grid, list) else []:
+        if isinstance(g, dict) and isinstance(g.get("rate"), int) and isinstance(g.get("quantum"), int):
+            cells.add((g["rate"], g["quantum"]))
+        elif isinstance(g, str):
+            cells |= grid_cells(g)
+    return cells
+
+
+def record_cells(rec):
+    """The cells a qualification record measured (measurements.grid)."""
+    return {(g.get("rate"), g.get("quantum")) for g in ((rec.get("measurements") or {}).get("grid") or []) if isinstance(g, dict)}
 
 
 def comparison_problems(rec):
@@ -148,6 +176,9 @@ def check_set(path):
     host = prov.get("hostProfile")
     if not isinstance(host, str) or not host:
         bad("provenance.json", "names no hostProfile")
+    cell = set_cell(set_name)
+    if cell is not None and cell not in grid_cells(prov.get("grid")):
+        bad("provenance.json", f"its grid {prov.get('grid')!r} does not name {cell[0]}/{cell[1]}, the cell of the set's name")
 
     names = sorted(os.listdir(path))
     judged = set()
@@ -182,6 +213,9 @@ def check_set(path):
             continue
         if rec.get("schema") != RECORD_SCHEMA:
             bad(name, f"schema is {rec.get('schema')!r}")
+        if cell is not None and cell not in record_cells(rec):
+            cells = ", ".join(f"{r}/{q}" for r, q in sorted(record_cells(rec), key=str)) or "no cell"
+            bad(name, f"measured {cells}, not {cell[0]}/{cell[1]}, the cell of the set's name")
         binary = rec.get("binary") or {}
         files = binary.get("files")
         if not isinstance(binary.get("path"), str) or not isinstance(files, list) or not files:

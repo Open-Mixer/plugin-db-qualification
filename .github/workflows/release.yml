@@ -1,21 +1,18 @@
 name: release
 
-# A version tag builds the records packages, one per set (a set is per machine class, per sample rate and per
-# quantum; tools/sets.py names them): the Debian sets' (Architecture: all, from debian/) are linted, each is proven
-# alone in Debian trixie on arm64 beside plugin-qualify from the channel (plugin-qualify-sync --system takes plugins
-# from it), then signed, published into the deb/ tree of the FreeMixer Pages repository, and attached to the GitHub
-# release. The same tag builds the Fedora sets' RPMs (noarch, one subpackage per set of
-# packaging/plugin-db-qualification.spec, whose Version is the tag's too), publishes them into the rpm/ tree, and
-# proves each alone in Fedora 44 the same way (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves the same and publishes nothing unless
-# `publish` is set, and even then only on a tag. The build and the publish are in FreeMixer/.github; the
-# secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
+# A version tag builds the one records package, plugin-qualification-records, for the architectures
+# packaging/release-arches names (tools/sets.py github-output reads it): each architecture's package carries the
+# record sets of its machine classes (packaging/arch-classes). The Debian packages are built from debian/ on a runner
+# of their own architecture, linted, signed and published into the deb/ tree of the FreeMixer Pages repository and
+# attached to the GitHub release; the arm64 one is then installed in Debian trixie on arm64 beside plugin-qualify
+# from the channel, and plugin-qualify-sync --system takes plugins from every set it carries. The RPMs are built from
+# packaging/plugin-qualification-records.spec (whose Version is the tag's too), published into the rpm/ tree and
+# proven the same way in Fedora 44 on x86_64 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
+# the same and publishes nothing unless `publish` is set, and even then only on a tag. The build and the publish are
+# in FreeMixer/.github; the secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
-# A tagged commit that carries debian/republish does not build: it takes a package the channel already holds,
-# repacks it under the version debian/changelog names (dpkg-deb -R, the Version field, dpkg-deb -b; every file it
-# installs byte for byte the same, which the job checks), and publishes that through the same publish step. It
-# renames a published set without measuring or building it again. The file says, one per line:
-#   from <version>          the version the channel holds
-#   at <channel commit>     the commit of FreeMixer/freemixer.github.io that holds it (the tree is read there)
+# arm64 is released first: its package depends on a plugin-qualify the channel serves. The amd64 deb and the x86_64
+# rpm join packaging/release-arches in a later dated version, once plugin-qualify 0.20.1 is in the channel.
 
 on:
   push:
@@ -34,207 +31,64 @@ permissions:
 
 jobs:
   plan:
-    name: Build or republish
+    name: What this version releases
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
     outputs:
-      from: ${{ steps.read.outputs.from }}
-      at: ${{ steps.read.outputs.at }}
-      rpm-set: ${{ steps.read.outputs.rpm-set }}
-      rpm-names: ${{ steps.read.outputs.rpm-names }}
+      deb-arches: ${{ steps.read.outputs.deb-arches }}
+      deb-run: ${{ steps.read.outputs.deb-run }}
       deb-names: ${{ steps.read.outputs.deb-names }}
+      deb-prove: ${{ steps.read.outputs.deb-prove }}
+      rpm-arches: ${{ steps.read.outputs.rpm-arches }}
+      rpm-run: ${{ steps.read.outputs.rpm-run }}
+      rpm-names: ${{ steps.read.outputs.rpm-names }}
+      rpm-prove: ${{ steps.read.outputs.rpm-prove }}
     steps:
       - uses: actions/checkout@v4
       - id: read
         run: |
           set -euo pipefail
+          # a republish repacked one Architecture: all package of one set under a new version; the records are now
+          # one package per architecture, which is built, not repacked
           if [ -f debian/republish ]; then
-            from=$(awk '$1 == "from" {print $2}' debian/republish)
-            at=$(awk '$1 == "at" {print $2}' debian/republish)
-            [ -n "$from" ] && [ -n "$at" ] || { echo "::error::debian/republish needs a from and an at line"; exit 1; }
-            echo "from=$from" >> "$GITHUB_OUTPUT"
-            echo "at=$at" >> "$GITHUB_OUTPUT"
-            # the repack takes one package by name (the repack job's PKG); the proofs after it prove every Debian set
-            debs=$(python3 tools/sets.py names deb)
-            [ "$debs" = plugin-db-qualification-rpi5-zynthian-vangelis ] ||
-              { echo "::error::a republish repacks plugin-db-qualification-rpi5-zynthian-vangelis alone; this tree's Debian sets are: $debs"; exit 1; }
-            echo "republish $from (channel $at)"
-          else
-            echo "build from debian/"
+            echo "::error::debian/republish: a republish repacks one Architecture: all package of one set; plugin-qualification-records is one package per architecture, built from debian/. Remove the file and release a new version."
+            exit 1
           fi
-          # every set is its own package; the RPM is built only while the spec lists a set: a class whose sets are not
-          # current ships nothing until it is measured again
           python3 tools/sets.py check
           python3 tools/sets.py github-output
 
   # A release is one wave: the DEB waits for the RPM job and runs only when it passed (the organisation's release-order
-  # check). While the tree holds no Fedora set the RPM job is skipped and the DEB goes alone; with one, the DEB runs
-  # only after the RPM succeeded.
+  # check). While packaging/release-arches names no RPM architecture the RPM job is skipped and the DEB goes alone.
   deb:
     needs: [plan, rpm]
-    if: ${{ !cancelled() && needs.plan.outputs.from == '' && (needs.plan.outputs.rpm-set != 'true' || needs.rpm.result == 'success') }}
+    if: ${{ !cancelled() && needs.plan.outputs.deb-run == 'true' && (needs.plan.outputs.rpm-run != 'true' || needs.rpm.result == 'success') }}
     uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
-      # every Debian set's package (tools/sets.py names deb)
       binary-names: ${{ needs.plan.outputs.deb-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
-      # the records are data for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
-      # bookworm images before it):
-      # no build dependency beyond debhelper, and one package for all architectures
+      # the arm64 records are for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
+      # bookworm images before it); no build dependency beyond debhelper and python3 (tools/sets.py)
       dependencies: ''
       requires: ''
       channel-deps: false
-      # the changelog is regenerated from git by a python3 script
       build-packages: python3
       suite-matrix: '["bookworm", "trixie"]'
-      arch-matrix: '["amd64"]'
+      arch-matrix: ${{ needs.plan.outputs.deb-arches }}
     secrets: inherit
 
-  # The package installed where it is used: arm64 Debian trixie with plugin-qualify from the channel and Debian's
-  # own lv2vocoder, whose bytes are the ones the Zynthian image holds (checked against the records' SHA-256s; the
-  # image's other Debian plugins have since been rebuilt, so their records rightly do not apply). The sync takes it
-  # from the records and measures nothing. If Debian rebuilds lv2vocoder this step fails with `binary differs`: pick
-  # another plugin whose installed files still hash as a record's.
-  # The republish: the channel's package under this commit's version, every installed file unchanged.
-  repack:
-    name: Repack ${{ needs.plan.outputs.from }} under this version
-    needs: plan
-    if: needs.plan.outputs.from != ''
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    container:
-      image: debian:trixie
-    # the checks use process substitution: bash, not a container's default sh
-    defaults:
-      run:
-        shell: bash
-    env:
-      FROM: ${{ needs.plan.outputs.from }}
-      AT: ${{ needs.plan.outputs.at }}
-      PKG: plugin-db-qualification-rpi5-zynthian-vangelis
-    steps:
-      - uses: actions/checkout@v4
-      - name: Repack
-        run: |
-          set -euo pipefail
-          apt-get update -qq
-          apt-get install -y --no-install-recommends ca-certificates curl dpkg-dev
-          to=$(dpkg-parsechangelog -S Version)
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            [ "$GITHUB_REF_NAME" = "v$to" ] || { echo "::error::tag $GITHUB_REF_NAME is not v$to (debian/changelog)"; exit 1; }
-          fi
-          dpkg --compare-versions "$to" gt "$FROM" || { echo "::error::$to does not sort above $FROM"; exit 1; }
-          old=${PKG}_${FROM}_all.deb
-          curl -fsSL -o "$old" "https://raw.githubusercontent.com/FreeMixer/freemixer.github.io/$AT/deb/debian/trixie/all/$old"
-          [ "$(dpkg-deb -f "$old" Package)" = "$PKG" ] && [ "$(dpkg-deb -f "$old" Version)" = "$FROM" ]
-          dpkg-deb -R "$old" pkg
-          sed -i "s/^Version: .*/Version: $to/" pkg/DEBIAN/control
-          mkdir -p out/trixie
-          new=out/trixie/${PKG}_${to}_all.deb
-          dpkg-deb -b --root-owner-group pkg "$new"
-          # the files it installs, byte for byte, and their modes: the same set under another version
-          inv() { dpkg-deb --fsys-tarfile "$1" | tar -tv --numeric-owner | awk '{print $1, $3, $6}' | sort; }
-          cmp <(inv "$old") <(inv "$new") || { echo "::error::the repacked listing differs"; exit 1; }
-          sums() { local d; d=$(mktemp -d); dpkg-deb -x "$1" "$d"; (cd "$d" && find . -type f -exec sha256sum {} + | sort -k2); }
-          cmp <(sums "$old") <(sums "$new") || { echo "::error::the repacked contents differ"; exit 1; }
-          echo "$old -> $(basename "$new"): $(sums "$new" | wc -l) files unchanged"
-          dpkg-deb -I "$new" | sed -n '/Package:/,$p'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: plugin-db-qualification-debs-trixie-amd64
-          path: out
-          if-no-files-found: error
-          retention-days: 30
-
-  # the checks a publish needs (the secrets, the channel reachable), on the runner as build-deb.yml runs them: the
-  # Debian container of the publish has no curl
-  preflight-repacked:
-    name: Check the release can publish
-    needs: plan
-    if: needs.plan.outputs.from != '' && github.ref_type == 'tag'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: FreeMixer/.github/.github/actions/release-preflight@v1
-        with:
-          publish: true
-          tag: ${{ github.ref_name }}
-          target: FreeMixer/freemixer.github.io
-          gpg-key: ${{ secrets.OPENMIXER_PACKAGES_SIGNING_KEY }}
-          pages-token: ${{ secrets.PAGES_TOKEN }}
-
-  publish-repacked:
-    name: Sign and publish the repacked package
-    needs: [repack, preflight-repacked]
-    if: github.ref_type == 'tag'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    container:
-      image: debian:trixie
-    concurrency:
-      group: publish-FreeMixer/freemixer.github.io-live
-      cancel-in-progress: false
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: plugin-db-qualification-debs-*
-          merge-multiple: true
-          path: collected
-      - uses: FreeMixer/.github/.github/actions/publish-debs@v1
-        with:
-          deb-dir: collected
-          tag: ${{ github.ref_name }}
-          sign: true
-          gpg-key: ${{ secrets.OPENMIXER_PACKAGES_SIGNING_KEY }}
-          cosign-key: ${{ secrets.RPM_GPG_KEY }}
-          cosign-passphrase: ${{ secrets.RPM_GPG_PASSPHRASE }}
-          publish-token: ${{ secrets.PAGES_TOKEN }}
-          site-gpg-key: ${{ secrets.SITE_GPG_KEY }}
-          channel: FreeMixer/freemixer.github.io
-          requires: ''
-          changelogs-url: https://www.openmixer.org/deb/changelogs
-      - uses: actions/upload-artifact@v4
-        with:
-          name: plugin-db-qualification-debs-signed
-          path: signed/*.deb
-          if-no-files-found: error
-          retention-days: 30
-
-  release-repacked:
-    name: GitHub release of the repacked package
-    needs: [plan, publish-repacked]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: plugin-db-qualification-debs-signed
-          path: signed
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          FROM: ${{ needs.plan.outputs.from }}
-        run: |
-          set -euo pipefail
-          for deb in signed/*.deb; do base=$(basename "$deb" .deb); cp "$deb" "${base%_*}_trixie_${base##*_}.deb"; done
-          # the RPM job of the same tag may have made the release first
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
-            ! gh release create "$TAG" ./*_trixie_*.deb --title "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --notes "The records of v${FROM#v}, unchanged, under the version $TAG names."; then
-            gh release upload "$TAG" ./*_trixie_*.deb --clobber --repo "$GITHUB_REPOSITORY"
-          fi
-
+  # The arm64 package installed where it is used: arm64 Debian trixie with plugin-qualify from the channel and
+  # Debian's own lv2vocoder, whose bytes are the ones the Zynthian image holds (checked against the records'
+  # SHA-256s; the image's other Debian plugins have since been rebuilt, so their records rightly do not apply). The
+  # sync takes it from the records and measures nothing. If Debian rebuilds lv2vocoder this step fails with
+  # `binary differs`: pick another plugin whose installed files still hash as a record's.
   installed:
     name: Install and sync (trixie, arm64)
-    needs: [deb, repack]
-    if: ${{ !cancelled() && (needs.deb.result == 'success' || needs.repack.result == 'success') }}
+    needs: [plan, deb]
+    if: ${{ !cancelled() && needs.deb.result == 'success' && needs.plan.outputs.deb-prove == 'true' }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     permissions:
@@ -249,7 +103,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: plugin-db-qualification-debs-trixie-amd64
+          name: plugin-db-qualification-debs-trixie-arm64
           path: pkgs
 
       - name: Prepare the container
@@ -260,41 +114,40 @@ jobs:
 
       - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
 
-      # each set alone: installed, plugin-qualify-sync --system takes plugins from it and measures none of the set's,
-      # removed (tools/prove-set.sh; a container has no device tree, so the host class is the settings file's, and a
-      # set of one cell sets the sync's grid to it)
-      - name: Each set installed, and plugin-qualify-sync --system applies its records
+      # the package installed once; each set it carries proven in turn (tools/prove-set.sh: a container has no
+      # device tree, so the host class is the settings file's, and a set of one cell sets the sync's grid to it)
+      - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |
           set -euo pipefail
           apt-get install -y --no-install-recommends python3
           python3 tools/sets.py prove deb pkgs
 
-  # The Fedora sets: one noarch RPM per set, built from packaging/ by the organisation's RPM path (its %check runs
-  # tools/check-records.py over each installed set), signed and published into the rpm/ tree on a tag.
+  # The RPM: plugin-qualification-records for each architecture packaging/release-arches names, built from
+  # packaging/ by the organisation's RPM path (its %check runs tools/check-records.py over each installed set),
+  # signed and published into the rpm/ tree on a tag.
   rpm:
     needs: plan
-    if: needs.plan.outputs.rpm-set == 'true'
+    if: needs.plan.outputs.rpm-run == 'true'
     uses: FreeMixer/.github/.github/workflows/build-rpm.yml@v1
     with:
-      package-name: plugin-db-qualification
-      # every Fedora set's subpackage (tools/sets.py names rpm)
+      package-name: plugin-qualification-records
       binary-names: ${{ needs.plan.outputs.rpm-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
-      # noarch data: built once; no mod-host, no channel BuildRequires
-      arch-matrix: '["x86_64"]'
+      # data, built per architecture; no mod-host, no channel BuildRequires
+      arch-matrix: ${{ needs.plan.outputs.rpm-arches }}
       needs-mod-host: false
       channel-deps: false
     secrets: inherit
 
-  # Each RPM installed where it is used, one set at a time: Fedora 44 x86_64 with plugin-qualify and the channel's
-  # omx-plugins at the version the set measured (its provenance.json). A container has no device tree, and an x86_64
-  # machine never has one, so the host class is the settings file's. The sync takes the omx plugins from the records
-  # and measures nothing. When the channel's omx-plugins of that version is rebuilt with other bytes this step fails
-  # with `binary differs`: the set is then due to be measured again.
+  # The x86_64 RPM installed where it is used, each set in turn: Fedora 44 x86_64 with plugin-qualify and the
+  # channel's omx-plugins at the version the set measured (its provenance.json). A container has no device tree, and
+  # an x86_64 machine never has one, so the host class is the settings file's. The sync takes the omx plugins from the
+  # records and measures nothing. When the channel's omx-plugins of that version is rebuilt with other bytes this
+  # step fails with `binary differs`: the set is then due to be measured again.
   rpm-installed:
     name: Install and sync (Fedora 44, x86_64)
-    needs: rpm
-    if: ${{ !cancelled() && needs.rpm.result == 'success' }}
+    needs: [plan, rpm]
+    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.plan.outputs.rpm-prove == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -309,12 +162,12 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: plugin-db-qualification-rpms-x86_64
+          name: plugin-qualification-records-rpms-x86_64
           path: pkgs
 
       - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
 
-      - name: Each set installed, and plugin-qualify-sync --system applies its records
+      - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |
           set -euo pipefail
           # fedora:44 has no python3; tools/sets.py and the provenance read need it

@@ -3,7 +3,9 @@ name: check
 # Every record set under records/ read as plugin-qualify-sync reads it (tools/check-records.py): its provenance names
 # its set and host class, every record has its probe output beside it with the size and SHA-256 it names, a set named
 # for a cell holds only that cell, and nothing else is shipped. The RPM's %check and the release run the same script.
-# tools/sets.py check holds the packages to the sets: one package per set, for every set.
+# tools/sets.py check holds the one package, plugin-qualification-records, to the sets: every class under records/ has
+# an architecture (packaging/arch-classes), debian/control and the spec build it for those architectures, and the
+# architectures a tag releases (packaging/release-arches) carry sets.
 
 on:
   push:
@@ -26,10 +28,10 @@ jobs:
       - run: python3 -m unittest tools/test_build_package.py
       - run: python3 -m unittest tools/test_sets.py
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
-      # every set under records/ is built by one package (the spec's %global sets, or a debian/control stanza with its
-      # own install file), every set they name is in the tree, and the spec's Version is debian/changelog's: a tag
-      # must equal both
-      - name: The packages build the sets this tree holds
+      # every class under records/ is carried by an architecture of the one package, debian/control and the spec's
+      # per-architecture block are what packaging/arch-classes and records/ give, and the spec's Version is
+      # debian/changelog's: a tag must equal both
+      - name: The package builds the sets this tree holds
         run: python3 tools/sets.py check
 
   # the commit messages, private references and layout every FreeMixer repository is held to

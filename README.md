@@ -32,7 +32,7 @@ A set measured by an older plugin-qualify is dropped, not kept: the class ships 
 
 | architecture | host class | machine | sets | tier | depends on | released as |
 | --- | --- | --- | --- | --- | --- | --- |
-| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 up to 0.21 | deb, Debian trixie and bookworm |
+| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 up to 0.21 | deb, Debian trixie |
 | amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify 0.20.1 up to 0.21, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
 
 `packaging/arch-classes` is the one map of architectures to classes and plugin-qualify ranges: `debian/rules`, the
@@ -220,7 +220,7 @@ and the new set's comparison is added after. The site's plugin pages show it per
 A tag `v*` runs `.github/workflows/release.yml`. It builds `plugin-qualification-records` for the architectures
 `packaging/release-arches` names, each on a runner of its own architecture, and nothing else:
 
-- a Debian architecture: the package from `debian/`, for trixie and bookworm, linted (warnings fail), signed and
+- a Debian architecture: the package from `debian/`, for trixie, linted (warnings fail), signed and
   published into the channel. The arm64 package is then installed in Debian trixie on arm64 with plugin-qualify from
   the channel and Debian's own arm64 lv2vocoder (its bytes are the set's), and for every set it carries
   `plugin-qualify-sync --system` must take plugins from that set's records (`distributed: ... applied (<set>)`) and

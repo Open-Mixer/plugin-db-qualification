@@ -1,0 +1,543 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "clap",
+    "id": "org.openmixer.comp",
+    "name": "omx comp",
+    "vendor": "openmixer",
+    "version": "0.19.1",
+    "doc": "The console's compressor: threshold, ratio and knee set how hard it holds the level down, attack and release how fast, with makeup gain and a dry/wet mix. Kind picks the RMS detector (Compressor) or the peak detector (Limiter), and detector oversampling can run the control path at 4x; detector topology has it hear the input (feedforward) or its own output (feedback). Its detector can listen to a key routed to its sidechain input instead, through a high-pass, a low-pass and a tilt, on the louder leg, the mid or the side, with a hold; key listen puts what the detector hears on the output, and duck holds the reduction to a set depth. The DSP is omx-dsp's <omxdsp/fx/omx_comp_instance.h>, the console's own compressor.",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": 0,
+      "name": "Threshold",
+      "kind": "travel",
+      "travel": {
+        "min": -60,
+        "max": 0,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": -18
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][0]"
+      }
+    },
+    {
+      "id": 1,
+      "name": "Ratio",
+      "kind": "travel",
+      "travel": {
+        "min": 1,
+        "max": 20,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": 4
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][1]"
+      }
+    },
+    {
+      "id": 2,
+      "name": "Knee",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 24,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": 6
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][2]"
+      }
+    },
+    {
+      "id": 3,
+      "name": "Attack",
+      "kind": "travel",
+      "travel": {
+        "min": 0.10000000149011612,
+        "max": 100,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": 5
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][3]"
+      }
+    },
+    {
+      "id": 4,
+      "name": "Release",
+      "kind": "travel",
+      "travel": {
+        "min": 5,
+        "max": 3000,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 200
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][4]"
+      }
+    },
+    {
+      "id": 5,
+      "name": "Makeup",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 24,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": 0
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][5]"
+      }
+    },
+    {
+      "id": 6,
+      "name": "Mix",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 100,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 100
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][6]"
+      }
+    },
+    {
+      "id": 7,
+      "name": "Kind",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][7]"
+      }
+    },
+    {
+      "id": 8,
+      "name": "Detector Oversampling",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 2,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][8]"
+      }
+    },
+    {
+      "id": 9,
+      "name": "Detector Topology",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][9]"
+      }
+    },
+    {
+      "id": 10,
+      "name": "Key Source",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Key"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][10]"
+      }
+    },
+    {
+      "id": 11,
+      "name": "Key HP",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 2000,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Key"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][11]"
+      }
+    },
+    {
+      "id": 12,
+      "name": "Key LP",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 20000,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Key"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][12]"
+      }
+    },
+    {
+      "id": 13,
+      "name": "Key Tilt",
+      "kind": "travel",
+      "travel": {
+        "min": -6,
+        "max": 6,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": 0
+      },
+      "group": [
+        "Key"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][13]"
+      }
+    },
+    {
+      "id": 14,
+      "name": "Key Listen",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Key"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][14]"
+      }
+    },
+    {
+      "id": 15,
+      "name": "Hold",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 2000,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Comp"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][15]"
+      }
+    },
+    {
+      "id": 16,
+      "name": "Detect Link",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 3,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Key"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][16]"
+      }
+    },
+    {
+      "id": 17,
+      "name": "Duck",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "group": [
+        "Duck"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][17]"
+      }
+    },
+    {
+      "id": 18,
+      "name": "Duck Range",
+      "kind": "travel",
+      "travel": {
+        "min": -40,
+        "max": 0,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": -12
+      },
+      "group": [
+        "Duck"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][18]"
+      }
+    },
+    {
+      "id": 2147418112,
+      "name": "Bypass",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "meaning": "bypass",
+      "automatable": true,
+      "source": {
+        "from": "omx-comp.clap#clap_entry[org.openmixer.comp][2147418112]"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": 0,
+      "name": "in",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 2,
+      "layout": "stereo"
+    },
+    {
+      "id": 1,
+      "name": "key",
+      "kind": "audio",
+      "direction": "in",
+      "role": "aux",
+      "channels": 1,
+      "layout": "mono"
+    },
+    {
+      "id": 0,
+      "name": "out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 2,
+      "layout": "stereo"
+    }
+  ],
+  "latency": {
+    "reports": true
+  },
+  "extensions": {
+    "clap": {
+      "clap_plugin_descriptor.features": [
+        "audio-effect",
+        "compressor",
+        "stereo"
+      ],
+      "clap_plugin_descriptor.url": "https://github.com/FreeMixer/omx-plugins",
+      "clap_plugin_remote_controls.get": [
+        {
+          "id": 0,
+          "section": "Comp",
+          "name": "Comp 1",
+          "params": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            15,
+            5,
+            6
+          ],
+          "forPreset": false
+        },
+        {
+          "id": 1,
+          "section": "Comp",
+          "name": "Comp 2",
+          "params": [
+            7,
+            8,
+            9,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "forPreset": false
+        },
+        {
+          "id": 2,
+          "section": "Key",
+          "name": "Key",
+          "params": [
+            10,
+            11,
+            12,
+            13,
+            16,
+            14,
+            null,
+            null
+          ],
+          "forPreset": false
+        },
+        {
+          "id": 3,
+          "section": "Duck",
+          "name": "Duck",
+          "params": [
+            17,
+            18,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "forPreset": false
+        }
+      ]
+    }
+  },
+  "source": {
+    "from": "omx-comp.clap#clap_entry[org.openmixer.comp]"
+  }
+}

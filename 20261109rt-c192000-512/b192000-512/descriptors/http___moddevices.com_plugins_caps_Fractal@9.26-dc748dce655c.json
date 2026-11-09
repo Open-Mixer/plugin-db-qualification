@@ -1,0 +1,167 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/Fractal",
+    "uri": "http://moddevices.com/plugins/caps/Fractal",
+    "name": "C* Fractal - Audio stream from deterministic chaos",
+    "vendor": "MOD Team",
+    "version": "9.26",
+    "doc": "This plugin turns the oscillating state of a fractal attractor into an audio stream. The result is something that most would without much hesitation classify as noise. The Lorenz attractor is one of the earliest models of deterministic chaos discovered deriving from the Navier-Stokes equationswp. The Rössler system is similar but contains only one non-linearity. The x, y and z controls set the amplitude of the respective variables of the attractor state in the output audio signal. The attractor state variables are scaled and translated to stay mostly within the [-1,1] range and not contain a DC offset. Nevertheless, due to the unpredictable nature of the systems, peak limits cannot be guaranteed. In addition, some energy near DC may be produced; therefore a configurable high-pass filter is part of the circuit. It can be turned off by setting the hp parameter to zero. The output signal varies with the sample rate. source: http://quitte.de/dsp/caps.html#Fractals",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "rate",
+      "name": "Rate",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.25
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#rate"
+      }
+    },
+    {
+      "id": "mode",
+      "name": "Mode",
+      "kind": "choice",
+      "ids": [
+        "lorenz",
+        "roessler"
+      ],
+      "labels": [
+        "Lorenz",
+        "Roessler"
+      ],
+      "values": [
+        0.0,
+        1.0
+      ],
+      "default": "lorenz",
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#mode"
+      }
+    },
+    {
+      "id": "x",
+      "name": "X",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 1.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#x"
+      }
+    },
+    {
+      "id": "y",
+      "name": "Y",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#y"
+      }
+    },
+    {
+      "id": "z",
+      "name": "Z",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.5
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#z"
+      }
+    },
+    {
+      "id": "hp",
+      "name": "HP",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.5
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#hp"
+      }
+    },
+    {
+      "id": "volume",
+      "name": "Volume",
+      "kind": "travel",
+      "travel": {
+        "min": 9.999999974752427e-07,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.5
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Fractal.lv2/Fractal.ttl#volume"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "out",
+      "name": "Out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "optional": [
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#GeneratorPlugin"
+    }
+  },
+  "source": {
+    "from": "mod-caps-Fractal.lv2/Fractal.so#lv2_descriptor"
+  }
+}

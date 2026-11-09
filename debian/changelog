@@ -1,19 +1,36 @@
 plugin-db-qualification (2026110901) unstable; urgency=medium
 
-  * The x86-64 fedora44 class, one set per cell, provisional tier: ten sets
-    of 1109 records of 668 plugins, at 48000/64, 48000/128, 48000/256,
+  * One package, plugin-qualification-records, the same name on every
+    platform, built per architecture. Its files stay at
+    /usr/share/omx/qualification/<host class>/<set>/ and plugin-qualify-sync
+    chooses the set of the machine's class and cell.
+  * arm64: the rpi5 class, the zynthian-vangelis set, hardware tier
+    (measured on the machine's own audio interface: the verdicts hold, the
+    figures describe that interface). Depends on plugin-qualify >= 0.20.0
+    and < 0.21. Released first, as a Debian package for trixie and
+    bookworm.
+  * amd64 and x86_64: the x86-64 class, ten fedora44 sets, one per cell, of
+    1109 records of 668 plugins, at 48000/64, 48000/128, 48000/256,
     48000/512, 96000/64, 96000/128, 96000/256, 96000/512, 192000/256 and
-    192000/512, measured by plugin-qualify-sync on JACK's dummy driver
-    without real-time priority, host profile omx-clap-host. Eight sets ran
-    plugin-qualify 0.19.1, plugin-hostd 0.19.1 and omx-clap-host 0.30.6;
-    48000/128 and 48000/256 ran 0.20.0, 0.20.0 and 0.31.0. Each set's
-    provenance names its packages. 192000/128 is not here: its run did not
-    finish. The crash, hang and unmeasured verdicts hold; the cost, latency
-    and xrun figures are not reference figures. Built as RPMs.
-  * The rpi5 zynthian-vangelis set is labelled the hardware tier: measured
-    on the device's own audio interface.
-  * Every records package requires plugin-qualify 0.20.1 up to 0.21, which
-    takes a set by its cell, and provides plugin-qualification-records.
+    192000/512, provisional tier: measured by plugin-qualify-sync on JACK's
+    dummy driver without real-time priority, host profile omx-clap-host.
+    The crash, hang and unmeasured verdicts hold; the cost, latency and
+    xrun figures are not reference figures. Eight sets ran plugin-qualify
+    0.19.1, plugin-hostd 0.19.1 and omx-clap-host 0.30.6; 48000/128 and
+    48000/256 ran 0.20.0, 0.20.0 and 0.31.0. Each set's provenance names
+    its packages. 192000/128 is not here: its run did not finish. Depends
+    on plugin-qualify >= 0.20.1 and < 0.21, which takes a set by its cell.
+    Released in a later version, once that plugin-qualify is in the
+    channel. There is no aarch64 RPM: no Fedora machine of an arm64 class
+    is measured.
+  * The older names are folded into it. The Debian package Provides,
+    Replaces and Breaks plugin-db-qualification-rpi5-zynthian-vangelis and
+    omx-qualification-rpi5-zynthian-vangelis on every architecture, and on
+    amd64 also the x86-64 names: plugin-db-qualification-x86-64-fedora44,
+    omx-qualification-x86-64-fedora44 and every per-cell
+    plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>. The x86_64
+    RPM Provides and Obsoletes the x86-64 names. The list is derived from
+    records/ when the package is built.
 
  -- Pau Aliagas <linuxnow@gmail.com>  Mon, 09 Nov 2026 12:00:00 +0100
 

@@ -56,6 +56,10 @@ jobs:
             [ -n "$from" ] && [ -n "$at" ] || { echo "::error::debian/republish needs a from and an at line"; exit 1; }
             echo "from=$from" >> "$GITHUB_OUTPUT"
             echo "at=$at" >> "$GITHUB_OUTPUT"
+            # the repack takes one package by name (the repack job's PKG); the proofs after it prove every Debian set
+            debs=$(python3 tools/sets.py names deb)
+            [ "$debs" = plugin-db-qualification-rpi5-zynthian-vangelis ] ||
+              { echo "::error::a republish repacks plugin-db-qualification-rpi5-zynthian-vangelis alone; this tree's Debian sets are: $debs"; exit 1; }
             echo "republish $from (channel $at)"
           else
             echo "build from debian/"

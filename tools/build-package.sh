@@ -116,6 +116,10 @@ json.dump(p, open(sys.argv[3], "w", encoding="utf-8"), indent=2)' "$provenance" 
         sets=$(printf '%s\n' $sets "$name" | sort -u | tr '\n' ' ' | sed 's/ $//')
         sed -i "s/^%global sets .*/%global sets $sets/; s/^Version: .*/Version: $version/" "$spec"
         echo "$pkg $version (RPM): $(ls "$root/records/$class/$name" | wc -l) files; review git diff"
+        # one version for both formats: an RPM-only run leaves debian/changelog to be written, and says so
+        if [ "$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' "$root/debian/changelog")" != "$version" ]; then
+            echo "debian/changelog: add a $version entry (the tag equals the spec and the changelog; tools/sets.py check holds them)" >&2
+        fi
         return
     fi
     # a Debian set: its stanza in debian/control (replaced where it is, else added) and its own install file; the

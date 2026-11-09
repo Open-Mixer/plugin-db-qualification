@@ -178,10 +178,10 @@ class Sets(unittest.TestCase):
         self.assertIn("2 of 2 sets proven", out)
         steps = [l for l in log.splitlines() if re.match(r"(dnf|plugin-qualify-sync|grid|host_class)", l)]
         self.assertEqual(steps, [
-            "dnf install -y --setopt=install_weak_deps=False ./pkgs/plugin-db-qualification-x86-64-fedora44-48000-512-[0-9]*.noarch.rpm omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
+            "dnf install -y --setopt=install_weak_deps=False ./pkgs/plugin-db-qualification-x86-64-fedora44-48000-512-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*.noarch.rpm omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
             "plugin-qualify-sync --system", "host_class x86-64", "grid 48000/512",
             "dnf remove -y plugin-db-qualification-x86-64-fedora44-48000-512",
-            "dnf install -y --setopt=install_weak_deps=False ./pkgs/plugin-db-qualification-x86-64-fedora44-96000-256-[0-9]*.noarch.rpm omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
+            "dnf install -y --setopt=install_weak_deps=False ./pkgs/plugin-db-qualification-x86-64-fedora44-96000-256-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*.noarch.rpm omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
             "plugin-qualify-sync --system", "host_class x86-64", "grid 96000/256",
             "dnf remove -y plugin-db-qualification-x86-64-fedora44-96000-256"])
 

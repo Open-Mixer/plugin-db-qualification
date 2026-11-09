@@ -24,6 +24,17 @@ r=${PROVE_ROOT:-}
 installed=$r/usr/share/omx/qualification/$class/$set_
 tree=records/$class/$set_
 
+# the next set starts from nothing, whether this one passed or not: no package of this one, no record the sync
+# copied from it
+cleanup() {
+    case $kind in
+        deb) apt-get remove -y "$pkg" >/dev/null 2>&1 || true ;;
+        rpm) dnf remove -y "$pkg" >/dev/null 2>&1 || true ;;
+    esac
+    rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf"
+}
+trap cleanup EXIT
+
 case $kind in
     deb)
         chmod -R a+rX "$pkgs"
@@ -34,7 +45,7 @@ case $kind in
         ;;
     rpm)
         ver=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1].rsplit("-",1)[0])' "$tree/provenance.json")
-        dnf install -y --setopt=install_weak_deps=False "./$pkgs/$pkg-"[0-9]*.noarch.rpm "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
+        dnf install -y --setopt=install_weak_deps=False "./$pkgs/$pkg-"[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-*.noarch.rpm "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
         rpm -q plugin-qualify omx-plugins-clap omx-plugins-lv2
         have=$(rpm -q --qf '%{VERSION}' plugin-qualify)
         conf='clap_extra /usr/lib64/clap'
@@ -62,10 +73,3 @@ if grep -E 'distributed: .*(binary differs|not applied|measured here)' "$log"; t
     echo "::error::$pkg: a plugin of the set was measured instead of taken from the records"; exit 1
 fi
 rm -f "$log"
-
-# the next set starts from nothing: no package of this one, no record the sync copied from it
-case $kind in
-    deb) apt-get remove -y "$pkg" ;;
-    rpm) dnf remove -y "$pkg" ;;
-esac
-rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf"

@@ -10,16 +10,26 @@ the same plugin set does not need to measure it again: this repository holds the
 publishes them as `plugin-db-qualification-<host class>-<set>`, which `plugin-qualify-sync` reads before it measures
 anything.
 
+A record set is per machine class, per sample rate and per quantum. A run that measured several cells publishes one
+set per cell, each its own package, named `<set>-<rate>-<quantum>`: `fedora44-48000-512` and `fedora44-96000-256`
+are two sets and two packages, `plugin-db-qualification-x86-64-fedora44-48000-512` and
+`plugin-db-qualification-x86-64-fedora44-96000-256`.
+
 ## What is offered
 
-One current set per machine class, measured by the latest plugin-qualify, and packaged only for the architecture and
-distribution that class runs. A set measured by an older plugin-qualify is dropped, not kept: the class ships nothing
-until it is measured again.
+The current sets of each machine class, one per cell measured, by the latest plugin-qualify, and packaged only for
+the architecture and distribution that class runs. A set measured by an older plugin-qualify is dropped, not kept:
+the class ships nothing until it is measured again.
 
 | host class | machine | arch | distribution | package | records | plugin-qualify |
 | --- | --- | --- | --- | --- | --- | --- |
 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | arm64 | Debian trixie and bookworm | `plugin-db-qualification-rpi5-zynthian-vangelis` (deb) | 1863 | 0.19.0, with the adapter, isolated, pool and memory steps under 0.19.1 |
-| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44` (rpm) | none | not current: the 0.18.5 set was dropped |
+| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>` (rpm), one per cell | none | not current: the 0.18.5 set was dropped |
+
+The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
+cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it
+becomes `zynthian-vangelis-48000-256` and `zynthian-vangelis-96000-256`. A record or probe file is never rewritten:
+they are the bytes the device wrote.
 
 There is no Debian x86-64 class and no Fedora rpi5 class, so there is no `.deb` for x86-64 and no `.rpm` for rpi5.
 
@@ -33,8 +43,11 @@ has with the same bytes.
 
 | class | where | command | time |
 | --- | --- | --- | --- |
-| `rpi5` | a Raspberry Pi 5 with the ZynthianOS image, plugin-qualify from the channel | `plugin-qualify-sync --system --force --no-distributed --grid 48000/256,96000/256`, then the copy below | about 6 hours per rate (2026-10-28: 6 h at 48 kHz) |
-| `x86-64` | the cluster, a Job (`tools/fedora44/job.yaml`, a fedora:44 pod on an AMD Ryzen 7 PRO 8700GE node) | `kubectl -n omx-worker create configmap omx-qualify-fedora44-script --from-file=tools/fedora44/measure.sh && kubectl apply -f tools/fedora44/job.yaml` | hours; the Job stops at 14 h (`activeDeadlineSeconds`) |
+| `rpi5` | a Raspberry Pi 5 with the ZynthianOS image, plugin-qualify from the channel | one `plugin-qualify-sync --system --force --no-distributed --grid <rate>/<quantum>` per cell (48000/256, 96000/256), each with its own `qualification_dir` under `<run>/b<rate>-<quantum>/qualification`, then the build below | about 6 hours per cell at 48 kHz |
+| `x86-64` | the cluster, a Job (`tools/fedora44/job.yaml`, a fedora:44 pod on an AMD Ryzen 7 PRO 8700GE node) | `kubectl -n omx-worker create configmap omx-qualify-fedora44-script --from-file=tools/fedora44/measure.sh && kubectl apply -f tools/fedora44/job.yaml`; it measures 48000/512 and 96000/256 and delivers `<SET>/b48000-512/qualification` and `<SET>/b96000-256/qualification` to a `records/fedora44/<SET>` branch | hours; the Job stops at 14 h (`activeDeadlineSeconds`) |
+
+Each cell measured is a set of its own: the build below packages every `b<rate>-<quantum>/qualification` of a run as
+`<set>-<rate>-<quantum>`.
 
 A desk can measure the class too (`plugin-qualify-sync --system --force --no-distributed` with `host_class x86-64`),
 but only when nothing else runs on it: the measurement plays every plugin on the audio server.
@@ -42,7 +55,7 @@ but only when nothing else runs on it: the measurement plays every plugin on the
 ## Install path
 
 ```
-/usr/share/omx/qualification/<host class>/<set>/
+/usr/share/omx/qualification/<host class>/<set>/          # <set> is <set>-<rate>-<quantum> for a set of one cell
     <plugin>@<version>-<sha256 first 12>.<offer>.qualification.json   # the record
     <same name>.probe.json                                              # the probe output the record judged, byte for byte
     provenance.json                                                     # where the set comes from
@@ -50,7 +63,7 @@ but only when nothing else runs on it: the measurement plays every plugin on the
 
 plugin-db's store (`/var/lib/plugin-db`) holds a machine's own layers and names no place for shipped records, so the
 records stay where plugin-qualify-sync reads them (`distributed_dir`, `/usr/share/omx/qualification`). Each package
-is architecture-independent (`Architecture: all`, `BuildArch: noarch`) and depends on the plugin-qualify that measured
+is architecture-independent (`Architecture: all`, `BuildArch: noarch`), holds one set, and depends on the plugin-qualify that measured
 its set, up to the next minor: `plugin-qualify (>= 0.19.0~), plugin-qualify (<< 0.20~)` and
 `(plugin-qualify >= 0.19.0 with plugin-qualify < 0.20)`.
 
@@ -79,6 +92,8 @@ apt install plugin-db-qualification-rpi5-zynthian-vangelis      # from the OpenM
 plugin-qualify-sync --system
 ```
 
+A machine installs the set of the cell it runs at (its sample rate and quantum).
+
 ```
 plugin-qualify-sync: distributed: http://distrho.sf.net/plugins/3BandEQ: applied (zynthian-vangelis)
 ```
@@ -95,7 +110,7 @@ On Fedora 44 x86_64, once the x86-64 set is current again:
 
 ```
 dnf install https://www.openmixer.org/rpm/openmixer-release.noarch.rpm
-dnf install plugin-db-qualification-x86-64-fedora44
+dnf install plugin-db-qualification-x86-64-fedora44-48000-512     # the set of the cell the machine runs at
 printf 'host_class x86-64\nclap_extra /usr/lib64/clap\n' >> /etc/omx/qualify.conf
 plugin-qualify-sync --system
 ```
@@ -107,41 +122,56 @@ measures the set.
 
 ## Rebuild from a device run
 
-On the device (same class, a new image or new plugin versions), run `plugin-qualify-sync --system --force`, or
-`plugin-qualify --all --isolate --out <dir>`, then copy its `qualification_dir` here and:
+A run measures one or more cells, each into its own qualification directory, `<run>/b<rate>-<quantum>/qualification`
+(the layout of `tools/fedora44/measure.sh`; on a device, run `plugin-qualify-sync --system --force --grid
+<rate>/<quantum>` once per cell with `qualification_dir` set to that cell's directory, or `plugin-qualify --all
+--isolate --out <dir>`). Copy the run here and:
 
 ```
-tools/build-package.sh --from <qualification dir> --provenance provenance.json \
-    --version <YYYY.MM.DD> --host-class rpi5 --set zynthian-vangelis
+tools/build-package.sh --from-run <run> --provenance provenance.json \
+    --version <YYYYMMDDXX> --host-class <class> --set <set>
 git diff --stat
 ```
 
-`plugin-qualify-records-package` judges which records go in, builds the package, and the
-script replaces `records/`, `debian/control`, `debian/install` and the top `debian/changelog` entry with what it
-holds. `provenance.json` is a JSON file of what the tool cannot know: the image, the board, the package versions
-and the source revisions of the device; the tool adds the schema, the set, the host class, the package and the
-date. Commit, then tag `v<version>`: the tag must equal the `debian/changelog` version.
+Every `b<rate>-<quantum>/qualification` of the run becomes the set `<set>-<rate>-<quantum>`, the package
+`plugin-db-qualification-<class>-<set>-<rate>-<quantum>`, and its provenance's `grid` is that cell. One cell alone is
+`--from <qualification dir> --cell <rate>/<quantum>`; `--from <qualification dir>` without `--cell` keeps the set
+name as given. For each set, `plugin-qualify-records-package` judges which records go in and builds the package,
+and the script replaces `records/<class>/<set>/` with what it holds. No other set, of the class or of another, is
+touched.
 
-`tools/build-package.sh` without arguments builds the package of `records/` with the tool, to compare with what
-`debian/` builds.
+- An `x86-64` set (the class the RPM spec builds) joins the spec's `%global sets` list, from which the spec generates
+  one subpackage per set, and the spec's `Version` becomes the version.
+- An `rpi5` set gets its own `debian/control` stanza (the Depends and Description of the tool's own control) and its
+  own `debian/<package>.install`, and the top `debian/changelog` entry takes the version.
 
-The x86-64 set is measured in a pod, not on a desk: `tools/fedora44/job.yaml` is a Job in the cluster's
+`provenance.json` is a JSON file of what the tool cannot know: the image, the board, the package versions and the
+source revisions of the device; the tool adds the schema, the set, the host class, the package and the date. Commit,
+then tag `v<version>`: the tag must equal the spec's `Version` and the `debian/changelog` version (`tools/sets.py
+check` holds them together, and every set to the package that builds it).
+
+`tools/build-package.sh` without arguments builds the package of every set of `records/` with the tool, to compare
+with what `debian/` builds.
+
+The x86-64 sets are measured in a pod, not on a desk: `tools/fedora44/job.yaml` is a Job in the cluster's
 `omx-worker` namespace, and `tools/fedora44/measure.sh` installs the channel's plugin-qualify, plugin-hostd and
 omx-clap-host with the worker image's plugin set (platform `baked-versions.yml`) in `fedora:44`, starts a JACK
-server of the pod's own (dummy driver, 48000/512) and runs `plugin-qualify-sync --system`. Copy `/out` out of the pod
-and feed the qualification directory of its `var-lib-omx.tar.xz` to
+server of the pod's own (dummy driver) at each cell and runs `plugin-qualify-sync --system` there. It delivers the
+run to a `records/fedora44/<SET>` branch; take it from there and:
 
 ```
-tools/build-package.sh --from <qualification dir> --provenance provenance.json \
+git archive origin/records/fedora44/<SET> <SET> | tar -x -C /tmp
+tools/build-package.sh --from-run /tmp/<SET> --provenance provenance.json \
     --version <YYYYMMDDXX> --host-class x86-64 --set fedora44
 ```
 
-For the set the RPM spec builds, the script replaces only `records/x86-64/fedora44/` and the spec's `Version`. The
-release builds the RPM only while that set is in the tree.
+The release builds the RPMs only while the spec lists a set.
 
 `tools/check-records.py` reads every set as plugin-qualify-sync will: the provenance names its set and class, every
-record has its probe output beside it with the size and SHA-256 it names, and nothing else is shipped. The `check`
-workflow runs it on every pull request, and the RPM's `%check` runs it on the installed tree.
+record has its probe output beside it with the size and SHA-256 it names, a set named `<set>-<rate>-<quantum>`
+holds only records whose measurement grid holds that cell and names the cell in its provenance's `grid`, and nothing
+else is shipped. The `check` workflow runs it on every pull request, and the RPM's `%check` runs it on the installed
+tree.
 
 ## The host comparison
 
@@ -172,15 +202,18 @@ and the new set's comparison is added after. The site's plugin pages show it per
 
 ## Release
 
-A tag `v*` runs `.github/workflows/release.yml`: it builds the package from `debian/`, runs lintian (warnings fail),
-installs it in Debian trixie on arm64 with plugin-qualify from the channel and Debian's own arm64 lv2vocoder
-(its bytes are the set's), asserts that `plugin-qualify-sync --system` takes plugins from the records
-(`distributed: ... applied`), signs the apt index and publishes into the channel.
+A tag `v*` runs `.github/workflows/release.yml`: it builds every Debian set's package from `debian/`, runs lintian
+(warnings fail), installs each set alone in Debian trixie on arm64 with plugin-qualify from the channel and Debian's
+own arm64 lv2vocoder (its bytes are the set's), asserts that `plugin-qualify-sync --system` takes plugins from its
+records (`distributed: ... applied`), signs the apt index and publishes into the channel. `tools/sets.py` names the
+packages and runs the proofs (`tools/prove-set.sh`, one set at a time: installed, synced with the set's cell as the
+grid, removed).
 
-While the x86-64 set is in the tree, the same tag builds the RPM from `packaging/plugin-db-qualification.spec` through FreeMixer/.github's
-`build-rpm.yml` (one noarch build, signed and published into the channel's `rpm/` tree, attached to the same
-GitHub release), then installs it in Fedora 44 with plugin-qualify and the omx-plugins version the set measured from
-the channel, and asserts that `plugin-qualify-sync --system` takes them from the records. The spec's `Version` and
+While the spec lists an x86-64 set, the same tag builds the RPMs from `packaging/plugin-db-qualification.spec`
+through FreeMixer/.github's `build-rpm.yml` (one noarch build, a subpackage per set, signed and published into the
+channel's `rpm/` tree, attached to the same GitHub release), then installs each set alone in Fedora 44 with
+plugin-qualify and the omx-plugins version the set measured from the channel, and asserts that
+`plugin-qualify-sync --system` takes them from the records. The spec's `Version` and
 the top `debian/changelog` entry are the same number, and the tag must equal both (the `check` workflow holds them
 together). A manual run (`workflow_dispatch`) does everything except publishing.
 

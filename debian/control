@@ -2,19 +2,33 @@ Source: plugin-db-qualification
 Section: sound
 Priority: optional
 Maintainer: Pau Aliagas <linuxnow@gmail.com>
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 13), python3:native
 Standards-Version: 4.6.2
 Homepage: https://github.com/FreeMixer/plugin-db-qualification
 Rules-Requires-Root: no
 
-Package: plugin-db-qualification-rpi5-zynthian-vangelis
-Architecture: all
-Multi-Arch: foreign
-Depends: ${misc:Depends}, plugin-qualify (>= 0.19.0~), plugin-qualify (<< 0.20~)
-Description: plugin-db qualification layer: zynthian-vangelis set for rpi5
- The qualification layer of the plugin database for one machine class and one
- plugin set: the plugin-qualify records of the zynthian-vangelis plugin set,
- measured on a Raspberry Pi 5 (host class rpi5). plugin-qualify-sync takes a
- plugin from them instead of measuring it, and only when every file of the
- installed plugin hashes as the measured one did; any other plugin is
- measured on the device as before.
+Package: plugin-qualification-records
+Architecture: amd64 arm64
+Depends: ${misc:Depends}, ${qualify:Depends}
+Provides: ${records:Provides}
+Replaces: ${records:Replaces}
+Breaks: ${records:Breaks}
+Description: plugin-db qualification layer: records of OpenMixer plugin sets
+ The qualification layer of the plugin database: the plugin-qualify records
+ of the plugin sets measured on a reference machine of a host class.
+ plugin-qualify-sync takes a plugin from them instead of measuring it, and
+ only when every file of the installed plugin hashes as the measured one
+ did; any other plugin is measured on the machine as before. The sync
+ chooses the set of the machine's class and cell.
+ .
+ Each architecture carries the sets of its machine classes:
+ .
+  arm64: the rpi5 class, the zynthian-vangelis set measured on a Raspberry
+  Pi 5 with ZynthianOS. Hardware records: measured on the machine's own
+  audio interface; the verdicts hold, the figures describe that interface
+  and are not compared with the reference tier.
+ .
+  amd64: the x86-64 class, the fedora44 sets, one per sample rate and
+  quantum. Provisional records: measured on JACK's dummy driver without
+  real-time priority; the crash, hang and unmeasured verdicts hold, the
+  cost, latency and xrun figures are not reference figures.

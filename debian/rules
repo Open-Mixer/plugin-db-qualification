@@ -1,9 +1,25 @@
 #!/usr/bin/make -f
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+#
+# One package, plugin-qualification-records, per architecture: it carries the record sets of the classes
+# packaging/arch-classes gives its architecture, at /usr/share/omx/qualification/<class>/<set>/. tools/sets.py reads
+# the file and records/; it refuses an architecture with no class and a class with no set.
+
+DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+PKG := plugin-qualification-records
 
 %:
 	dh $@
 
 # the records are data: nothing to configure, build or test
 override_dh_auto_configure override_dh_auto_build override_dh_auto_test:
+
+# the sets of this architecture's classes, byte for byte
+override_dh_install:
+	python3 tools/sets.py install deb $(DEB_HOST_ARCH) debian/$(PKG)/usr/share/omx/qualification
+
+# the plugin-qualify range of this architecture and the older package names it takes over
+override_dh_gencontrol:
+	python3 tools/sets.py substvars $(DEB_HOST_ARCH) >> debian/$(PKG).substvars
+	dh_gencontrol

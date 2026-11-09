@@ -1,0 +1,186 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "in.lsp-plug.spectrum_analyzer_x16"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+    "files": [
+      {
+        "path": "lsp-plugins.clap",
+        "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "304abf52884d95e2f8d29edfc3f0d95c37a7778b3aae3831d4f9bd9dbef19360"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unsuitable",
+          "code": "hosting.cost.above-ceiling",
+          "params": {
+            "coreFractionP95": 0.06505824,
+            "ceiling": 0.05
+          }
+        },
+        {
+          "dimension": "cost",
+          "rating": "conditional",
+          "code": "hosting.cost.spiky-tail",
+          "params": {
+            "tailRatio": 7.972635937977931,
+            "ceiling": 4
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 170.004,
+          "percentile": {
+            "p": 95,
+            "value": 1355.38
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 27988,
+          "afterActivateKb": 29472,
+          "atRestKb": 29748,
+          "secondInstanceKb": 10256,
+          "firstInstanceKb": 29748,
+          "perInstanceKb": 10256
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T14:23:33+00:00",
+  "probe": {
+    "file": "in.lsp-plug.spectrum_analyzer_x16@unversioned-823d2c8dab8c.custom.probe.json",
+    "sha256": "31698b7c618537119663e50e4c76972c696a6d5e0bbed6b96f972e21c81aeb06",
+    "bytes": 10354,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 12.82,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T142333Z-77e8-9249c92b",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

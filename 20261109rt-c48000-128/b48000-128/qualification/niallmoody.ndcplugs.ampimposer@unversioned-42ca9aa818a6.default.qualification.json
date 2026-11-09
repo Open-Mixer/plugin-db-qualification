@@ -1,0 +1,202 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "niallmoody.ndcplugs.ampimposer"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/AmplitudeImposer.clap",
+    "sha256": "42ca9aa818a63192b3460343ae46944de1f2ad997e5a1ea1457b572f083a944a",
+    "files": [
+      {
+        "path": "AmplitudeImposer.clap",
+        "sha256": "42ca9aa818a63192b3460343ae46944de1f2ad997e5a1ea1457b572f083a944a"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "7ea61a8e3bf3394d5fca733c20679dc3324d0af646ee7e7e5e8d18dd9aaf4ec8"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 0,
+            "syscalls": 0,
+            "locks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
+  },
+  "cost": [
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 1
+        },
+        "cost": {
+          "median": 5.64062,
+          "percentile": {
+            "p": 95,
+            "value": 6.10156
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 512,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock",
+            "pthread_mutex_trylock"
+          ]
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 3736,
+          "afterActivateKb": 3740,
+          "atRestKb": 3740,
+          "secondInstanceKb": 4,
+          "firstInstanceKb": 3740,
+          "perInstanceKb": 4
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T13:51:08+00:00",
+  "probe": {
+    "file": "niallmoody.ndcplugs.ampimposer@unversioned-42ca9aa818a6.default.probe.json",
+    "sha256": "b9071e53b01c275622dfc9cc51db85b16687e1101bdb95e4591a1eee186c6220",
+    "bytes": 10657,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 8.95,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T135108Z-11b7-f488034b",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      }
+    ]
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.lubba64-plugins-egui.node-sound-egui-2"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/node_sound_vst.clap",
+    "sha256": "e552e257cb73b90e0506cac4195abdeca3f98ca79997641ed1b82b6148b4323c",
+    "files": [
+      {
+        "path": "node_sound_vst.clap",
+        "sha256": "e552e257cb73b90e0506cac4195abdeca3f98ca79997641ed1b82b6148b4323c"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "01c0af0dac26b7f1ba452ee4b707f9cc065ff69072866e0292afd5cd40015372"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 31426,
+            "syscalls": 0,
+            "locks": 0
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "clap",
+          "allocations": 31426,
+          "locks": 0,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 7480,
+          "afterActivateKb": 7552,
+          "atRestKb": 7552,
+          "secondInstanceKb": 364,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T14:24:14+00:00",
+  "probe": {
+    "file": "com.lubba64-plugins-egui.node-sound-egui-2@unversioned-e552e257cb73.custom.probe.json",
+    "sha256": "dbc72171e765f43b39d622a914a9225613467a79dabb7b3980f930f6b7dd6b7a",
+    "bytes": 10414,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 10.98,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T142414Z-7a32-446406fa",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 6,
+          "xruns": 2,
+          "midiInputsLinked": 1
+        }
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

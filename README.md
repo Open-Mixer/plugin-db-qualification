@@ -24,7 +24,7 @@ the class ships nothing until it is measured again.
 | host class | machine | arch | distribution | package | records | plugin-qualify |
 | --- | --- | --- | --- | --- | --- | --- |
 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | arm64 | Debian trixie and bookworm | `plugin-db-qualification-rpi5-zynthian-vangelis` (deb) | 1863 | 0.19.0, with the adapter, isolated, pool and memory steps under 0.19.1 |
-| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>` (rpm), one per cell | none | not current: the 0.18.5 set was dropped |
+| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>` (rpm), one per cell | 1109 at 48000/512, 1109 at 96000/256 | 0.19.1 |
 
 The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
 cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it

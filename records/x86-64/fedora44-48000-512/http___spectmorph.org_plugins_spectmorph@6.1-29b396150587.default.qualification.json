@@ -1,0 +1,305 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://spectmorph.org/plugins/spectmorph"
+  },
+  "testedVersion": "6.1",
+  "binary": {
+    "path": "spectmorph_lv2.so",
+    "sha256": "29b39615058749ce55aa0ecd525b26788fe5cfcff7ffffd2d4a3cc89b459f00b",
+    "files": [
+      {
+        "path": "manifest.ttl",
+        "sha256": "2a1b44244a6014bec5880085d1c1fbc572861a64b10a32d2e825f1513c5656e7"
+      },
+      {
+        "path": "spectmorph.ttl",
+        "sha256": "70eac0b9b2026646e527b6009a5e749b69f60aec3bbf0fd3dc832aa771c18e89"
+      },
+      {
+        "path": "spectmorph_lv2.so",
+        "sha256": "29b39615058749ce55aa0ecd525b26788fe5cfcff7ffffd2d4a3cc89b459f00b"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "71dc64ec711b8c0717e95ab814f8f27c34a03c6acbebf41a28b4719dad3a1e76"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "run",
+      "deciding": "omx-clap-host.silent-under-note",
+      "reasons": [
+        {
+          "dimension": "hostAdmission",
+          "rating": "unknown",
+          "code": "omx-clap-host.silent-under-note",
+          "params": {
+            "peak": 0,
+            "notes": 30
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 0,
+            "syscalls": 0,
+            "locks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 64,
+            "syscalls": 0,
+            "locks": 512
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 0,
+            "syscalls": 0,
+            "locks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 64,
+            "syscalls": 0,
+            "locks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {
+    "host": "omx-clap-host",
+    "measured": true,
+    "admitted": false,
+    "code": "omx-clap-host.silent-under-note",
+    "params": {
+      "peak": 0,
+      "notes": 30
+    }
+  },
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "omx-clap-host.silent-under-note"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured; omx-clap-host: omx-clap-host.silent-under-note"
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 512,
+        "outcome": "probe.ok",
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 512,
+          "syscalls": 0,
+          "events": [
+            "mutex_trylock ? ?"
+          ]
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "midi",
+          "allocations": 64,
+          "locks": 512,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 20988,
+          "afterActivateKb": 20988,
+          "atRestKb": 20988,
+          "secondInstanceKb": 4688,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no probe count (OMX_PROBE_NOTES) of notes to hold"
+        },
+        "latency": {
+          "unmeasuredReason": "silent-output",
+          "code": "hosting.latency.unmeasured"
+        }
+      }
+    ],
+    "behaviour": {
+      "lifecycle": {
+        "cycles": 30,
+        "instantiated": 30,
+        "failed": 0
+      },
+      "threads": {
+        "before": 1,
+        "afterFirstInstantiate": 2,
+        "afterAllFreed": 1
+      },
+      "features": {
+        "required": [
+          "http://lv2plug.in/ns/ext/urid#map"
+        ]
+      }
+    },
+    "unmeasured": [
+      {
+        "dimension": "latency",
+        "rate": 48000,
+        "quantum": 512,
+        "code": "hosting.latency.unmeasured",
+        "detail": "silent-output: the note never sounded within the declared latency and the tail"
+      },
+      {
+        "dimension": "cost",
+        "rate": 48000,
+        "quantum": 512,
+        "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+        "detail": "voices-unknown: an instrument with no probe count (OMX_PROBE_NOTES) to hold: no note was held down"
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "lv2_measure",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-08T17:49:40+00:00",
+  "probe": {
+    "file": "http___spectmorph.org_plugins_spectmorph@6.1-29b396150587.default.probe.json",
+    "sha256": "2c37712b3fe63ff6305e68def48ec361aa95828b19246128d990f0ccac3f10c8",
+    "bytes": 10792,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 9.25,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261108T174940Z-eade-72fb2109",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      }
+    ]
+  }
+}

@@ -1,0 +1,209 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.greyboxaudio.sg-323"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/SG-323.clap",
+    "sha256": "3fbc730dd1fae8c33c442cfd06083cc2b1363ba21e1d8b2fbeb684c6db2af853",
+    "files": [
+      {
+        "path": "SG-323.clap",
+        "sha256": "3fbc730dd1fae8c33c442cfd06083cc2b1363ba21e1d8b2fbeb684c6db2af853"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "f4f745cd127eb5fdada2261bc7aeb2b5eb6da31b9525c2aafa8277d880acd928"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 32768,
+            "syscalls": 0,
+            "locks": 7452
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 256,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 491.059,
+          "percentile": {
+            "p": 95,
+            "value": 604.982
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 32768,
+          "locks": 7452,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock"
+          ]
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 9036,
+          "afterActivateKb": 9084,
+          "atRestKb": 9968,
+          "secondInstanceKb": 2456,
+          "firstInstanceKb": 9968,
+          "perInstanceKb": 2456
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-08T17:57:14+00:00",
+  "probe": {
+    "file": "com.greyboxaudio.sg-323@unversioned-3fbc730dd1fa.custom.probe.json",
+    "sha256": "5560a35b0bf1b5b2ce5eaef3befad5d6656905e7ece79ee34540318a7d77c869",
+    "bytes": 10707,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 60.77,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261108T175714Z-1038b-47475398",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 5.666666666666667,
+          "xruns": 0,
+          "midiInputsLinked": 0
+        }
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

@@ -13,13 +13,13 @@
 # tree holds. An empty list (%%{nil}) builds no package, and the release then skips the RPM.
 
 %global host_class x86-64
-%global sets %{nil}
+%global sets fedora44-48000-512 fedora44-96000-256
 %global qual_dir %{_datadir}/omx/qualification/%{host_class}
 # the plugin-qualify that measured the sets, up to its next minor
 %global qualify_requires (plugin-qualify >= 0.19.0 with plugin-qualify < 0.20)
 
 Name: plugin-db-qualification
-Version: 2026110602
+Version: 2026110901
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later

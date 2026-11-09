@@ -130,7 +130,7 @@ path, tool_control, pkg = sys.argv[1:]
 tool = open(tool_control, encoding="utf-8").read()
 depends = next(l[len("Depends: "):] for l in tool.splitlines() if l.startswith("Depends: "))
 description = tool[tool.index("\nDescription:") + 1:].rstrip("\n")
-stanza = f"Package: {pkg}\nArchitecture: all\nMulti-Arch: foreign\nDepends: ${{misc:Depends}}, {depends}\n{description}"
+stanza = f"Package: {pkg}\nArchitecture: all\nMulti-Arch: foreign\nDepends: ${{misc:Depends}}, {depends}\nProvides: plugin-qualification-records\n{description}"
 paras = [p for p in open(path, encoding="utf-8").read().strip("\n").split("\n\n") if p.strip()]
 names = [next((l[len("Package: "):] for l in p.splitlines() if l.startswith("Package: ")), None) for p in paras]
 if pkg in names:

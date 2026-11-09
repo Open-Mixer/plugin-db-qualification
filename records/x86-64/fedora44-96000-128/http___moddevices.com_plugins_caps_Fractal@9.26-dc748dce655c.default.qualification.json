@@ -1,0 +1,275 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/Fractal"
+  },
+  "testedVersion": "9.26",
+  "binary": {
+    "path": "Fractal.so",
+    "sha256": "dc748dce655c12ee7ce2a4538d091f18591a1d4df1f9450366a4443849653aa3",
+    "files": [
+      {
+        "path": "Fractal.so",
+        "sha256": "dc748dce655c12ee7ce2a4538d091f18591a1d4df1f9450366a4443849653aa3"
+      },
+      {
+        "path": "Fractal.ttl",
+        "sha256": "397608da9b4909063cc9ce66db0b0900bfe71d92edcb190bbb8005ae3dc07004"
+      },
+      {
+        "path": "manifest.ttl",
+        "sha256": "81b6a2d3296a5804b3d1c8a604595b73f97d6ee40b99fa1d63a038e9402acae2"
+      },
+      {
+        "path": "modgui.ttl",
+        "sha256": "992996ed26bfdf812802d04932f0c0498be8ab58f539c4171339e76d6072fda7"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "82c1b915e2a72d6b33501fe735eb5f2a0fee6451b7b41615a8593582af22e81d"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {
+    "host": "omx-clap-host",
+    "measured": true,
+    "admitted": true,
+    "params": {}
+  },
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "cost": {
+          "median": 5.16406,
+          "percentile": {
+            "p": 95,
+            "value": 5.32031
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 3100,
+          "afterActivateKb": 3100,
+          "atRestKb": 3356,
+          "secondInstanceKb": 8,
+          "firstInstanceKb": 3356,
+          "perInstanceKb": 8
+        },
+        "latency": {
+          "unmeasuredReason": "no-audio-in",
+          "code": "hosting.latency.unmeasured"
+        }
+      }
+    ],
+    "behaviour": {
+      "lifecycle": {
+        "cycles": 30,
+        "instantiated": 30,
+        "failed": 0
+      },
+      "threads": {
+        "before": 1,
+        "afterFirstInstantiate": 1,
+        "afterAllFreed": 1
+      },
+      "features": {
+        "required": []
+      }
+    },
+    "unmeasured": [
+      {
+        "dimension": "latency",
+        "rate": 96000,
+        "quantum": 128,
+        "code": "hosting.latency.unmeasured",
+        "detail": "no-audio-in: no audio input to put an impulse in and no MIDI input to play"
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "lv2_measure",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T10:06:43+00:00",
+  "probe": {
+    "file": "http___moddevices.com_plugins_caps_Fractal@9.26-dc748dce655c.default.probe.json",
+    "sha256": "a486f2f863d7a26e010461a0ed6c84cd235c411942e9865f87e728a23b2b9733",
+    "bytes": 10508,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 9.39,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T100643Z-b07e-1af170fd",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 0.6666666666666666,
+          "xruns": 0,
+          "midiInputsLinked": 0
+        }
+      }
+    ]
+  }
+}

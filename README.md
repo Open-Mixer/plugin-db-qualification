@@ -15,6 +15,17 @@ set per cell, each its own package, named `<set>-<rate>-<quantum>`: `fedora44-48
 are two sets and two packages, `plugin-db-qualification-x86-64-fedora44-48000-512` and
 `plugin-db-qualification-x86-64-fedora44-96000-256`.
 
+Every set names its tier in its provenance (`tier`, `tierNote`) and in its package description:
+
+- **reference**: measured in a container on JACK's dummy driver with real-time priority (SCHED_FIFO, memory
+  locked). Every figure is comparable across machines and classes.
+- **provisional**: measured on JACK's dummy driver without real-time priority. The crash, hang and unmeasured
+  verdicts hold; the cost, latency and xrun figures are not reference figures. A newer reference set supersedes it.
+- **hardware**: measured on the machine's own audio interface. The verdicts hold; its figures describe that
+  interface and are not compared with the reference tier.
+
+Every records package provides `plugin-qualification-records`.
+
 ## What is offered
 
 The current sets of each machine class, one per cell measured, by the latest plugin-qualify, and packaged only for
@@ -24,7 +35,7 @@ the class ships nothing until it is measured again.
 | host class | machine | arch | distribution | package | records | plugin-qualify |
 | --- | --- | --- | --- | --- | --- | --- |
 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | arm64 | Debian trixie and bookworm | `plugin-db-qualification-rpi5-zynthian-vangelis` (deb) | 1863 | 0.19.0, with the adapter, isolated, pool and memory steps under 0.19.1 |
-| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>` (rpm), one per cell | none | not current: the 0.18.5 set was dropped |
+| `x86-64` | the OpenMixer worker image, and a desk | x86_64 | Fedora 44 | `plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>` (rpm), one per cell | 1109 a set, ten cells, provisional tier | 0.19.1 and 0.20.0 (each set's provenance) |
 
 The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
 cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it

@@ -75,7 +75,7 @@ jobs:
   deb:
     needs: [plan, rpm]
     if: ${{ !cancelled() && needs.plan.outputs.from == '' && (needs.plan.outputs.rpm-set != 'true' || needs.rpm.result == 'success') }}
-    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@main
+    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@openmixer-v1
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
@@ -162,7 +162,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: Open-Mixer/.github/.github/actions/release-preflight@main
+      - uses: Open-Mixer/.github/.github/actions/release-preflight@openmixer-v1
         with:
           publish: true
           tag: ${{ github.ref_name }}
@@ -187,7 +187,7 @@ jobs:
           pattern: plugin-db-qualification-debs-*
           merge-multiple: true
           path: collected
-      - uses: Open-Mixer/.github/.github/actions/publish-debs@main
+      - uses: Open-Mixer/.github/.github/actions/publish-debs@openmixer-v1
         with:
           deb-dir: collected
           tag: ${{ github.ref_name }}
@@ -258,7 +258,7 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends ca-certificates curl
 
-      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
 
       # each set alone: installed, plugin-qualify-sync --system takes plugins from it and measures none of the set's,
       # removed (tools/prove-set.sh; a container has no device tree, so the host class is the settings file's, and a
@@ -274,7 +274,7 @@ jobs:
   rpm:
     needs: plan
     if: needs.plan.outputs.rpm-set == 'true'
-    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@main
+    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@openmixer-v1
     with:
       package-name: plugin-db-qualification
       # every Fedora set's subpackage (tools/sets.py names rpm)
@@ -312,7 +312,7 @@ jobs:
           name: plugin-db-qualification-rpms-x86_64
           path: pkgs
 
-      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
 
       - name: Each set installed, and plugin-qualify-sync --system applies its records
         run: |

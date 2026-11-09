@@ -9,7 +9,7 @@ name: release
 # packaging/plugin-qualification-records.spec (whose Version is the tag's too), published into the rpm/ tree and
 # proven the same way in Fedora 44 on x86_64 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
 # the same and publishes nothing unless `publish` is set, and even then only on a tag. The build and the publish are
-# in FreeMixer/.github; the secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
+# in Open-Mixer/.github; the secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
 # arm64 is released first: its package depends on a plugin-qualify the channel serves. The amd64 deb and the x86_64
 # rpm join packaging/release-arches in a later dated version, once plugin-qualify 0.20.1 is in the channel.
@@ -64,7 +64,7 @@ jobs:
   deb:
     needs: [plan, rpm]
     if: ${{ !cancelled() && needs.plan.outputs.deb-run == 'true' && (needs.plan.outputs.rpm-run != 'true' || needs.rpm.result == 'success') }}
-    uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
+    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@main
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
@@ -114,7 +114,7 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends ca-certificates curl
 
-      - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
 
       # the package installed once; each set it carries proven in turn (tools/prove-set.sh: a container has no
       # device tree, so the host class is the settings file's, and a set of one cell sets the sync's grid to it)
@@ -130,7 +130,7 @@ jobs:
   rpm:
     needs: plan
     if: needs.plan.outputs.rpm-run == 'true'
-    uses: FreeMixer/.github/.github/workflows/build-rpm.yml@v1
+    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@main
     with:
       package-name: plugin-qualification-records
       binary-names: ${{ needs.plan.outputs.rpm-names }}
@@ -167,7 +167,7 @@ jobs:
           name: plugin-qualification-records-rpms-x86_64
           path: pkgs
 
-      - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
 
       - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |

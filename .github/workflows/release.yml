@@ -64,7 +64,7 @@ jobs:
   deb:
     needs: [plan, rpm]
     if: ${{ !cancelled() && needs.plan.outputs.deb-run == 'true' && (needs.plan.outputs.rpm-run != 'true' || needs.rpm.result == 'success') }}
-    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@main
+    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@openmixer-v1
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
@@ -114,7 +114,7 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends ca-certificates curl
 
-      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
 
       # the package installed once; each set it carries proven in turn (tools/prove-set.sh: a container has no
       # device tree, so the host class is the settings file's, and a set of one cell sets the sync's grid to it)
@@ -130,7 +130,7 @@ jobs:
   rpm:
     needs: plan
     if: needs.plan.outputs.rpm-run == 'true'
-    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@main
+    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@openmixer-v1
     with:
       package-name: plugin-qualification-records
       binary-names: ${{ needs.plan.outputs.rpm-names }}
@@ -167,7 +167,7 @@ jobs:
           name: plugin-qualification-records-rpms-x86_64
           path: pkgs
 
-      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
 
       - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |

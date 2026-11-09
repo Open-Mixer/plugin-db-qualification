@@ -7,7 +7,7 @@ name: release
 # release. The same tag builds the Fedora sets' RPMs (noarch, one subpackage per set of
 # packaging/plugin-db-qualification.spec, whose Version is the tag's too), publishes them into the rpm/ tree, and
 # proves each alone in Fedora 44 the same way (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves the same and publishes nothing unless
-# `publish` is set, and even then only on a tag. The build and the publish are in FreeMixer/.github; the
+# `publish` is set, and even then only on a tag. The build and the publish are in Open-Mixer/.github; the
 # secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
 # A tagged commit that carries debian/republish does not build: it takes a package the channel already holds,
@@ -15,7 +15,7 @@ name: release
 # installs byte for byte the same, which the job checks), and publishes that through the same publish step. It
 # renames a published set without measuring or building it again. The file says, one per line:
 #   from <version>          the version the channel holds
-#   at <channel commit>     the commit of FreeMixer/freemixer.github.io that holds it (the tree is read there)
+#   at <channel commit>     the commit of Open-Mixer/open-mixer.github.io that holds it (the tree is read there)
 
 on:
   push:
@@ -75,7 +75,7 @@ jobs:
   deb:
     needs: [plan, rpm]
     if: ${{ !cancelled() && needs.plan.outputs.from == '' && (needs.plan.outputs.rpm-set != 'true' || needs.rpm.result == 'success') }}
-    uses: FreeMixer/.github/.github/workflows/build-deb.yml@v1
+    uses: Open-Mixer/.github/.github/workflows/build-deb.yml@main
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
@@ -131,7 +131,7 @@ jobs:
           fi
           dpkg --compare-versions "$to" gt "$FROM" || { echo "::error::$to does not sort above $FROM"; exit 1; }
           old=${PKG}_${FROM}_all.deb
-          curl -fsSL -o "$old" "https://raw.githubusercontent.com/FreeMixer/freemixer.github.io/$AT/deb/debian/trixie/all/$old"
+          curl -fsSL -o "$old" "https://raw.githubusercontent.com/Open-Mixer/open-mixer.github.io/$AT/deb/debian/trixie/all/$old"
           [ "$(dpkg-deb -f "$old" Package)" = "$PKG" ] && [ "$(dpkg-deb -f "$old" Version)" = "$FROM" ]
           dpkg-deb -R "$old" pkg
           sed -i "s/^Version: .*/Version: $to/" pkg/DEBIAN/control
@@ -162,11 +162,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: FreeMixer/.github/.github/actions/release-preflight@v1
+      - uses: Open-Mixer/.github/.github/actions/release-preflight@main
         with:
           publish: true
           tag: ${{ github.ref_name }}
-          target: FreeMixer/freemixer.github.io
+          target: Open-Mixer/open-mixer.github.io
           gpg-key: ${{ secrets.OPENMIXER_PACKAGES_SIGNING_KEY }}
           pages-token: ${{ secrets.PAGES_TOKEN }}
 
@@ -179,7 +179,7 @@ jobs:
     container:
       image: debian:trixie
     concurrency:
-      group: publish-FreeMixer/freemixer.github.io-live
+      group: publish-Open-Mixer/open-mixer.github.io-live
       cancel-in-progress: false
     steps:
       - uses: actions/download-artifact@v4
@@ -187,7 +187,7 @@ jobs:
           pattern: plugin-db-qualification-debs-*
           merge-multiple: true
           path: collected
-      - uses: FreeMixer/.github/.github/actions/publish-debs@v1
+      - uses: Open-Mixer/.github/.github/actions/publish-debs@main
         with:
           deb-dir: collected
           tag: ${{ github.ref_name }}
@@ -197,7 +197,7 @@ jobs:
           cosign-passphrase: ${{ secrets.RPM_GPG_PASSPHRASE }}
           publish-token: ${{ secrets.PAGES_TOKEN }}
           site-gpg-key: ${{ secrets.SITE_GPG_KEY }}
-          channel: FreeMixer/freemixer.github.io
+          channel: Open-Mixer/open-mixer.github.io
           requires: ''
           changelogs-url: https://www.openmixer.org/deb/changelogs
       - uses: actions/upload-artifact@v4
@@ -258,7 +258,7 @@ jobs:
           apt-get update -qq
           apt-get install -y --no-install-recommends ca-certificates curl
 
-      - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
 
       # each set alone: installed, plugin-qualify-sync --system takes plugins from it and measures none of the set's,
       # removed (tools/prove-set.sh; a container has no device tree, so the host class is the settings file's, and a
@@ -274,7 +274,7 @@ jobs:
   rpm:
     needs: plan
     if: needs.plan.outputs.rpm-set == 'true'
-    uses: FreeMixer/.github/.github/workflows/build-rpm.yml@v1
+    uses: Open-Mixer/.github/.github/workflows/build-rpm.yml@main
     with:
       package-name: plugin-db-qualification
       # every Fedora set's subpackage (tools/sets.py names rpm)
@@ -312,7 +312,7 @@ jobs:
           name: plugin-db-qualification-rpms-x86_64
           path: pkgs
 
-      - uses: FreeMixer/.github/.github/actions/add-openmixer@v1
+      - uses: Open-Mixer/.github/.github/actions/add-openmixer@main
 
       - name: Each set installed, and plugin-qualify-sync --system applies its records
         run: |

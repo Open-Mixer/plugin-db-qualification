@@ -42,12 +42,22 @@ esac
 """
 
 
+
+def start_empty(tree):
+    """the spec as the tests start from it: no x86-64 set listed, whatever sets this branch carries"""
+    p = os.path.join(tree, "packaging", "plugin-db-qualification.spec")
+    with open(p, encoding="utf-8") as f:
+        s = f.read()
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(re.sub(r"^%global sets .*$", "%global sets %{nil}", s, count=1, flags=re.M))
+
 class Sets(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = os.path.join(self.tmp.name, "tree")
         for d in ("packaging", "debian"):
             shutil.copytree(os.path.join(ROOT, d), os.path.join(self.root, d))
+        start_empty(self.root)
         self.add_set("rpi5", "zynthian-vangelis")
 
     def tearDown(self):

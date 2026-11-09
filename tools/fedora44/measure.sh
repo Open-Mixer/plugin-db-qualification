@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
-# The run behind records/x86-64/fedora44: in a fedora:44 container (job.yaml, a Job in the cluster's omx-worker
+# The run behind records/x86-64/fedora44: in a fedora:44 container (job.yaml, a Job in the cluster's omx-qualify-rt
 # namespace), the OpenMixer channel's plugin-qualify, plugin-hostd and omx-clap-host, the worker image's plugin set
 # (platform k8s/omx-worker/images/openmixer/baked-versions.yml: omx-plugins clap and lv2, rpms lv2-plugins and
 # clap-plugins, handed over as PLUGINS), and plugin-qualify-sync --system against a dummy-driver JACK server of the
@@ -131,9 +131,24 @@ C
   # the JACK server a device runs: the admission under omx-clap-host adds each LV2 plugin as a client of the default
   # server. Private to this pod, dummy driver, the cell the grid measures; started again whenever it ends, since an
   # admission without a server answers ERR_JACK_CLIENT_CREATION for a plugin that never ran
-  ( while :; do echo "jackd start $(date -u +%FT%T.%NZ)"; jackd -r -d dummy -r $rate -p $per; echo "jackd exit $? $(date -u +%FT%T.%NZ)"; sleep 1; done ) > $out/jackd-$n.log 2>&1 &
+  # real-time priority: SCHED_FIFO 70 and memory locked (the namespace grants SYS_NICE and IPC_LOCK); a base whose
+  # server did not get SCHED_FIFO is not measured, since its records would not be the reference tier
+  ulimit -l unlimited 2>/dev/null || true
+  ( while :; do echo "jackd start $(date -u +%FT%T.%NZ)"; jackd -R -P 70 -d dummy -r $rate -p $per; echo "jackd exit $? $(date -u +%FT%T.%NZ)"; sleep 1; done ) > $out/jackd-$n.log 2>&1 &
   sup=$!
   sleep 3
+  jpid=$(pgrep -x jackd | head -1)
+  # jack2 keeps its main thread at SCHED_OTHER and runs its audio and driver threads at SCHED_FIFO: every thread is
+  # read; memory is locked through IPC_LOCK, which lifts the memlock limit for mlock whatever ulimit -l says
+  fifo=$(for t in /proc/${jpid:-0}/task/*; do chrt -p "${t##*/}" 2>/dev/null; done | grep -c 'SCHED_FIFO')
+  { echo "base $cell: jackd pid ${jpid:-none}, $fifo thread(s) at SCHED_FIFO"
+    for t in /proc/${jpid:-0}/task/*; do echo "  tid ${t##*/} $(cat $t/comm 2>/dev/null): $(chrt -p "${t##*/}" 2>/dev/null | tr '\n' ' ')"; done
+    echo "ulimit -r $(ulimit -r) -l $(ulimit -l); CapEff $(grep CapEff /proc/self/status | awk '{print $2}')"; } >> $out/rt.txt 2>&1
+  cp $out/rt.txt $dir/rt.txt 2>/dev/null || true
+  if [ -z "$jpid" ] || [ "$fifo" -eq 0 ]; then
+    echo "stage $stage $cell: jackd is not SCHED_FIFO (no thread of pid ${jpid:-none} is); not measured: the reference tier needs real-time priority"
+    kill $sup; pkill -x jackd; return 1
+  fi
   # a plugin whose admission or isolated step found no JACK server (resp -201, isolated.no-host) is dropped from the
   # state and measured again by the next pass; what still fails after three passes stays as measured
   for pass in 1 2 3; do

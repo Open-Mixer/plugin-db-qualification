@@ -15,6 +15,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # A new push to a pull request cancels the run it supersedes. Every other run (main, a tag) has a group of its own
+  # and is never cancelled; the run id keeps two pushes to main from replacing each other while one is queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   records:
     runs-on: ubuntu-24.04
@@ -27,6 +33,7 @@ jobs:
       - run: python3 -m unittest tools/test_fedora44_deliver.py
       - run: python3 -m unittest tools/test_build_package.py
       - run: python3 -m unittest tools/test_sets.py
+      - run: python3 -m unittest tools/test_fedora44_rt.py
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
       # every class under records/ is carried by an architecture of the one package, debian/control and the spec's
       # per-architecture block are what packaging/arch-classes and records/ give, and the spec's Version is

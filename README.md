@@ -62,7 +62,7 @@ has with the same bytes.
 | class | where | command | time |
 | --- | --- | --- | --- |
 | `rpi5` | a Raspberry Pi 5 with the ZynthianOS image, plugin-qualify from the channel | one `plugin-qualify-sync --system --force --no-distributed --grid <rate>/<quantum>` per cell (48000/256, 96000/256), each with its own `qualification_dir` under `<run>/b<rate>-<quantum>/qualification`, then the build below | about 6 hours per cell at 48 kHz |
-| `x86-64` | the cluster, a Job (`tools/fedora44/job.yaml`, a fedora:44 pod on an AMD Ryzen 7 PRO 8700GE node) | `kubectl -n omx-worker create configmap omx-qualify-fedora44-script --from-file=tools/fedora44/measure.sh && kubectl apply -f tools/fedora44/job.yaml`; it measures 48000/512 and 96000/256 and delivers `<SET>/b48000-512/qualification` and `<SET>/b96000-256/qualification` to a `records/fedora44/<SET>` branch | hours; the Job stops at 14 h (`activeDeadlineSeconds`) |
+| `x86-64` | the cluster, a Job (`tools/fedora44/job.yaml`, a fedora:44 pod on an AMD Ryzen 7 PRO 8700GE node) | `kubectl -n omx-qualify-rt create configmap omx-qualify-fedora44-script --from-file=tools/fedora44/measure.sh && kubectl apply -f tools/fedora44/job.yaml`; it measures 48000/512 and 96000/256 and delivers `<SET>/b48000-512/qualification` and `<SET>/b96000-256/qualification` to a `records/fedora44/<SET>` branch | hours; the Job stops at 14 h (`activeDeadlineSeconds`) |
 
 Each cell measured is a set of its own: the build below packages every `b<rate>-<quantum>/qualification` of a run as
 `<set>-<rate>-<quantum>`.
@@ -171,7 +171,7 @@ check` holds them together, and every class of `records/` to an architecture).
 judgement with what `debian/` ships.
 
 The x86-64 sets are measured in a pod, not on a desk: `tools/fedora44/job.yaml` is a Job in the cluster's
-`omx-worker` namespace, and `tools/fedora44/measure.sh` installs the channel's plugin-qualify, plugin-hostd and
+`omx-qualify-rt` namespace (privileged, so the container adds SYS_NICE and IPC_LOCK and jackd runs at SCHED_FIFO 70 with memory locked; a base whose server is not SCHED_FIFO is refused), and `tools/fedora44/measure.sh` installs the channel's plugin-qualify, plugin-hostd and
 omx-clap-host with the worker image's plugin set (platform `baked-versions.yml`) in `fedora:44`, starts a JACK
 server of the pod's own (dummy driver) at each cell and runs `plugin-qualify-sync --system` there. It delivers the
 run to a `records/fedora44/<SET>` branch; take it from there and:

@@ -1,0 +1,193 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "org.codeberg.rustydrumgizmo"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/rusty_drumgizmo.clap",
+    "sha256": "ac78f28cec3cdc4952865b2d3b487d96bd968c0a72e86a536c919ca4d8701f11",
+    "files": [
+      {
+        "path": "rusty_drumgizmo.clap",
+        "sha256": "ac78f28cec3cdc4952865b2d3b487d96bd968c0a72e86a536c919ca4d8701f11"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "8ae17de5dd6b41a275b9e58b7d8b70e658101f8a56e6d80fe9dce1a234b9157b"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 0,
+            "syscalls": 0,
+            "locks": 1
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 1
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "clap",
+          "allocations": 0,
+          "locks": 1,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 43976,
+          "afterActivateKb": 44052,
+          "atRestKb": 44052,
+          "secondInstanceKb": 6708,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.19.1",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T08:16:42+00:00",
+  "probe": {
+    "file": "org.codeberg.rustydrumgizmo@unversioned-ac78f28cec3c.custom.probe.json",
+    "sha256": "12a617bb4b6526a3029f007d0c22aaf2083d07a2f658811ddd013f99c081689f",
+    "bytes": 10425,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 39.16,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T081642Z-8ab-bd3ec578",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.silent-output",
+        "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 1.3333333333333333,
+          "xruns": 13,
+          "midiInputsLinked": 1
+        }
+      }
+    ]
+  }
+}

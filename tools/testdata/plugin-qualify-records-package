@@ -1,0 +1,108 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+"""A stand-in for plugin-qualify's plugin-qualify-records-package, for the tests: the same arguments, the same
+judgement of which records go in (a record with its probe output intact, never an unmeasured one), the same
+provenance fields, and a real .deb (ar with debian-binary, control.tar.xz and data.tar.xz) of what it was given,
+so that tools/build-package.sh unpacks it as it unpacks the tool's. Its control says it is this stand-in."""
+import hashlib
+import io
+import json
+import os
+import sys
+import tarfile
+import time
+
+QUALIFIER = "0.19.1"
+
+
+def fail(why):
+    sys.stderr.write(f"plugin-qualify-records-package: {why}\n")
+    sys.exit(2)
+
+
+def tar_xz(entries):
+    """entries: [(name, bytes or None for a directory)], every name ./-rooted, owned by root, in name order."""
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:xz", format=tarfile.GNU_FORMAT) as t:
+        for name, data in sorted(entries, key=lambda e: e[0]):
+            info = tarfile.TarInfo(name)
+            info.mtime = 0
+            if data is None:
+                info.type, info.mode = tarfile.DIRTYPE, 0o755
+                t.addfile(info)
+            else:
+                info.size, info.mode = len(data), 0o644
+                t.addfile(info, io.BytesIO(data))
+    return buf.getvalue()
+
+
+def ar(path, members):
+    with open(path, "wb") as f:
+        f.write(b"!<arch>\n")
+        for name, data in members:
+            f.write(f"{name:<16}{0:<12}{0:<6}{0:<6}{'100644':<8}{len(data):<10}`\n".encode("latin1"))
+            f.write(data)
+            if len(data) % 2:
+                f.write(b"\n")
+
+
+def main(argv):
+    if not argv or argv[0].startswith("--"):
+        fail("names no qualification directory")
+    state, opts, rest = argv[0], {}, argv[1:]
+    while rest:
+        if len(rest) < 2 or rest[0] not in ("--host-class", "--set", "--provenance", "--version", "--out", "--maintainer"):
+            fail(f"unknown argument {rest[0]}")
+        opts[rest[0][2:]] = rest[1]
+        rest = rest[2:]
+    for k in ("host-class", "set", "provenance"):
+        if k not in opts:
+            fail(f"--{k} is needed")
+    cls, set_, version = opts["host-class"], opts["set"], opts.get("version", time.strftime("%Y.%m.%d"))
+    files = []
+    for name in sorted(os.listdir(state)):
+        if name.endswith(".unmeasured.json"):
+            sys.stderr.write(f"plugin-qualify-records-package: {name}: unmeasured, never applies; left out\n")
+        if not name.endswith(".qualification.json"):
+            continue
+        rec = json.load(open(os.path.join(state, name), encoding="utf-8"))
+        probe = (rec.get("probe") or {}).get("file")
+        try:
+            data = open(os.path.join(state, probe), "rb").read()
+        except (OSError, TypeError):
+            continue
+        if hashlib.sha256(data).hexdigest() == rec["probe"].get("sha256"):
+            files += [name, probe]
+    if not files:
+        fail(f"{state} holds no record that can go in the package")
+    text = opts["provenance"]
+    prov = json.loads(text) if text.lstrip().startswith("{") else json.load(open(text, encoding="utf-8"))
+    pkg = f"plugin-db-qualification-{cls}-{set_}"
+    prov.update({"schema": "plugin-qualify.distributed-provenance/1", "set": set_, "hostClass": cls,
+                 "package": {"name": pkg, "version": version}, "date": time.strftime("%Y-%m-%d")})
+    rel = f"./usr/share/omx/qualification/{cls}/{set_}"
+    data = [(d, None) for d in (".", "./usr", "./usr/share", "./usr/share/omx", "./usr/share/omx/qualification",
+                                f"./usr/share/omx/qualification/{cls}", rel)]
+    data += [(f"{rel}/{f}", open(os.path.join(state, f), "rb").read()) for f in sorted(set(files))]
+    data.append((f"{rel}/provenance.json", (json.dumps(prov, indent=2) + "\n").encode()))
+    floor = ".".join(QUALIFIER.split(".")[:2]) + ".0"
+    ceiling = QUALIFIER.split(".")[0] + "." + str(int(QUALIFIER.split(".")[1]) + 1)
+    control = "\n".join([
+        f"Package: {pkg}", f"Version: {version}", "Architecture: all",
+        f"Maintainer: {opts.get('maintainer', 'nobody')}",
+        f"Depends: plugin-qualify (>= {floor}~), plugin-qualify (<< {ceiling}~)",
+        "Section: sound", "Priority: optional", "Multi-Arch: foreign",
+        f"Description: plugin-db qualification layer: {set_} set for {cls}",
+        f" The records of the {set_} plugin set for {cls}, packaged by the test stand-in",
+        " of plugin-qualify-records-package.", ""])
+    out = opts.get("out", ".")
+    os.makedirs(out, exist_ok=True)
+    path = os.path.join(out, f"{pkg}_{version}_all.deb")
+    ar(path, [("debian-binary", b"2.0\n"), ("control.tar.xz", tar_xz([("./control", control.encode())])),
+              ("data.tar.xz", tar_xz(data))])
+    print(path)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

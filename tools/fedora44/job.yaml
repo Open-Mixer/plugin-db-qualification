@@ -4,7 +4,7 @@
 # The Job that measured records/x86-64/fedora44 (see measure.sh). The script goes in first as a ConfigMap:
 #
 #   RUN=20261108   # the set's name; the Job, the ConfigMap, the cache directory and the branch are named for it
-#   kubectl -n omx-worker create configmap omx-qualify-fedora44-script-$RUN --from-file=tools/fedora44/measure.sh --from-file=tools/fedora44/channel-check.sh
+#   kubectl -n omx-qualify-rt create configmap omx-qualify-fedora44-script-$RUN --from-file=tools/fedora44/measure.sh --from-file=tools/fedora44/channel-check.sh
 #   sed "s/__RUN__/$RUN/g" tools/fedora44/job.yaml | kubectl apply -f -
 #
 # The Job delivers its own records: after every stage and base it commits them to the branch records/fedora44/<RUN>
@@ -13,13 +13,14 @@
 # same RUN: the sync's state skips the plugins measured and a stamp skips the stages finished. DRY=2 in the env
 # measures two plugins and pushes to records/fedora44/dry-<RUN>.
 #
-# The namespace's pod security is baseline: no CAP_SYS_NICE and RLIMIT_RTPRIO 0, so nothing in the pod gets
-# SCHED_FIFO (the records say realtime none). PLUGINS is the worker image's set, lv2-plugins then clap-plugins.
+# It runs in omx-qualify-rt, whose pod security is privileged: the container adds SYS_NICE and IPC_LOCK, so jackd runs
+# at SCHED_FIFO 70 with memory locked (measure.sh refuses a base whose server did not), and the records are the
+# reference tier. PLUGINS is the worker image's set, lv2-plugins then clap-plugins.
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: omx-qualify-fedora44-__RUN__
-  namespace: omx-worker
+  namespace: omx-qualify-rt
   labels: {app: omx-qualify-records}
 spec:
   backoffLimit: 0
@@ -196,9 +197,12 @@ spec:
             lsp-plugins-clap
         - name: NODE_NAME
           valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+        securityContext:
+          capabilities: {add: [SYS_NICE, IPC_LOCK]}
         resources:
           requests: {cpu: "2", memory: 6Gi}
-          limits: {cpu: "3", memory: 12Gi}
+          # 192000/128 was killed at 12Gi; qualify-grid.yml raises this further for the heaviest cells
+          limits: {cpu: "3", memory: 16Gi}
         volumeMounts:
         - {name: script, mountPath: /script}
         # JACK keeps its servers in /dev/shm: the runtime's 64 MiB holds one, and a second (the isolated step's private

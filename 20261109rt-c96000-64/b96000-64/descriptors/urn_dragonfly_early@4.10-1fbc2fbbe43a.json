@@ -1,0 +1,214 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "urn:dragonfly:early",
+    "uri": "urn:dragonfly:early",
+    "name": "Dragonfly Early Reflections",
+    "vendor": "Michael Willis",
+    "version": "4.10",
+    "doc": "An early reflection reverb based on Freeverb3",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "dry_level",
+      "name": "Dry Level",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "%",
+        "scale": "linear",
+        "default": 80.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#dry_level"
+      }
+    },
+    {
+      "id": "early_level",
+      "name": "Wet Level",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "%",
+        "scale": "linear",
+        "default": 20.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#early_level"
+      }
+    },
+    {
+      "id": "program",
+      "name": "Program",
+      "kind": "choice",
+      "ids": [
+        "abruptEcho",
+        "backstagePass",
+        "concertVenue",
+        "damagedGoods",
+        "elevatorPitch",
+        "floorThirteen",
+        "garageBand",
+        "homeStudio"
+      ],
+      "labels": [
+        "Abrupt Echo",
+        "Backstage Pass",
+        "Concert Venue",
+        "Damaged Goods",
+        "Elevator Pitch",
+        "Floor Thirteen",
+        "Garage Band",
+        "Home Studio"
+      ],
+      "values": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0
+      ],
+      "default": "concertVenue",
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#program"
+      }
+    },
+    {
+      "id": "size",
+      "name": "Size",
+      "kind": "travel",
+      "travel": {
+        "min": 10.0,
+        "max": 60.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 20.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#size"
+      }
+    },
+    {
+      "id": "width",
+      "name": "Width",
+      "kind": "travel",
+      "travel": {
+        "min": 50.0,
+        "max": 150.0,
+        "unit": "%",
+        "scale": "linear",
+        "default": 100.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#width"
+      }
+    },
+    {
+      "id": "low_cut",
+      "name": "Low Cut",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 200.0,
+        "unit": "Hz",
+        "scale": "linear",
+        "default": 50.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#low_cut"
+      }
+    },
+    {
+      "id": "high_cut",
+      "name": "High Cut",
+      "kind": "travel",
+      "travel": {
+        "min": 1000.0,
+        "max": 16000.0,
+        "unit": "Hz",
+        "scale": "linear",
+        "default": 10000.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.ttl#high_cut"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "lv2_audio_in_1",
+      "name": "Audio Input 1",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "lv2_audio_in_2",
+      "name": "Audio Input 2",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "lv2_audio_out_1",
+      "name": "Audio Output 1",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "lv2_audio_out_2",
+      "name": "Audio Output 2",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "required": [
+        "http://lv2plug.in/ns/ext/options#options",
+        "http://lv2plug.in/ns/ext/urid#map"
+      ],
+      "optional": [
+        "http://lv2plug.in/ns/ext/buf-size#boundedBlockLength",
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#ReverbPlugin"
+    }
+  },
+  "source": {
+    "from": "DragonflyEarlyReflections.lv2/DragonflyEarlyReflections_dsp.so#lv2_descriptor"
+  }
+}

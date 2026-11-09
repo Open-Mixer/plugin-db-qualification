@@ -1,0 +1,156 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/Scape",
+    "uri": "http://moddevices.com/plugins/caps/Scape",
+    "name": "C* Scape - Stereo delay + Filters",
+    "vendor": "MOD Team",
+    "version": "9.26",
+    "doc": "A stereo delay with resonant filters and fractally modulated panning. The delay times are set through the bpm control and the divider adjustment. Triplet and sixteenth settings create a dotted rhythm. With every beat, the filter resonance frequencies are retuned to random steps on an equal-tempered chromatic scale, to the reference set through the tune control. source: http://quitte.de/dsp/caps.html#Scape",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "bpm",
+      "name": "BPM",
+      "kind": "travel",
+      "travel": {
+        "min": 30.0,
+        "max": 182.0,
+        "unit": "bpm",
+        "scale": "linear",
+        "default": 100.0
+      },
+      "source": {
+        "from": "mod-caps-Scape.lv2/Scape.ttl#bpm"
+      }
+    },
+    {
+      "id": "div",
+      "name": "Div",
+      "kind": "choice",
+      "ids": [
+        "v0",
+        "v1",
+        "v2",
+        "v3"
+      ],
+      "labels": [
+        "♩",
+        "♪♪",
+        "♪♪♪",
+        "♬♬"
+      ],
+      "values": [
+        1.0,
+        2.0,
+        3.0,
+        4.0
+      ],
+      "default": "v2",
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Scape.lv2/Scape.ttl#div"
+      }
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.25
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Scape.lv2/Scape.ttl#feedback"
+      }
+    },
+    {
+      "id": "q",
+      "name": "Q",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.75
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Scape.lv2/Scape.ttl#q"
+      }
+    },
+    {
+      "id": "blend",
+      "name": "Blend",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.5
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Scape.lv2/Scape.ttl#blend"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "in",
+      "name": "In",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "outl",
+      "name": "Out Left",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "outr",
+      "name": "Out Right",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "optional": [
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#DelayPlugin"
+    }
+  },
+  "source": {
+    "from": "mod-caps-Scape.lv2/Scape.so#lv2_descriptor"
+  }
+}

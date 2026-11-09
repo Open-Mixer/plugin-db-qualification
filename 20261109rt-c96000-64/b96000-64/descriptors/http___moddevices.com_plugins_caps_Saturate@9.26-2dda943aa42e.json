@@ -1,0 +1,141 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/Saturate",
+    "uri": "http://moddevices.com/plugins/caps/Saturate",
+    "name": "C* Saturate",
+    "vendor": "MOD Team",
+    "version": "9.26",
+    "doc": "Please note that this plugin embodies a very basic building block of audio DSP, not an elaborate effect that will be pleasing to hear right away. To turn saturation into a musically useful effect it is usually combined with some sort of filtering and dynamics modulation. The mode control chooses from a selection of clipping functions of varying character. Even-order harmonics can be added with the bias setting. Towards the maximum, sound will start to get scratchy and eventually starve away. The plugin is 8x oversampled with 64-tap polyphase filters, effectively suppressing aliasing noise for most musical applications. Changes to the bias control induce short-lived energy at DC in the output. In order to reduce the computational load incurred when evaluating transcendental functions at eight times the nominal sample rate, these are approximated roughly, using Chebyshev polynomials whose coefficients depend on the amplitude's floating point representation exponent. source: http://quitte.de/dsp/caps.html#Saturate",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "mode",
+      "name": "Mode",
+      "kind": "choice",
+      "ids": [
+        "bypass",
+        "atan",
+        "atan15",
+        "clip",
+        "one5",
+        "one53",
+        "clip3",
+        "clip9",
+        "sin1",
+        "pow7",
+        "tanh",
+        "rectify"
+      ],
+      "labels": [
+        "bypass",
+        "atan",
+        "atan15",
+        "clip",
+        "one5",
+        "one53",
+        "clip3",
+        "clip9",
+        "sin1",
+        "pow7",
+        "tanh",
+        "rectify"
+      ],
+      "values": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0
+      ],
+      "default": "atan",
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Saturate.lv2/Saturate.ttl#mode"
+      }
+    },
+    {
+      "id": "gain",
+      "name": "Gain",
+      "kind": "travel",
+      "travel": {
+        "min": -24.0,
+        "max": 72.0,
+        "unit": "dB",
+        "scale": "linear",
+        "default": 0.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Saturate.lv2/Saturate.ttl#gain"
+      }
+    },
+    {
+      "id": "bias",
+      "name": "Bias",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Saturate.lv2/Saturate.ttl#bias"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "in",
+      "name": "In",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "out",
+      "name": "Out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "optional": [
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#DistortionPlugin"
+    }
+  },
+  "source": {
+    "from": "mod-caps-Saturate.lv2/Saturate.so#lv2_descriptor"
+  }
+}

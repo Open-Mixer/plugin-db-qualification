@@ -1,0 +1,216 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "https://chrisarndt.de/plugins/stereocrossdelay",
+    "uri": "https://chrisarndt.de/plugins/stereocrossdelay",
+    "name": "StereoCrossDelay",
+    "vendor": "chrisarndt.de",
+    "version": "2.0",
+    "doc": "A stereo delay with feedback and cross-mixing",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "delay_l",
+      "name": "Delay L",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "ms",
+        "scale": "linear",
+        "default": 500.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#delay_l"
+      }
+    },
+    {
+      "id": "delay_r",
+      "name": "Delay R Ratio",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0010000000474974513,
+        "max": 2.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.75
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#delay_r"
+      }
+    },
+    {
+      "id": "feedback",
+      "name": "Feedback",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "%",
+        "scale": "linear",
+        "default": 20.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#feedback"
+      }
+    },
+    {
+      "id": "lp_cutoff",
+      "name": "Lowpass",
+      "kind": "travel",
+      "travel": {
+        "min": 20.0,
+        "max": 20000.0,
+        "unit": "Hz",
+        "scale": "log",
+        "default": 12000.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#lp_cutoff"
+      }
+    },
+    {
+      "id": "hp_cutoff",
+      "name": "Highpass",
+      "kind": "travel",
+      "travel": {
+        "min": 20.0,
+        "max": 20000.0,
+        "unit": "Hz",
+        "scale": "log",
+        "default": 60.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#hp_cutoff"
+      }
+    },
+    {
+      "id": "crossmix",
+      "name": "Crossmix",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "%",
+        "scale": "linear",
+        "default": 25.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#crossmix"
+      }
+    },
+    {
+      "id": "dry",
+      "name": "Dry",
+      "kind": "travel",
+      "travel": {
+        "min": -90.0,
+        "max": 6.0,
+        "unit": "dB",
+        "scale": "linear",
+        "default": 0.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#dry"
+      }
+    },
+    {
+      "id": "wet",
+      "name": "Wet",
+      "kind": "travel",
+      "travel": {
+        "min": -90.0,
+        "max": 6.0,
+        "unit": "dB",
+        "scale": "linear",
+        "default": -6.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#wet"
+      }
+    },
+    {
+      "id": "lv2_enabled",
+      "name": "Enabled",
+      "kind": "toggle",
+      "default": true,
+      "meaning": "enabled",
+      "source": {
+        "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.ttl#lv2_enabled"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "audio_in_1",
+      "name": "Audio Input 1",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "audio_in_2",
+      "name": "Audio Input 2",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "audio_out_1",
+      "name": "Audio Output 1",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "audio_out_2",
+      "name": "Audio Output 2",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "required": [
+        "http://lv2plug.in/ns/ext/options#options",
+        "http://lv2plug.in/ns/ext/urid#map"
+      ],
+      "optional": [
+        "http://lv2plug.in/ns/ext/buf-size#boundedBlockLength",
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#DelayPlugin"
+    }
+  },
+  "source": {
+    "from": "stereocrossdelay.lv2/stereocrossdelay_dsp.so#lv2_descriptor"
+  }
+}

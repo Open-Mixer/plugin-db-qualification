@@ -1,0 +1,122 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/Noisegate",
+    "uri": "http://moddevices.com/plugins/caps/Noisegate",
+    "name": "C* Noisegate - Attenuate noise resident in silence",
+    "vendor": "MOD Team",
+    "version": "9.26",
+    "doc": "This plugin aims to reduce undesirable background noise and hum in otherwise silent passages. When the signal's instantaneous amplitude exceeds the opening threshold, the gate is opened. The time it takes until the gate is fully open can be set with the attack control. As soon as the signal's RMS power level drops below the closing threshold, the gate closes. This takes a fixed time of 20 ms; closed gate attenuation is 60 dB. To cope with powerline hum as often present in signals from electric guitars, a notch filter can be activated by setting the mains frequency control to a non-zero value. The filter will prevent this frequency from contributing to the signal power measurement. This allows a low closing threshold setting without mains hum keeping the gate open unduly. The default mains setting is 50 Hz. source: http://quitte.de/dsp/caps.html#Noisegate",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "open",
+      "name": "Open",
+      "kind": "travel",
+      "travel": {
+        "min": -55.0,
+        "max": 0.0,
+        "unit": "dB",
+        "scale": "linear",
+        "default": -41.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Noisegate.lv2/Noisegate.ttl#open"
+      }
+    },
+    {
+      "id": "attack",
+      "name": "Attack",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 5.0,
+        "unit": "ms",
+        "scale": "linear",
+        "default": 0.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Noisegate.lv2/Noisegate.ttl#attack"
+      }
+    },
+    {
+      "id": "close",
+      "name": "Close",
+      "kind": "travel",
+      "travel": {
+        "min": -80.0,
+        "max": 0.0,
+        "unit": "dB",
+        "scale": "linear",
+        "default": -67.5
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Noisegate.lv2/Noisegate.ttl#close"
+      }
+    },
+    {
+      "id": "mains",
+      "name": "Mains",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "Hz",
+        "scale": "stepped",
+        "step": 1,
+        "default": 50.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-Noisegate.lv2/Noisegate.ttl#mains"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "in",
+      "name": "In",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "out",
+      "name": "Out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "optional": [
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#UtilityPlugin"
+    }
+  },
+  "source": {
+    "from": "mod-caps-Noisegate.lv2/Noisegate.so#lv2_descriptor"
+  }
+}

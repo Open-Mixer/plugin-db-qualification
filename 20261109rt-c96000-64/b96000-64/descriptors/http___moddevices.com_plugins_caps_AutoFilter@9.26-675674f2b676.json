@@ -1,0 +1,197 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/AutoFilter",
+    "uri": "http://moddevices.com/plugins/caps/AutoFilter",
+    "name": "C* AutoFilter",
+    "vendor": "MOD Team",
+    "version": "9.26",
+    "doc": "A versatile selection of filters of varying character in band and lowpass configuration. The cutoff frequency can be modulated by both the input signal envelope and by a fractal oscillator. The default settings provide some sort of an automatic wah effect. The extent of filter modulation is set through the range parameter. The shape of the modulation is mixed from the attractor and the envelope according to the lfo/env balance. Filter stage gain can be used to add inter-stage saturation. To prevent this from causing audible aliasing, the plugin can be run in oversampled mode, at ratios selectable through the over control. At very high Q and f combined, the filter stability may become compromised. Computational load varies greatly with the over and filter settings. source: http://quitte.de/dsp/caps.html#AutoFilter",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "mode",
+      "name": "Mode",
+      "kind": "choice",
+      "ids": [
+        "lowPass",
+        "bandPass"
+      ],
+      "labels": [
+        "Low-Pass",
+        "Band-Pass"
+      ],
+      "values": [
+        0.0,
+        1.0
+      ],
+      "default": "bandPass",
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#mode"
+      }
+    },
+    {
+      "id": "filter",
+      "name": "Filter",
+      "kind": "choice",
+      "ids": [
+        "breathy",
+        "fat"
+      ],
+      "labels": [
+        "Breathy",
+        "Fat"
+      ],
+      "values": [
+        0.0,
+        1.0
+      ],
+      "default": "fat",
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#filter"
+      }
+    },
+    {
+      "id": "frequency",
+      "name": "Frequency",
+      "kind": "travel",
+      "travel": {
+        "min": 20.0,
+        "max": 3800.0,
+        "unit": "Hz",
+        "scale": "log",
+        "default": 2555.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#frequency"
+      }
+    },
+    {
+      "id": "Q",
+      "name": "Q",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.25
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#Q"
+      }
+    },
+    {
+      "id": "depth",
+      "name": "Depth",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 1.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#depth"
+      }
+    },
+    {
+      "id": "lfoenv",
+      "name": "LFO/Envelope",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.25
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#lfoenv"
+      }
+    },
+    {
+      "id": "rate",
+      "name": "Rate",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 0.25
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#rate"
+      }
+    },
+    {
+      "id": "shape",
+      "name": "Shape",
+      "kind": "travel",
+      "travel": {
+        "min": 0.0,
+        "max": 1.0,
+        "unit": "unknown",
+        "scale": "linear",
+        "default": 1.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-AutoFilter.lv2/AutoFilter.ttl#shape"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "in",
+      "name": "In",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "out",
+      "name": "Out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "optional": [
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#FilterPlugin"
+    }
+  },
+  "source": {
+    "from": "mod-caps-AutoFilter.lv2/AutoFilter.so#lv2_descriptor"
+  }
+}

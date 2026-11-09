@@ -1,0 +1,150 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/CabinetIII",
+    "uri": "http://moddevices.com/plugins/caps/CabinetIII",
+    "name": "C* CabinetIII - Idealised loudspeaker cabinet emulation",
+    "vendor": "MOD Team",
+    "version": "9.26",
+    "doc": "A loudspeaker cabinet emulation far less demanding than the recommended CabinetIV. Implemented as two sets of 31st-order IIR filters precomputed (using Prony's method) for fs of 44.1 and 48 kHz. The appropriate filter set is selected at runtime. The alt switch allows the selection of the same fiter model for the alternative sample rate; at 48 kHz the alternative will sound slightly darker, at 44.1 slightly brighter. At other sample rates, the plugin will not sound very much like a guitar speaker cabinet. source: http://quitte.de/dsp/caps.html#CabinetIII",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": "model",
+      "name": "Model",
+      "kind": "choice",
+      "ids": [
+        "off",
+        "twin",
+        "wookie",
+        "blue",
+        "indigo",
+        "supra",
+        "tweedie",
+        "basswoman",
+        "martial",
+        "poser",
+        "cabby",
+        "angel",
+        "matched",
+        "yellow",
+        "piquey",
+        "paladin",
+        "turtle"
+      ],
+      "labels": [
+        "Off",
+        "Twin",
+        "Wookie",
+        "Blue",
+        "Indigo",
+        "Supra",
+        "Tweedie",
+        "Basswoman",
+        "Martial",
+        "Poser",
+        "Cabby",
+        "Angel",
+        "Matched",
+        "Yellow",
+        "Piquey",
+        "Paladin",
+        "Turtle"
+      ],
+      "values": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+        13.0,
+        14.0,
+        15.0,
+        16.0
+      ],
+      "default": "twin",
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-CabinetIII.lv2/CabinetIII.ttl#model"
+      }
+    },
+    {
+      "id": "alt",
+      "name": "Alt",
+      "kind": "toggle",
+      "default": false,
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-CabinetIII.lv2/CabinetIII.ttl#alt"
+      }
+    },
+    {
+      "id": "gain",
+      "name": "Gain",
+      "kind": "travel",
+      "travel": {
+        "min": -24.0,
+        "max": 24.0,
+        "unit": "dB",
+        "scale": "linear",
+        "default": 0.0
+      },
+      "meaning": "unknown",
+      "source": {
+        "from": "mod-caps-CabinetIII.lv2/CabinetIII.ttl#gain"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": "in",
+      "name": "In",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 1
+    },
+    {
+      "id": "out",
+      "name": "Out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 1
+    }
+  ],
+  "needs": {
+    "extensions": {
+      "optional": [
+        "http://lv2plug.in/ns/lv2core#hardRTCapable"
+      ]
+    }
+  },
+  "latency": {
+    "reports": false
+  },
+  "extensions": {
+    "lv2": {
+      "rdf:type": "http://lv2plug.in/ns/lv2core#SimulatorPlugin"
+    }
+  },
+  "source": {
+    "from": "mod-caps-CabinetIII.lv2/CabinetIII.so#lv2_descriptor"
+  }
+}

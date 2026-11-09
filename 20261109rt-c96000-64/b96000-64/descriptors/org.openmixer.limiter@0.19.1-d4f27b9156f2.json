@@ -1,0 +1,153 @@
+{
+  "$schema": "https://github.com/FreeMixer/omx-contract/raw/v3/schema/omx-contract.schema.json",
+  "requires": {
+    "omx-contract-schema": ">= 3.4.0"
+  },
+  "origin": "scanned",
+  "plugin": {
+    "format": "clap",
+    "id": "org.openmixer.limiter",
+    "name": "omx limiter",
+    "vendor": "openmixer",
+    "version": "0.19.1",
+    "doc": "The precision limiter: a look-ahead, true-peak, stereo-linked brickwall.",
+    "features": [
+      "audio-effect"
+    ]
+  },
+  "controls": [
+    {
+      "id": 0,
+      "name": "Ceiling",
+      "kind": "travel",
+      "travel": {
+        "min": -12,
+        "max": 0,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": -1
+      },
+      "group": [
+        "Limiter"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-limiter.clap#clap_entry[org.openmixer.limiter][0]"
+      }
+    },
+    {
+      "id": 1,
+      "name": "Lookahead",
+      "kind": "travel",
+      "travel": {
+        "min": 0.5,
+        "max": 5,
+        "unit": "unknown",
+        "scale": "unknown",
+        "default": 1.5
+      },
+      "group": [
+        "Limiter"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-limiter.clap#clap_entry[org.openmixer.limiter][1]"
+      }
+    },
+    {
+      "id": 2,
+      "name": "Release",
+      "kind": "travel",
+      "travel": {
+        "min": 1,
+        "max": 1000,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 50
+      },
+      "group": [
+        "Limiter"
+      ],
+      "meaning": "unknown",
+      "automatable": true,
+      "source": {
+        "from": "omx-limiter.clap#clap_entry[org.openmixer.limiter][2]"
+      }
+    },
+    {
+      "id": 2147418112,
+      "name": "Bypass",
+      "kind": "travel",
+      "travel": {
+        "min": 0,
+        "max": 1,
+        "unit": "unknown",
+        "scale": "stepped",
+        "step": 1,
+        "default": 0
+      },
+      "meaning": "bypass",
+      "automatable": true,
+      "source": {
+        "from": "omx-limiter.clap#clap_entry[org.openmixer.limiter][2147418112]"
+      }
+    }
+  ],
+  "ports": [
+    {
+      "id": 0,
+      "name": "in",
+      "kind": "audio",
+      "direction": "in",
+      "role": "main",
+      "channels": 2,
+      "layout": "stereo"
+    },
+    {
+      "id": 0,
+      "name": "out",
+      "kind": "audio",
+      "direction": "out",
+      "role": "main",
+      "channels": 2,
+      "layout": "stereo"
+    }
+  ],
+  "latency": {
+    "reports": true
+  },
+  "extensions": {
+    "clap": {
+      "clap_plugin_descriptor.features": [
+        "audio-effect",
+        "limiter",
+        "stereo"
+      ],
+      "clap_plugin_descriptor.url": "https://github.com/FreeMixer/omx-plugins",
+      "clap_plugin_remote_controls.get": [
+        {
+          "id": 0,
+          "section": "Limiter",
+          "name": "Limiter",
+          "params": [
+            0,
+            1,
+            2,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "forPreset": false
+        }
+      ]
+    }
+  },
+  "source": {
+    "from": "omx-limiter.clap#clap_entry[org.openmixer.limiter]"
+  }
+}

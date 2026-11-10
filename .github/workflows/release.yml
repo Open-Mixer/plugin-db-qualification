@@ -59,11 +59,10 @@ jobs:
           python3 tools/sets.py check
           python3 tools/sets.py github-output
 
-  # A release is one wave: the DEB waits for the RPM job and runs only when it passed (the organisation's release-order
-  # check). While packaging/release-arches names no RPM architecture the RPM job is skipped and the DEB goes alone.
+  # The DEB builds beside the RPM: the organisation's build workflows serialise their publish jobs, one group per target.
   deb:
-    needs: [plan, rpm]
-    if: ${{ !cancelled() && needs.plan.outputs.deb-run == 'true' && (needs.plan.outputs.rpm-run != 'true' || needs.rpm.result == 'success') }}
+    needs: plan
+    if: needs.plan.outputs.deb-run == 'true'
     uses: Open-Mixer/.github/.github/workflows/build-deb.yml@openmixer-v1
     with:
       # the source package is named for the repository, which keeps the .changes file name short for lintian

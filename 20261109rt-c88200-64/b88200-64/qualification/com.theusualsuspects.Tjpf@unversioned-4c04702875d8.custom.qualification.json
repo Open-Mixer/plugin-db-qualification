@@ -1,0 +1,224 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.theusualsuspects.Tjpf"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/JE8086FX.clap",
+    "sha256": "4c04702875d830f118a206ce699ba4a4803944ac7db048945fdde134564ad313",
+    "files": [
+      {
+        "path": "JE8086FX.clap",
+        "sha256": "4c04702875d830f118a206ce699ba4a4803944ac7db048945fdde134564ad313"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "ca4f7fac37738c671eaa437738c7a045687cfecd233c318ded450f271b1059b8"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 5158,
+            "syscalls": 66,
+            "locks": 4868
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 15422,
+            "syscalls": 0,
+            "locks": 28674
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 88200,
+        "quantum": 64,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 660,
+          "measuredFrames": 661
+        },
+        "cost": {
+          "median": 1183.47,
+          "percentile": {
+            "p": 95,
+            "value": 1569.32
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 5158,
+          "locks": 4868,
+          "syscalls": 66,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "pthread_mutex_lock",
+            "write",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "write",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "write",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "write",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "write",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock"
+          ]
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "midi",
+          "allocations": 15422,
+          "locks": 28674,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 20512,
+          "afterActivateKb": 41540,
+          "atRestKb": 41540,
+          "secondInstanceKb": 28632,
+          "firstInstanceKb": 41540,
+          "perInstanceKb": 28632
+        },
+        "latencyMs": 7.494331
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T23:43:44+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "com.theusualsuspects.Tjpf@unversioned-4c04702875d8.custom.probe.json",
+    "sha256": "1c160fe85f562db20cd4962f5fc830059d822e1d4211e357fa3c9dbeec77bcbd",
+    "bytes": 10781,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 17.92,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T234344Z-1d7f-84bbcefd",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.silent-output",
+        "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
+        "figures": {
+          "latencyFrames": 1092,
+          "cpuPercent": 12.666666666666666,
+          "xruns": 2,
+          "midiInputsLinked": 1
+        }
+      }
+    ]
+  }
+}

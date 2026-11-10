@@ -7,8 +7,9 @@
 # class and cell. A set is per machine class, per sample rate and per quantum (fedora44-48000-512). The version is the
 # dated one the tag and debian/changelog carry (vYYYYMMDDXX).
 #
-# x86_64 carries the x86-64 class (the fedora44 sets). There is no aarch64 build: no Fedora machine of an arm64
-# class (rpi5) is measured, so ExclusiveArch names x86_64 alone.
+# x86_64 carries the x86-64 class (the fedora44 sets). aarch64 carries the rpi5 class, the same sets the arm64 deb
+# carries: a package that depends on the records installs on Fedora aarch64 too, and a record applies only where the
+# installed plugin's bytes are the measured ones.
 #
 # The block between BEGIN and END per-architecture is written by tools/sets.py spec: each architecture's
 # plugin-qualify range (packaging/arch-classes) and the older package names it takes over (one package per set, the
@@ -19,13 +20,13 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026110902
+Version: 2026111001
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/FreeMixer/plugin-db-qualification
 Source0: %{name}-%{version}.tar.gz
-ExclusiveArch: x86_64
+ExclusiveArch: x86_64 aarch64
 
 # tools/sets.py in %%install and the record check in %%check
 BuildRequires: python3
@@ -57,6 +58,13 @@ Provides: plugin-db-qualification-x86-64-fedora44-96000-512 = %{version}-%{relea
 Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-512 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-96000-64 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-64 < %{version}-%{release}
+%endif
+%ifarch aarch64
+Requires: (plugin-qualify >= 0.20.0 with plugin-qualify < 0.21)
+Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
+Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
+Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
+Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
 %endif
 # END per-architecture
 

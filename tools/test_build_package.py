@@ -138,9 +138,13 @@ class BuildPackage(unittest.TestCase):
                          ["zynthian-vangelis", "zynthian-vangelis-48000-512", "zynthian-vangelis-96000-256"])
         for suffix, cell in CELLS.items():
             self.assert_cell_set("rpi5", f"zynthian-vangelis-{suffix}", cell, f"b{suffix}")
-        # no stanza, no install file, no spec list: the arm64 package carries records/rpi5/ whole
+        # no stanza and no install file: the arm64 package carries records/rpi5/ whole. The spec's aarch64 block
+        # gains the new sets' names and nothing else moves
         self.assertEqual(self.snapshot("debian"), self.debian)
-        self.assertEqual(self.spec_text(), spec_before)
+        spec = self.spec_text()
+        for suffix in CELLS:
+            self.assertIn(f"Provides: plugin-db-qualification-rpi5-zynthian-vangelis-{suffix} = ", spec)
+        self.assertEqual([l for l in spec.split("\n") if "rpi5" not in l], [l for l in spec_before.split("\n") if "rpi5" not in l])
         self.assertEqual(os.listdir(self.other), ["provenance.json"])
         self.assertEqual(sets.problems(self.tree), [])
         out = subprocess.run(["python3", os.path.join(self.tree, "tools", "sets.py"), "substvars", "arm64"],

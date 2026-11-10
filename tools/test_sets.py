@@ -175,8 +175,8 @@ class Check(Tree):
         self.assertIn("release-arches: class x86-64 of rpm architecture x86_64 has no set under records/x86-64/", self.problems())
         self.with_two_cells()
         self.assertEqual(sets.problems(self.root), [])
-        self.edit("packaging/release-arches", "\nrpm x86_64\n", "\nrpm aarch64\n")
-        self.assertIn("rpm aarch64 is not an ExclusiveArch", self.problems())
+        self.edit("packaging/release-arches", "\nrpm x86_64\n", "\nrpm riscv64\n")
+        self.assertIn("rpm riscv64 is not an ExclusiveArch", self.problems())
 
     def test_github_output(self):
         out = os.path.join(self.tmp.name, "out")
@@ -240,7 +240,10 @@ class Substvars(Tree):
         for n in ("plugin-db-qualification-x86-64-fedora44", "omx-qualification-x86-64-fedora44",
                   "plugin-db-qualification-x86-64-fedora44-48000-512", "plugin-db-qualification-x86-64-fedora44-96000-256"):
             self.assertIn(f"Provides: {n} = %{{version}}-%{{release}}\nObsoletes: {n} < %{{version}}-%{{release}}\n", block)
-        self.assertNotIn("rpi5", block)
+        # each architecture's block names its own classes only
+        self.assertNotIn("rpi5", block.split("%endif")[0])
+        self.assertIn("%ifarch aarch64\nRequires: (plugin-qualify >= 0.20.0 with plugin-qualify < 0.21)\n", block)
+        self.assertNotIn("x86-64", block.split("%ifarch aarch64")[1])
         if shutil.which("rpmspec"):
             def q(*what):
                 return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],

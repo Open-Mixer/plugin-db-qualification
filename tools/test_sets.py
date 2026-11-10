@@ -64,6 +64,12 @@ class Tree(unittest.TestCase):
             shutil.copytree(os.path.join(ROOT, d), os.path.join(self.root, d))
         os.makedirs(self.path("tools"))
         shutil.copy2(os.path.join(HERE, "sets.py"), self.path("tools", "sets.py"))
+        # the tree as a class's first release finds it: the arm64 deb alone, so a test adds the x86-64 sets and the
+        # amd64/x86_64 formats itself, whatever this repo's own release-arches names today
+        with open(self.path("packaging", "release-arches")) as f:
+            head = [l for l in f if l.startswith("#")]
+        with open(self.path("packaging", "release-arches"), "w") as f:
+            f.write("".join(head) + "deb arm64\nrpm\n")
         self.add_set("rpi5", "zynthian-vangelis")
         self.respec()
 

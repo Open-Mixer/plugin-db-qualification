@@ -22,6 +22,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
+# the version the spec carries today: a build at it changes nothing in debian/ the test does not expect
+with open(os.path.join(ROOT, "packaging", "plugin-qualification-records.spec")) as _f:
+    VERSION = next(l.split()[1] for l in _f if l.startswith("Version:"))
 DATA = os.path.join(HERE, "testdata")
 RUN = os.path.join(DATA, "run")
 CELLS = {"48000-512": "48000/512", "96000-256": "96000/256"}
@@ -49,14 +52,19 @@ class BuildPackage(unittest.TestCase):
         os.makedirs(self.other)
         with open(os.path.join(self.other, "provenance.json"), "w") as f:
             f.write("{}\n")
-        # the tree as it starts: no x86-64 set, the spec's block written for that
+        # the tree as it starts: no x86-64 set and the arm64 deb the only format released, the spec's block written for that
+        ra = os.path.join(self.tree, "packaging", "release-arches")
+        with open(ra) as f:
+            head = [l for l in f if l.startswith("#")]
+        with open(ra, "w") as f:
+            f.write("".join(head) + "deb arm64\nrpm\n")
         self.assertEqual(sets.main(["spec"], root=self.tree), 0)
         self.debian = self.snapshot("debian")
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def build(self, *args, version="2026110901", rc=0):
+    def build(self, *args, version=VERSION, rc=0):
         env = dict(os.environ, PATH=DATA + os.pathsep + os.environ["PATH"])
         r = subprocess.run(["bash", os.path.join(self.tree, "tools", "build-package.sh"), *args,
                             "--provenance", os.path.join(DATA, "provenance.json"), "--version", version],
@@ -91,7 +99,7 @@ class BuildPackage(unittest.TestCase):
         prov = json.loads(self.read("records", cls, name, "provenance.json"))
         self.assertEqual(prov["set"], name)
         self.assertEqual(prov["hostClass"], cls)
-        self.assertEqual(prov["package"], {"name": f"plugin-db-qualification-{cls}-{name}", "version": "2026110901"})
+        self.assertEqual(prov["package"], {"name": f"plugin-db-qualification-{cls}-{name}", "version": VERSION})
         self.assertEqual(prov["grid"], cell)
         self.assertEqual(prov["hostProfile"], "openmixer-console")
         # the records are the device's bytes, the unmeasured plugin stays out
@@ -110,7 +118,7 @@ class BuildPackage(unittest.TestCase):
                          ["fedora44-48000-512", "fedora44-96000-256"])
         for suffix, cell in CELLS.items():
             self.assert_cell_set("x86-64", f"fedora44-{suffix}", cell, f"b{suffix}")
-        self.assertIn("\nVersion: 2026110901\n", self.spec_text())
+        self.assertIn(f"\nVersion: {VERSION}\n", self.spec_text())
         # the one package takes over each set's older name; nothing in debian/ is per set
         self.assert_folded_by_the_rpm(["plugin-db-qualification-x86-64-fedora44", "omx-qualification-x86-64-fedora44",
                                        "plugin-db-qualification-x86-64-fedora44-48000-512",
@@ -137,7 +145,7 @@ class BuildPackage(unittest.TestCase):
         self.assertEqual(sets.problems(self.tree), [])
         out = subprocess.run(["python3", os.path.join(self.tree, "tools", "sets.py"), "substvars", "arm64"],
                              capture_output=True, text=True, check=True).stdout
-        self.assertIn("plugin-db-qualification-rpi5-zynthian-vangelis-48000-512 (= 2026110901)", out)
+        self.assertIn(f"plugin-db-qualification-rpi5-zynthian-vangelis-48000-512 (= {VERSION})", out)
 
     def test_the_version_goes_where_it_lives(self):
         r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101")

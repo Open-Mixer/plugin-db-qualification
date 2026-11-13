@@ -24,7 +24,7 @@ Version: 2026111001
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
-URL: https://github.com/FreeMixer/plugin-db-qualification
+URL: https://github.com/Open-Mixer/plugin-db-qualification
 Source0: %{name}-%{version}.tar.gz
 ExclusiveArch: x86_64 aarch64
 

@@ -4,7 +4,7 @@ The qualification layer of plugin-db: plugin-qualify's records of the plugin set
 Debian and RPM package per architecture, `plugin-qualification-records`.
 
 plugin-db keeps the plugin database in layers; plugin-qualify writes this one, and plugin-hostd only hosts.
-[plugin-qualify](https://github.com/FreeMixer/plugin-qualify) measures every LV2 and CLAP plugin of a machine before
+[plugin-qualify](https://github.com/Open-Mixer/plugin-qualify) measures every LV2 and CLAP plugin of a machine before
 the machine hosts it. A Raspberry Pi 5 takes hours to measure a full Zynthian image. A machine of the same class and
 the same plugin set does not need to measure it again: this repository holds the records one such machine wrote, and
 publishes them as `plugin-qualification-records`, which `plugin-qualify-sync` reads before it measures anything.
@@ -226,7 +226,7 @@ A tag `v*` runs `.github/workflows/release.yml`. It builds `plugin-qualification
   `plugin-qualify-sync --system` must take plugins from that set's records (`distributed: ... applied (<set>)`) and
   measure none of them. The amd64 package carries the Fedora sets, whose plugins no Debian machine holds, so it is
   built, linted and published without an install proof; its sets are proven by the x86_64 RPM.
-- an RPM architecture: the package from `packaging/plugin-qualification-records.spec` through FreeMixer/.github's
+- an RPM architecture: the package from `packaging/plugin-qualification-records.spec` through Open-Mixer/.github's
   `build-rpm.yml` (its `%check` runs `tools/check-records.py` over every installed set), signed, published into the
   channel's `rpm/` tree and attached to the same GitHub release; then installed in Fedora 44 with plugin-qualify from
   the channel, and for every set, with the omx-plugins version that set measured, the sync must take it from the

@@ -17,6 +17,22 @@ ORDER = ["image", "board", "kernel", "measured", "hostProfile", "realtime", "jac
          "repositories", "packages"]
 
 
+def scheduling(meta):
+    """(realtime, jack) as the run's meta/rt.txt records them when it was granted SCHED_FIFO; None otherwise."""
+    try:
+        lines = open(os.path.join(meta, "rt.txt"), encoding="utf-8").read().splitlines()
+    except FileNotFoundError:
+        return None
+    if "SCHED_FIFO: yes" not in lines:
+        return None
+    limits = next((l for l in lines if l.startswith("ulimit ")), "")
+    jackd = [l.split(":", 1)[1].strip() for l in lines if "jackd pid" in l and "SCHED_FIFO" in l]
+    realtime = "SCHED_FIFO granted to the Job (chrt -f 10 ran in its namespace)" + (f"; {limits}" if limits else "")
+    jack = "jackd 1.9.22, dummy driver at the set's cell (its grid), private to the pod, real-time" + (
+        f": {jackd[0]}" if jackd else "")
+    return realtime, jack
+
+
 def main(template, meta, dst, run, sha, measured):
     d = json.load(open(template, encoding="utf-8"))
     installed = {}
@@ -42,6 +58,9 @@ def main(template, meta, dst, run, sha, measured):
         "sources": {f"plugin-db-qualification tools/fedora44 (Job), records branch records/fedora44/{run}": sha},
         "packages": packages,
     })
+    rt = scheduling(meta)
+    if rt is not None:
+        d["realtime"], d["jack"] = rt
     with open(dst, "w", encoding="utf-8") as f:
         json.dump({k: d[k] for k in ORDER}, f, indent=2)
         f.write("\n")

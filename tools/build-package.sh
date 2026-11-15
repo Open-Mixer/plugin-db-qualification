@@ -96,7 +96,11 @@ p = json.loads(text) if text.lstrip().startswith("{") else json.load(open(text, 
 p["grid"] = sys.argv[2]
 json.dump(p, open(sys.argv[3], "w", encoding="utf-8"), indent=2)' "$provenance" "$grid" "$prov"
     fi
-    "$tool" "$qdir" --host-class "$class" --set "$name" --provenance "$prov" --version "$version" --out "$work"
+    # the tool names a set of one cell <set>-<rate>-<quantum> itself (plugin-qualify#317): it is given the set without
+    # its cell, or the cell would be named twice
+    local given=$name
+    [ -z "$grid" ] || given=${name%-"${grid%/*}"-"${grid#*/}"}
+    "$tool" "$qdir" --host-class "$class" --set "$given" --provenance "$prov" --version "$version" --out "$work"
     deb=$(ls "$work"/*.deb)
     rel=usr/share/omx/qualification/$class/$name
     (cd "$work" && ar x "$deb" && tar -xJf data.tar.xz "./$rel")

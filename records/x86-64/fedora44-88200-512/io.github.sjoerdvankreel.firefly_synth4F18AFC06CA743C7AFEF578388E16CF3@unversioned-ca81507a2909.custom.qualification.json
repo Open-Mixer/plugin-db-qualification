@@ -1,0 +1,185 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "io.github.sjoerdvankreel.firefly_synth4F18AFC06CA743C7AFEF578388E16CF3"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/firefly_synth_fx_1.clap/Contents/x86_64-linux/firefly_synth_fx_1.clap",
+    "sha256": "ca81507a290944b542e731b51330219840f475aa8ddbc97e51574e8fa9eb0c82",
+    "files": [
+      {
+        "path": "firefly_synth_fx_1.clap",
+        "sha256": "ca81507a290944b542e731b51330219840f475aa8ddbc97e51574e8fa9eb0c82"
+      }
+    ],
+    "unpinnable": "more parameters than the host accepts (2048)"
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 88200,
+        "quantum": 512,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 1103.5,
+          "percentile": {
+            "p": 95,
+            "value": 1222.46
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 25800,
+          "afterActivateKb": 141724,
+          "atRestKb": 141828,
+          "secondInstanceKb": 127472,
+          "firstInstanceKb": 141828,
+          "perInstanceKb": 127472
+        },
+        "latencyMs": 0
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-10T01:27:12+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "io.github.sjoerdvankreel.firefly_synth4F18AFC06CA743C7AFEF578388E16CF3@unversioned-ca81507a2909.custom.probe.json",
+    "sha256": "4610c4b6a33d14b22776dcfe6fd942ba06bbfaa485608e85b65091868e3d480d",
+    "bytes": 10470,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 4.99,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261110T012712Z-3ce6-f3ad462f",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "pool",
+        "result": "not-run",
+        "code": "pool.not-watched",
+        "detail": "the plugin's tasks were not seen on helper threads under the interposer",
+        "pool": {
+          "allocationsOn": 1,
+          "locksOn": 5,
+          "syscallsOn": 1,
+          "tasksOnHelpers": 0
+        }
+      }
+    ]
+  }
+}

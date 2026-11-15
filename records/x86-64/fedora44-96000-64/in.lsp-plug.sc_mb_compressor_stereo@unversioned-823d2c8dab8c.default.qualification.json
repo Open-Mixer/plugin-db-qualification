@@ -30,12 +30,10 @@
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 1,
-            "syscalls": 1,
-            "locks": 1
+            "blocks": 512
           }
         },
         {
@@ -90,10 +88,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 1979.41,
+          "median": 1239.98,
           "percentile": {
             "p": 95,
-            "value": 3275.42
+            "value": 1797.11
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -103,26 +101,22 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 1,
-          "locks": 1,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "pthread_mutex_lock",
-            "nanosleep"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 18884,
-          "afterActivateKb": 24024,
-          "atRestKb": 26020,
+          "afterInstantiateKb": 19560,
+          "afterActivateKb": 24552,
+          "atRestKb": 26524,
           "secondInstanceKb": 6772,
-          "firstInstanceKb": 26020,
+          "firstInstanceKb": 26524,
           "perInstanceKb": 6772
         }
       }
@@ -135,15 +129,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:39:26+00:00",
+  "measuredAt": "2026-11-09T18:43:34+00:00",
   "probe": {
     "file": "in.lsp-plug.sc_mb_compressor_stereo@unversioned-823d2c8dab8c.default.probe.json",
-    "sha256": "85c8884ed0d4d9924f5ccbfd79ba53870d724b1a8225af8d776cb46ec5ee9906",
-    "bytes": 10441,
+    "sha256": "7e9d5efabf00a27c82ea5782f5d10a21d78abdbc3cee003d0c337eaf6b2b6b25",
+    "bytes": 10319,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -161,12 +155,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 12.01,
+      "loadavg1": 2.63,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T093926Z-6fe5-65de94d9",
+    "id": "20261109T184334Z-6219-b645b1c8",
     "steps": [
       {
         "step": "scan",
@@ -183,6 +177,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

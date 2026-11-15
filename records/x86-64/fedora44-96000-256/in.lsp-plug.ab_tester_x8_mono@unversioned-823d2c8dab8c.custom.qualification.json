@@ -22,20 +22,17 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 14,
-            "syscalls": 0,
-            "locks": 2
+            "blocks": 512
           }
         }
       ]
@@ -45,10 +42,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-in-run",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -83,10 +78,10 @@
           "measuredFrames": 1
         },
         "cost": {
-          "median": 8.43555,
+          "median": 8.02344,
           "percentile": {
             "p": 95,
-            "value": 9.03906
+            "value": 8.51191
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -96,40 +91,23 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 14,
-          "locks": 2,
+          "allocations": 0,
+          "locks": 0,
           "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "malloc",
-            "malloc",
-            "free",
-            "malloc",
-            "malloc",
-            "malloc",
-            "free",
-            "free",
-            "malloc",
-            "malloc",
-            "pthread_mutex_lock",
-            "free",
-            "pthread_mutex_lock",
-            "malloc",
-            "malloc"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 17588,
-          "afterActivateKb": 17892,
-          "atRestKb": 18212,
-          "secondInstanceKb": 484,
-          "firstInstanceKb": 18212,
-          "perInstanceKb": 484
+          "afterInstantiateKb": 17116,
+          "afterActivateKb": 17532,
+          "atRestKb": 18424,
+          "secondInstanceKb": 48,
+          "firstInstanceKb": 18424,
+          "perInstanceKb": 48
         }
       }
     ]
@@ -141,15 +119,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-08T18:07:18+00:00",
+  "measuredAt": "2026-11-09T15:38:46+00:00",
   "probe": {
     "file": "in.lsp-plug.ab_tester_x8_mono@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "cd022a31216639d2b1b325d85f7d616e332b204dc71c37955c5c26c8bb6cd52e",
-    "bytes": 10576,
+    "sha256": "0bb48d3c80f0213e57399d2895c395bd4f19633a315e776f0a593f5ace0b21d4",
+    "bytes": 10360,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -167,12 +145,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 23.11,
+      "loadavg1": 12.84,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261108T180718Z-1164c-4f9894ab",
+    "id": "20261109T153846Z-3778-0c5bbfb4",
     "steps": [
       {
         "step": "scan",
@@ -188,19 +166,11 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
+        "result": "safe"
       },
       {
-        "step": "isolated",
-        "result": "refused",
-        "code": "isolated.silent-output",
-        "detail": "no note input to link: a sine played at its audio inputs",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 0.3333333333333333,
-          "xruns": 1,
-          "midiInputsLinked": 0
-        }
+        "step": "pool",
+        "result": "not-asked"
       }
     ]
   }

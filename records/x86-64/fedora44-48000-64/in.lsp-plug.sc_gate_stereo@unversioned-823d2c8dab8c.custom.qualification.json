@@ -22,20 +22,17 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 70,
-            "syscalls": 1,
-            "locks": 3
+            "blocks": 512
           }
         }
       ]
@@ -45,10 +42,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-in-run",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -83,10 +78,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 68.0938,
+          "median": 42.4219,
           "percentile": {
             "p": 95,
-            "value": 76.7734
+            "value": 60.1164
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -96,40 +91,23 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 70,
-          "locks": 3,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "free",
-            "malloc",
-            "malloc",
-            "free",
-            "free",
-            "malloc",
-            "malloc",
-            "free"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 19140,
-          "afterActivateKb": 19496,
-          "atRestKb": 20264,
-          "secondInstanceKb": 1376,
-          "firstInstanceKb": 20264,
-          "perInstanceKb": 1376
+          "afterInstantiateKb": 18548,
+          "afterActivateKb": 19404,
+          "atRestKb": 20160,
+          "secondInstanceKb": 944,
+          "firstInstanceKb": 20160,
+          "perInstanceKb": 944
         }
       }
     ]
@@ -141,15 +119,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T08:45:32+00:00",
+  "measuredAt": "2026-11-09T14:19:56+00:00",
   "probe": {
     "file": "in.lsp-plug.sc_gate_stereo@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "b69182addcb45ea0eb99e4303c963420ef3cb63b3d18de06ea54cb4d7fac3aa8",
-    "bytes": 10511,
+    "sha256": "be0846da2299b75bf4e0cb9c078917f4744c0b19aae40984fd9da01a5f7cdb7a",
+    "bytes": 10367,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -167,12 +145,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 89.67,
+      "loadavg1": 8.4,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T084532Z-820a-a21d0156",
+    "id": "20261109T141956Z-633b-6a1306ed",
     "steps": [
       {
         "step": "scan",
@@ -188,17 +166,7 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
-      },
-      {
-        "step": "isolated",
-        "result": "isolated",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 1.3333333333333333,
-          "xruns": 8,
-          "midiInputsLinked": 0
-        }
+        "result": "safe"
       },
       {
         "step": "pool",

@@ -44,6 +44,8 @@ Provides: plugin-db-qualification-x86-64-fedora44-176400-256 = %{version}-%{rele
 Obsoletes: plugin-db-qualification-x86-64-fedora44-176400-256 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-176400-512 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-176400-512 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-192000-128 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-128 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-192000-256 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-256 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-192000-512 = %{version}-%{release}

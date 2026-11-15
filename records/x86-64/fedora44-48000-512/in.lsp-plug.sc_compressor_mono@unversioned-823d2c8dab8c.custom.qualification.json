@@ -22,20 +22,17 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 105,
-            "syscalls": 1,
-            "locks": 3
+            "blocks": 512
           }
         }
       ]
@@ -45,10 +42,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-in-run",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -83,10 +78,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 16.8086,
+          "median": 10.2051,
           "percentile": {
             "p": 95,
-            "value": 18.0597
+            "value": 12.9044
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -96,40 +91,23 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 105,
-          "locks": 3,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
-            "free",
-            "malloc",
-            "malloc",
-            "free",
-            "free"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 18912,
-          "afterActivateKb": 19200,
-          "atRestKb": 19532,
-          "secondInstanceKb": 1220,
-          "firstInstanceKb": 19532,
-          "perInstanceKb": 1220
+          "afterInstantiateKb": 18300,
+          "afterActivateKb": 18860,
+          "atRestKb": 19712,
+          "secondInstanceKb": 492,
+          "firstInstanceKb": 19712,
+          "perInstanceKb": 492
         }
       }
     ]
@@ -141,15 +119,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-08T17:24:44+00:00",
+  "measuredAt": "2026-11-09T15:46:14+00:00",
   "probe": {
     "file": "in.lsp-plug.sc_compressor_mono@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "235c3a4332372c5eb2526303c84efbbf56f3bba6786f15140f0952f9d49fe7fa",
-    "bytes": 10519,
+    "sha256": "cf8148c2c7d021f145a2a9c400c7f9bac2849c5a199229d9fe6c006b86dd8fbc",
+    "bytes": 10386,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -167,12 +145,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 70.5,
+      "loadavg1": 8.48,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261108T172444Z-937d-7da9e70a",
+    "id": "20261109T154614Z-675f-c680e0f4",
     "steps": [
       {
         "step": "scan",
@@ -188,17 +166,7 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
-      },
-      {
-        "step": "isolated",
-        "result": "isolated",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 1,
-          "xruns": 0,
-          "midiInputsLinked": 0
-        }
+        "result": "safe"
       },
       {
         "step": "pool",

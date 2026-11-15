@@ -4,8 +4,8 @@
   "kernel": "7.2.7-300.fc45.x86_64 (PREEMPT_DYNAMIC)",
   "measured": "2026-11-09",
   "hostProfile": "omx-clap-host",
-  "realtime": "none: the pod has no CAP_SYS_NICE and an RLIMIT_RTPRIO of 0 (pod security baseline), so the probe and the isolated step ran under SCHED_OTHER; memory not locked (RLIMIT_MEMLOCK 8 MiB)",
-  "jack": "jackd 1.9.22, dummy driver at the set's cell (its grid), private to the pod, not real-time",
+  "realtime": "SCHED_FIFO granted to the Job (chrt -f 10 ran in its namespace); ulimit -r 0 -l 8192",
+  "jack": "jackd 1.9.22, dummy driver at the set's cell (its grid), private to the pod, real-time: jackd pid 4167, 1 thread(s) at SCHED_FIFO",
   "settings": {
     "host_class": "x86-64",
     "clap_extra": "/usr/lib64/clap",
@@ -14,7 +14,7 @@
     "note": "measured with host_class x86_64 in the settings file; the class is a directory name only and no record holds it, so the set is published as x86-64, a name the Debian and RPM package names both accept"
   },
   "sources": {
-    "plugin-db-qualification tools/fedora44 (Job), records branch records/fedora44/20261109-c48000-256": "45cbd8f0dd460f987e93da9d11427accc2960306"
+    "plugin-db-qualification tools/fedora44 (Job), records branch records/fedora44/20261109rt-c48000-256": "414ebe34d0ffd9e71d3c779069bdd47736becaab"
   },
   "repositories": {
     "openmixer": "https://www.openmixer.org/rpm/fedora/44/",
@@ -185,11 +185,13 @@
   "schema": "plugin-qualify.distributed-provenance/1",
   "set": "fedora44-48000-256",
   "hostClass": "x86-64",
+  "cell": {
+    "rate": 48000,
+    "quantum": 256
+  },
   "package": {
     "name": "plugin-db-qualification-x86-64-fedora44-48000-256",
-    "version": "2026110901"
+    "version": "2026111501"
   },
-  "date": "2026-11-09",
-  "tier": "provisional",
-  "tierNote": "measured on JACK's dummy driver without real-time priority; the crash, hang and unmeasured verdicts hold, the cost, latency and xrun figures are not reference figures"
+  "date": "2026-11-15"
 }

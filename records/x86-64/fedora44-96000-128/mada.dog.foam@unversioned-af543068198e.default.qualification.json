@@ -38,12 +38,11 @@
         },
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-under-notes",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
           "params": {
-            "allocations": 4,
-            "syscalls": 0,
-            "locks": 0
+            "blocks": 512,
+            "events": 0
           }
         },
         {
@@ -112,18 +111,19 @@
         "noteSweep": {
           "applicable": true,
           "dialect": "clap",
-          "allocations": 4,
+          "allocations": 0,
           "locks": 0,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 5740,
-          "afterActivateKb": 5744,
-          "atRestKb": 5872,
+          "afterInstantiateKb": 5024,
+          "afterActivateKb": 5028,
+          "atRestKb": 5028,
           "secondInstanceKb": 332,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
-        }
+        },
+        "latencyMs": 0.010417
       }
     ]
   },
@@ -134,15 +134,17 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:25:20+00:00",
+  "measuredAt": "2026-11-09T20:51:37+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
   "probe": {
     "file": "mada.dog.foam@unversioned-af543068198e.default.probe.json",
-    "sha256": "df2ee63ee9c89f2f6e1065d4c86efeaa3e39a3e78373a9677ab35cd476b140bb",
-    "bytes": 10452,
+    "sha256": "1c4d2b3af5b673e738536118f7bf9911ad5019c1957529b2ad60301738a8add6",
+    "bytes": 10336,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -160,12 +162,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 8.68,
+      "loadavg1": 6.45,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T092520Z-198c-4cce6e25",
+    "id": "20261109T205137Z-1ac8-bd2dde3b",
     "steps": [
       {
         "step": "scan",
@@ -182,6 +184,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

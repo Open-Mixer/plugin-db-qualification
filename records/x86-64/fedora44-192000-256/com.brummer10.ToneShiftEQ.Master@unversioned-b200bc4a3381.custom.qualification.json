@@ -12,23 +12,31 @@
         "path": "toneshifteq.clap",
         "sha256": "b200bc4a33810f6f3f2a8098d437b7af29e53361ede3c66e0fc151c85d0ce303"
       }
-    ]
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "b322ca508e66042d41590be92457291f4b38f6bd01d1357ff06ea0533fe84c18"
+    }
   },
   "verdicts": [
     {
       "host": "omx-clap-host",
-      "measured": false,
-      "rating": "unknown",
+      "measured": true,
+      "rating": "conditional",
       "qualified": false,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "probe.crashed",
+      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "unknown",
-          "code": "probe.crashed",
-          "params": {}
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 2866,
+            "syscalls": 0,
+            "locks": 604
+          }
         }
       ]
     }
@@ -36,13 +44,15 @@
   "tiers": {
     "isolated": {
       "host": "omx-clap-host",
-      "measured": false,
+      "measured": true,
       "qualified": false,
-      "rating": "unknown",
-      "deciding": "probe.crashed"
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
     },
-    "offeredOn": [],
-    "dimmed": "omx-clap-host: probe.crashed"
+    "offeredOn": [
+      "isolated"
+    ]
   },
   "cost": [
     {
@@ -67,10 +77,59 @@
       {
         "rate": 192000,
         "quantum": 256,
-        "outcome": "probe.crashed",
+        "outcome": "probe.ok",
         "latency": {
-          "unmeasuredReason": "probe-crashed",
-          "code": "hosting.latency.unmeasured"
+          "declaredFrames": 128,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 431.709,
+          "percentile": {
+            "p": 95,
+            "value": 660.808
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 2866,
+          "locks": 604,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "pthread_mutex_lock",
+            "free",
+            "free",
+            "free",
+            "free",
+            "free",
+            "free",
+            "free",
+            "pthread_mutex_lock",
+            "free",
+            "free",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc"
+          ]
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 8648,
+          "afterActivateKb": 9676,
+          "atRestKb": 10212,
+          "secondInstanceKb": 1388,
+          "firstInstanceKb": 10212,
+          "perInstanceKb": 1388
         }
       }
     ]
@@ -82,21 +141,22 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
-    "child": "clap-qualify"
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T11:00:39+00:00",
+  "measuredAt": "2026-11-09T17:20:07+00:00",
   "probe": {
     "file": "com.brummer10.ToneShiftEQ.Master@unversioned-b200bc4a3381.custom.probe.json",
-    "sha256": "28dd385955299a102a0eb65420f1d042ddf2a3a85bf7b1800ad3764054a38a3d",
-    "bytes": 13875,
+    "sha256": "a86de2773ea1d52f2002db42eac1e35a09e35a36fa82f140a31d4f94c5b56741",
+    "bytes": 10545,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
     },
     "reason": "on-request",
-    "outcome": "probe.crashed",
-    "complete": false,
+    "outcome": "probe.ok",
+    "complete": true,
     "machineClass": {
       "arch": "x86_64",
       "family": "amd",
@@ -106,20 +166,13 @@
       "cstatesLimited": false
     },
     "meetsProtocol": false,
-    "ends": [
-      {
-        "step": "lifecycle",
-        "outcome": "probe.crashed",
-        "signal": "SIGSEGV"
-      }
-    ],
     "load": {
-      "loadavg1": 1.69,
+      "loadavg1": 5.97,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T110039Z-84b7-db66d792",
+    "id": "20261109T172007Z-7def-81e067ac",
     "steps": [
       {
         "step": "scan",
@@ -131,15 +184,19 @@
       },
       {
         "step": "probe",
-        "result": "probe.crashed"
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
       },
       {
         "step": "isolated",
         "result": "isolated",
         "figures": {
           "latencyFrames": 256,
-          "cpuPercent": 2,
-          "xruns": 2,
+          "cpuPercent": 2.3333333333333335,
+          "xruns": 3,
           "midiInputsLinked": 0
         }
       },

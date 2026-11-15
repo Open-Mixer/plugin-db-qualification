@@ -22,11 +22,10 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-under-notes",
       "reasons": [
         {
           "dimension": "rtSafety",
@@ -38,12 +37,11 @@
         },
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-under-notes",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
           "params": {
-            "allocations": 5,
-            "syscalls": 0,
-            "locks": 0
+            "blocks": 512,
+            "events": 0
           }
         }
       ]
@@ -53,10 +51,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-under-notes",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -105,15 +101,15 @@
         "noteSweep": {
           "applicable": true,
           "dialect": "clap",
-          "allocations": 5,
+          "allocations": 0,
           "locks": 0,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 8264,
-          "afterActivateKb": 8532,
-          "atRestKb": 8800,
-          "secondInstanceKb": 520,
+          "afterInstantiateKb": 9880,
+          "afterActivateKb": 10020,
+          "atRestKb": 10264,
+          "secondInstanceKb": 532,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
         }
@@ -127,15 +123,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-08T18:17:21+00:00",
+  "measuredAt": "2026-11-09T15:50:43+00:00",
   "probe": {
     "file": "com.hyperfocusdsp.niner@unversioned-fbecfed62246.custom.probe.json",
-    "sha256": "24a24f5af724b1416bd1cf2bd0b09c0d8cfcc08521547e3bda9537fc1c07446d",
-    "bytes": 10397,
+    "sha256": "68e4ecaf3b8ccb4fa03d6a7c75a0b9a4b4651b6d9bbd7d3bd3d198bc8c737af5",
+    "bytes": 10381,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -153,12 +149,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 34.11,
+      "loadavg1": 6.6,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261108T181721Z-16652-78c077d1",
+    "id": "20261109T155043Z-7b5d-0d54cc4a",
     "steps": [
       {
         "step": "scan",
@@ -174,17 +170,7 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
-      },
-      {
-        "step": "isolated",
-        "result": "isolated",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 1.6666666666666667,
-          "xruns": 0,
-          "midiInputsLinked": 1
-        }
+        "result": "safe"
       },
       {
         "step": "pool",

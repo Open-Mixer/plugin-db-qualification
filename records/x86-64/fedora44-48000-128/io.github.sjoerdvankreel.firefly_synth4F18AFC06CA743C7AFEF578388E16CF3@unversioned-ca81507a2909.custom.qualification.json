@@ -19,20 +19,17 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 1,
-            "syscalls": 1,
-            "locks": 5
+            "blocks": 512
           }
         }
       ]
@@ -42,10 +39,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-in-run",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -62,7 +57,7 @@
           "rating": "unsuitable",
           "code": "hosting.cost.above-ceiling",
           "params": {
-            "coreFractionP95": 0.0677784,
+            "coreFractionP95": 0.11626896,
             "ceiling": 0.05
           }
         }
@@ -80,10 +75,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 1273.72,
+          "median": 2063.75,
           "percentile": {
             "p": 95,
-            "value": 1412.05
+            "value": 2422.27
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -93,27 +88,19 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 1,
-          "locks": 5,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "pthread_mutex_lock",
-            "pthread_mutex_lock",
-            "pthread_mutex_lock",
-            "realloc",
-            "write",
-            "pthread_mutex_lock",
-            "pthread_mutex_lock"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 25528,
-          "afterActivateKb": 107720,
+          "afterInstantiateKb": 25388,
+          "afterActivateKb": 107656,
           "atRestKb": 107820,
           "secondInstanceKb": 93732,
           "firstInstanceKb": 107820,
@@ -133,11 +120,11 @@
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T10:57:37+00:00",
+  "measuredAt": "2026-11-09T14:10:09+00:00",
   "probe": {
     "file": "io.github.sjoerdvankreel.firefly_synth4F18AFC06CA743C7AFEF578388E16CF3@unversioned-ca81507a2909.custom.probe.json",
-    "sha256": "519e53399876dc50b9ccfe29f279f278a22b2aa513078cd9281149dd153b9f39",
-    "bytes": 10668,
+    "sha256": "cacf8b4515781bb1cff8c9c192ecb9d8c600a7d5922f3dcfaf4e5e6bb3493b23",
+    "bytes": 10451,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -155,12 +142,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 2.01,
+      "loadavg1": 9.35,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T105737Z-3705-c9c2abde",
+    "id": "20261109T141009Z-346d-5d1e42b3",
     "steps": [
       {
         "step": "scan",
@@ -176,17 +163,7 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
-      },
-      {
-        "step": "isolated",
-        "result": "isolated",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 6,
-          "xruns": 1,
-          "midiInputsLinked": 0
-        }
+        "result": "safe"
       },
       {
         "step": "pool",
@@ -194,9 +171,9 @@
         "code": "pool.not-watched",
         "detail": "the plugin's tasks were not seen on helper threads under the interposer",
         "pool": {
-          "allocationsOn": 1,
-          "locksOn": 5,
-          "syscallsOn": 1,
+          "allocationsOn": 0,
+          "locksOn": 0,
+          "syscallsOn": 0,
           "tasksOnHelpers": 0
         }
       }

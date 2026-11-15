@@ -22,10 +22,11 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "suitable",
-      "qualified": true,
+      "rating": "conditional",
+      "qualified": false,
       "hosting": "isolated",
       "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-under-notes",
       "reasons": [
         {
           "dimension": "rtSafety",
@@ -37,11 +38,12 @@
         },
         {
           "dimension": "rtSafety",
-          "rating": "suitable",
-          "code": "hosting.rt-safety.clean-under-notes",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
           "params": {
-            "blocks": 512,
-            "events": 0
+            "allocations": 2,
+            "syscalls": 0,
+            "locks": 9
           }
         }
       ]
@@ -51,8 +53,10 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": true,
-      "rating": "suitable"
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "runsAlone": true
     },
     "offeredOn": [
       "isolated"
@@ -101,14 +105,14 @@
         "noteSweep": {
           "applicable": true,
           "dialect": "clap",
-          "allocations": 0,
-          "locks": 0,
+          "allocations": 2,
+          "locks": 9,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 38708,
-          "afterActivateKb": 45908,
-          "atRestKb": 45908,
+          "afterInstantiateKb": 36664,
+          "afterActivateKb": 43588,
+          "atRestKb": 43588,
           "secondInstanceKb": 19348,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
@@ -127,11 +131,11 @@
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T11:33:30+00:00",
+  "measuredAt": "2026-11-09T14:14:51+00:00",
   "probe": {
     "file": "com.floe-audio.floe@unversioned-ded1a69cfb9c.custom.probe.json",
-    "sha256": "b5fb28d91ce8b6b85556786373ce44b9291dd4552922ac2a8d8ea7775432a8ba",
-    "bytes": 10521,
+    "sha256": "408efad1e8d3301b655d5e2eab5bb1d101832af96d60f921c214ed05b030a0c4",
+    "bytes": 10406,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -149,12 +153,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 2.52,
+      "loadavg1": 9.28,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T113330Z-18a4-bdde0b7b",
+    "id": "20261109T141451Z-1796-87b467e9",
     "steps": [
       {
         "step": "scan",
@@ -170,7 +174,17 @@
       },
       {
         "step": "rt-safety",
-        "result": "safe"
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 0.3333333333333333,
+          "xruns": 2,
+          "midiInputsLinked": 1
+        }
       },
       {
         "step": "pool",

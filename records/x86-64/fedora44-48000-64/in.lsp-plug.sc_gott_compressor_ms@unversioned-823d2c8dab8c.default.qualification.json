@@ -30,12 +30,10 @@
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 1,
-            "syscalls": 1,
-            "locks": 1
+            "blocks": 512
           }
         },
         {
@@ -90,10 +88,10 @@
           "measuredFrames": 240
         },
         "cost": {
-          "median": 1397.16,
+          "median": 1208.83,
           "percentile": {
             "p": 95,
-            "value": 2907.35
+            "value": 2549.12
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -103,26 +101,22 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 1,
-          "locks": 1,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "pthread_mutex_lock",
-            "nanosleep"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 20164,
-          "afterActivateKb": 21084,
-          "atRestKb": 23256,
+          "afterInstantiateKb": 19828,
+          "afterActivateKb": 21520,
+          "atRestKb": 22904,
           "secondInstanceKb": 3052,
-          "firstInstanceKb": 23256,
+          "firstInstanceKb": 22904,
           "perInstanceKb": 3052
         }
       }
@@ -135,15 +129,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T08:45:43+00:00",
+  "measuredAt": "2026-11-09T14:19:59+00:00",
   "probe": {
     "file": "in.lsp-plug.sc_gott_compressor_ms@unversioned-823d2c8dab8c.default.probe.json",
-    "sha256": "a746c369d1dd5b8d3e885d1558b682bb0d1cc889b90eed9595fb2675f9136bff",
-    "bytes": 10344,
+    "sha256": "f7407eebd1f4cfe8928fc8955d022074cc64b5f17405d409501b4d76aeb7e632",
+    "bytes": 10302,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -161,12 +155,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 86.91,
+      "loadavg1": 8.29,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T084543Z-83e4-a2435041",
+    "id": "20261109T141959Z-63a4-7eb7c3df",
     "steps": [
       {
         "step": "scan",
@@ -183,6 +177,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

@@ -41,7 +41,7 @@
           "rating": "conditional",
           "code": "hosting.rt-safety.violations-under-notes",
           "params": {
-            "allocations": 2,
+            "allocations": 4,
             "syscalls": 0,
             "locks": 0
           }
@@ -112,18 +112,19 @@
         "noteSweep": {
           "applicable": true,
           "dialect": "clap",
-          "allocations": 2,
+          "allocations": 4,
           "locks": 0,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 3084,
-          "afterActivateKb": 3088,
-          "atRestKb": 3220,
-          "secondInstanceKb": 160,
+          "afterInstantiateKb": 2608,
+          "afterActivateKb": 2616,
+          "atRestKb": 2680,
+          "secondInstanceKb": 164,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
-        }
+        },
+        "latencyMs": 0
       }
     ]
   },
@@ -134,15 +135,17 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:30:15+00:00",
+  "measuredAt": "2026-11-09T20:59:04+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
   "probe": {
     "file": "com.zmann.toybox@unversioned-d05a13c50892.default.probe.json",
-    "sha256": "5644f9254d77d3a710faddf80efc506ae7e418a9744d06bdce8ba14a42112477",
-    "bytes": 10367,
+    "sha256": "32e9f986b29dabcb6f3b4015056864f2356df7262d28a74e8777fc6be72789aa",
+    "bytes": 10257,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -160,12 +163,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 14.85,
+      "loadavg1": 6.06,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T093015Z-29ff-ae90a6b1",
+    "id": "20261109T205904Z-2d6d-9df68ecc",
     "steps": [
       {
         "step": "scan",
@@ -182,6 +185,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

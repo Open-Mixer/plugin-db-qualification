@@ -2,9 +2,9 @@
   "format": "plugin-hostd.probe-output",
   "formatVersion": "1.4",
   "run": {
-    "id": "20261106T002500Z-2e9a6b-98c32f5c",
-    "startedAt": "2026-11-06T00:25:00+00:00",
-    "elapsedMs": 2544,
+    "id": "20261115T123638Z-33b79-650bf8f8",
+    "startedAt": "2026-11-15T12:36:38+00:00",
+    "elapsedMs": 1774,
     "complete": true,
     "outcome": "probe.ok",
     "reason": "on-request",
@@ -13,7 +13,7 @@
       "version": 1
     },
     "tools": {
-      "runner": "plugin-hostd-probe 0.18.0",
+      "runner": "plugin-hostd-probe 0.20.6",
       "child": "lv2_measure",
       "interposer": "rt_interpose.so"
     },
@@ -36,22 +36,22 @@
     },
     "parts": [
       {
-        "id": "20261106T002500Z-2e9a6b-98c32f5c",
+        "id": "20261115T123638Z-33b79-650bf8f8",
         "outcome": "probe.ok",
         "rates": [
           48000
         ],
         "quantum": 256,
-        "elapsedMs": 1417
+        "elapsedMs": 879
       },
       {
-        "id": "20261106T002501Z-2e9a9f-3f8917b1",
+        "id": "20261115T123639Z-33bae-28400d6c",
         "outcome": "probe.ok",
         "rates": [
           96000
         ],
         "quantum": 256,
-        "elapsedMs": 1127
+        "elapsedMs": 895
       }
     ]
   },
@@ -117,7 +117,7 @@
     "applied": [
       {
         "limit": "wall-clock",
-        "value": 60,
+        "value": 120,
         "unit": "s",
         "by": "supervisor"
       },
@@ -131,7 +131,7 @@
         "limit": "memory",
         "value": 2122874880,
         "unit": "bytes",
-        "by": "rlimit"
+        "by": "cgroup"
       },
       {
         "limit": "files",
@@ -158,7 +158,7 @@
       },
       {
         "limit": "rt-time",
-        "value": 60000000,
+        "value": 120000000,
         "unit": "us",
         "by": "rlimit"
       },
@@ -175,10 +175,6 @@
     ],
     "unavailable": [
       {
-        "limit": "memory",
-        "code": "probe.limit.controller-not-delegated"
-      },
-      {
         "limit": "tasks",
         "code": "probe.limit.not-implemented"
       }
@@ -188,7 +184,7 @@
     {
       "step": "hash",
       "outcome": "probe.ok",
-      "elapsedMs": 40,
+      "elapsedMs": 29,
       "exitStatus": 0
     },
     {
@@ -209,26 +205,30 @@
       "step": "latency",
       "rate": 48000,
       "quantum": 256,
-      "outcome": "probe.ok",
-      "elapsedMs": 0
+      "outcome": "probe.not-attempted",
+      "elapsedMs": 0,
+      "hostingCode": "hosting.latency.unmeasured",
+      "detail": "silent-output: the note never sounded within the declared latency and the tail"
     },
     {
       "step": "cost",
       "rate": 48000,
       "quantum": 256,
-      "outcome": "probe.ok",
-      "elapsedMs": 0
+      "outcome": "probe.not-attempted",
+      "elapsedMs": 0,
+      "hostingCode": "hosting.cost.unmeasured-at-rate-and-quantum",
+      "detail": "silent-output: the held notes never sounded"
     },
     {
       "step": "lifecycle",
       "outcome": "probe.ok",
-      "elapsedMs": 1377,
+      "elapsedMs": 850,
       "exitStatus": 0
     },
     {
       "step": "hash",
       "outcome": "probe.ok",
-      "elapsedMs": 31,
+      "elapsedMs": 28,
       "exitStatus": 0
     },
     {
@@ -249,20 +249,24 @@
       "step": "latency",
       "rate": 96000,
       "quantum": 256,
-      "outcome": "probe.ok",
-      "elapsedMs": 0
+      "outcome": "probe.not-attempted",
+      "elapsedMs": 0,
+      "hostingCode": "hosting.latency.unmeasured",
+      "detail": "silent-output: the note never sounded within the declared latency and the tail"
     },
     {
       "step": "cost",
       "rate": 96000,
       "quantum": 256,
-      "outcome": "probe.ok",
-      "elapsedMs": 0
+      "outcome": "probe.not-attempted",
+      "elapsedMs": 0,
+      "hostingCode": "hosting.cost.unmeasured-at-rate-and-quantum",
+      "detail": "silent-output: the held notes never sounded"
     },
     {
       "step": "lifecycle",
       "outcome": "probe.ok",
-      "elapsedMs": 1096,
+      "elapsedMs": 867,
       "exitStatus": 0
     }
   ],
@@ -271,28 +275,13 @@
       "rate": 48000,
       "quantum": 256,
       "outcome": "probe.ok",
-      "latency": {
-        "declaredFrames": 0,
-        "measuredFrames": 0,
-        "method": "impulse-onset"
-      },
-      "cost": {
-        "unit": "ns-per-sample",
-        "median": 172.094,
-        "percentile": {
-          "p": 95,
-          "value": 173.031
-        },
-        "min": 2.53125,
-        "max": 236.617,
-        "blocks": 512,
-        "warmupBlocks": 64
-      },
       "memory": {
-        "afterInstantiateKb": 20640,
-        "afterActivateKb": 21360,
-        "atRestKb": 21376,
-        "secondInstanceKb": 960
+        "afterInstantiateKb": 21760,
+        "afterActivateKb": 22480,
+        "atRestKb": 22496,
+        "notesHeldKb": 22496,
+        "secondInstanceKb": 960,
+        "basis": "probe"
       },
       "rtSafety": {
         "interposer": true,
@@ -316,28 +305,13 @@
       "rate": 96000,
       "quantum": 256,
       "outcome": "probe.ok",
-      "latency": {
-        "declaredFrames": 0,
-        "measuredFrames": 0,
-        "method": "impulse-onset"
-      },
-      "cost": {
-        "unit": "ns-per-sample",
-        "median": 173.031,
-        "percentile": {
-          "p": 95,
-          "value": 174.695
-        },
-        "min": 2.60547,
-        "max": 231.121,
-        "blocks": 512,
-        "warmupBlocks": 64
-      },
       "memory": {
-        "afterInstantiateKb": 21616,
-        "afterActivateKb": 22480,
-        "atRestKb": 22496,
-        "secondInstanceKb": 1104
+        "afterInstantiateKb": 21760,
+        "afterActivateKb": 22624,
+        "atRestKb": 22640,
+        "notesHeldKb": 22640,
+        "secondInstanceKb": 1104,
+        "basis": "probe"
       },
       "rtSafety": {
         "interposer": true,
@@ -379,7 +353,13 @@
   "logs": [
     {
       "name": "stderr",
-      "path": "/run/omx/plugin-qualify-sync/plugin-qualify-probe-FpgQy5/child.stderr.log",
+      "path": "/tmp/plugin-qualify-probe-5oupUm/child.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "name": "stderr",
+      "path": "/tmp/plugin-qualify-probe-Zapdwn/child.stderr.log",
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "bytes": 0
     }

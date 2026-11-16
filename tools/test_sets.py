@@ -258,6 +258,28 @@ class Substvars(Tree):
         self.assertEqual(self.run_main("substvars", "amd64")[0], 1)
 
 
+class FloorsOnly(Tree):
+    """Owner ruling 2026-11-16: floors only, no ceiling on our packages; the generator writes none and the committed
+    spec carries none."""
+
+    CEILING = re.compile(r"plugin-qualify\s*\(?\s*(<<|<=|<)")
+
+    def test_the_generated_dependencies_carry_no_ceiling(self):
+        self.with_two_cells()
+        for arch in ("arm64", "amd64"):
+            v = self.run_main("substvars", arch)[1]
+            self.assertIn("qualify:Depends=plugin-qualify (>= ", v)
+            self.assertIsNone(self.CEILING.search(v), v)
+        self.assertIsNone(self.CEILING.search(sets.spec_block(self.root)), sets.spec_block(self.root))
+
+    def test_the_committed_spec_carries_no_ceiling_on_our_packages(self):
+        with open(os.path.join(ROOT, SPEC), encoding="utf-8") as f:
+            requires = [l for l in f.read().splitlines() if re.match(r"\s*(Build)?Requires", l)]
+        self.assertTrue(requires)
+        for line in requires:
+            self.assertIsNone(re.search(r"\b(omx|plugin)-[a-z0-9-]+\s*(<=|<)", line), line)
+
+
 @unittest.skipUnless(shutil.which("make"), "make is not installed")
 class Rules(Tree):
     """debian/rules' own steps, as dpkg-buildpackage runs them for one architecture."""

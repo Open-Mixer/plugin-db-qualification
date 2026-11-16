@@ -23,7 +23,7 @@
 #       --cell the set name is <set>-<rate>-<quantum> and its provenance's grid is that cell; without it the set name
 #       is <set>. The class must have an architecture in packaging/arch-classes. The version becomes the spec's
 #       Version and the top debian/changelog entry's, and the spec's per-architecture block is written again
-#       (tools/sets.py spec: the older names the package takes over follow records/). No other set, of this class or
+#       (tools/sets.py spec). No other set, of this class or
 #       another, is touched. Write the changelog entry, review the diff, commit, tag v<version>.
 #
 # plugin-qualify comes from the OpenMixer channel (apt) or, where that is not configured, from npm.
@@ -112,7 +112,7 @@ json.dump(p, open(sys.argv[3], "w", encoding="utf-8"), indent=2)' "$provenance" 
 }
 
 # the version where it lives (the spec and the top debian/changelog entry, which a tag equals), and the spec's
-# per-architecture block, whose folded names follow records/
+# per-architecture block (the plugin-qualify floor)
 set_version() {
     sed -i "s/^Version: .*/Version: $version/" "$spec"
     if [ "$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' "$root/debian/changelog")" != "$version" ]; then

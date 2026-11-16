@@ -12,8 +12,7 @@
 # installed plugin's bytes are the measured ones.
 #
 # The block between BEGIN and END per-architecture is written by tools/sets.py spec: each architecture's
-# plugin-qualify range (packaging/arch-classes) and the older package names it takes over (one package per set, the
-# names derived from records/), and tools/sets.py check holds it to them. The spec is read before %%prep unpacks the
+# plugin-qualify floor (packaging/arch-classes, no ceiling), and tools/sets.py check holds it to it. The spec is read before %%prep unpacks the
 # tree, so that part is written here; %%install and %%files read the tree.
 
 %global debug_package %{nil}
@@ -33,44 +32,10 @@ BuildRequires: python3
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
-Requires: (plugin-qualify >= 0.20.1 with plugin-qualify < 0.21)
-Provides: omx-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: omx-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-64 < %{version}-%{release}
+Requires: plugin-qualify >= 0.20.1
 %endif
 %ifarch aarch64
-Requires: (plugin-qualify >= 0.20.0 with plugin-qualify < 0.21)
-Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis-48000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis-48000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis-48000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis-48000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis-96000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis-96000-256 < %{version}-%{release}
+Requires: plugin-qualify >= 0.20.0
 %endif
 # END per-architecture
 

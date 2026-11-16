@@ -32,19 +32,15 @@ A set measured by an older plugin-qualify is dropped, not kept: the class ships 
 
 | architecture | host class | machine | sets | tier | depends on | released as |
 | --- | --- | --- | --- | --- | --- | --- |
-| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 up to 0.21 | deb, Debian trixie |
-| amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify 0.20.1 up to 0.21, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
+| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify from 0.20.0 | deb, Debian trixie |
+| amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify from 0.20.1, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
 
-`packaging/arch-classes` is the one map of architectures to classes and plugin-qualify ranges: `debian/rules`, the
+`packaging/arch-classes` is the one map of architectures to classes and plugin-qualify floors: `debian/rules`, the
 spec and `tools/sets.py` read it. There is no aarch64 RPM: no Fedora machine of an arm64 class is measured.
 
-The package takes over the names the sets were published under before, one package per set. On Debian it Provides
-them (at this version), Replaces and Breaks them (below this version): `plugin-db-qualification-rpi5-zynthian-vangelis`
-and `omx-qualification-rpi5-zynthian-vangelis` on every architecture, and on amd64 also
-`plugin-db-qualification-x86-64-fedora44`, `omx-qualification-x86-64-fedora44` and every per-cell
-`plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>`. The x86_64 RPM Provides and Obsoletes the x86-64 names.
-The list is derived from `records/` when the package is built (`tools/sets.py substvars` for Debian, the spec block
-`tools/sets.py spec` writes for the RPM), never kept by hand.
+The package ships under one name, `plugin-qualification-records`: it Provides, Obsoletes, Replaces and Breaks no older
+package name. The plugin-qualify floor is written when the package is built (`tools/sets.py substvars` for Debian, the
+spec block `tools/sets.py spec` writes for the RPM).
 
 The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
 cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it
@@ -82,9 +78,8 @@ but only when nothing else runs on it: the measurement plays every plugin on the
 plugin-db's store (`/var/lib/plugin-db`) holds a machine's own layers and names no place for shipped records, so the
 records stay where plugin-qualify-sync reads them (`distributed_dir`, `/usr/share/omx/qualification`). The package of
 an architecture holds `<host class>/` for each class of that architecture, every set of the class beside the others,
-and depends on the plugin-qualify range of that architecture, up to the next minor: on arm64
-`plugin-qualify (>= 0.20.0~), plugin-qualify (<< 0.21~)`, on amd64 `plugin-qualify (>= 0.20.1~),
-plugin-qualify (<< 0.21~)`, on x86_64 `(plugin-qualify >= 0.20.1 with plugin-qualify < 0.21)`.
+and depends on the plugin-qualify floor of that architecture, no ceiling: on arm64
+`plugin-qualify (>= 0.20.0~)`, on amd64 `plugin-qualify (>= 0.20.1~)`, on x86_64 `plugin-qualify >= 0.20.1`.
 
 Each record is held with its probe output. Both are the files the measuring machine wrote, unchanged. The plugins
 that could not be measured (`*.unmeasured.json`) are not here: an unmeasured record never applies.
@@ -159,8 +154,7 @@ dir>` without `--cell` keeps the set name as given. For each set, `plugin-qualif
 records go in, and the script replaces `records/<class>/<set>/` with what it holds. No other set, of the class or of
 another, is touched. Nothing is written per set: the set goes into the package of its class's architecture (the class
 must have a line in `packaging/arch-classes`). The spec's `Version` and the top `debian/changelog` entry take the
-version, and the spec's per-architecture block is written again (`tools/sets.py spec`), so the older names the
-package takes over follow `records/`; write the changelog entry.
+version, and the spec's per-architecture block is written again (`tools/sets.py spec`); write the changelog entry.
 
 `provenance.json` is a JSON file of what the tool cannot know: the image, the board, the package versions and the
 source revisions of the device; the tool adds the schema, the set, the host class, the package and the date. Commit,

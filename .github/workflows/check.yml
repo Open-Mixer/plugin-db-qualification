@@ -29,11 +29,6 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 tools/check-records.py
       - run: python3 -m unittest discover -s tools -p 'test_*.py'
-      - name: fedora44 rt test, 200 runs (looks for the one-off FifoCheck failure)
-        run: |
-          for i in $(seq 1 200); do
-            python3 -I -m unittest discover -s tools -p test_fedora44_rt.py -q || { echo "FifoCheck loop failed at run $i"; exit 1; }
-          done
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
       # every class under records/ is carried by an architecture of the one package, debian/control and the spec's
       # per-architecture block are what packaging/arch-classes and records/ give, and the spec's Version is

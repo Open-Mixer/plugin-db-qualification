@@ -28,12 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/check-records.py
-      - run: python3 -m unittest tools/test_check_records.py
-      - run: python3 -m unittest tools/test_fedora44_channel_check.py
-      - run: python3 -m unittest tools/test_fedora44_deliver.py
-      - run: python3 -m unittest tools/test_build_package.py
-      - run: python3 -m unittest tools/test_sets.py
-      - run: python3 -m unittest tools/test_fedora44_rt.py
+      - run: python3 -m unittest discover -s tools -p 'test_*.py'
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
       # every class under records/ is carried by an architecture of the one package, debian/control and the spec's
       # per-architecture block are what packaging/arch-classes and records/ give, and the spec's Version is

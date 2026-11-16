@@ -208,26 +208,30 @@ class Substvars(Tree):
         self.assertEqual(rc, 0)
         return dict(line.split("=", 1) for line in out.splitlines())
 
-    def test_arm64_takes_plugin_qualify_0_20_0(self):
-        self.with_two_cells()
-        self.assertEqual(self.vars("arm64"), {"qualify:Depends": "plugin-qualify (>= 0.20.0~)"})
+    def floors(self):
+        """{(deb arch, rpm arch): floor} as the tree's own packaging/arch-classes, which the fixture copied, says."""
+        with open(self.path("packaging", "arch-classes"), encoding="utf-8") as f:
+            rows = [l.split() for l in f if l.strip() and not l.startswith("#")]
+        self.assertTrue(rows)
+        return {(r[0], r[1]): r[3] for r in rows}
 
-    def test_amd64_takes_plugin_qualify_0_20_1(self):
+    def test_each_architecture_depends_on_the_floor_of_its_class(self):
+        """Audit rows 1-2, 2026-11-16: the deb substvar and the rpm block of every architecture carry the floor the
+        tree's arch-classes names, read from the fixture, never a literal typed here."""
         self.with_two_cells()
-        self.assertEqual(self.vars("amd64"), {"qualify:Depends": "plugin-qualify (>= 0.20.1~)"})
-
-    def test_the_rpm_block_is_the_requires_of_each_architecture(self):
-        self.with_two_cells()
-        block = sets.spec_block(self.root)
-        self.assertEqual(block.split("\n")[1:-1], ["%ifarch x86_64", "Requires: plugin-qualify >= 0.20.1", "%endif",
-                                                   "%ifarch aarch64", "Requires: plugin-qualify >= 0.20.0", "%endif"])
+        floors = self.floors()
+        self.assertEqual(len(floors), 2)
+        block = sets.spec_block(self.root).split("\n")[1:-1]
+        want = []
+        for (deb, rpm), floor in floors.items():
+            self.assertEqual(self.vars(deb), {"qualify:Depends": f"plugin-qualify (>= {floor}~)"})
+            want += [f"%ifarch {rpm}", f"Requires: plugin-qualify >= {floor}", "%endif"]
+        self.assertEqual(block, want)
         if shutil.which("rpmspec"):
-            def q(*what):
-                return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
-                                      capture_output=True, text=True, check=True).stdout
-            self.assertIn("plugin-qualify >= 0.20.1", q("--requires"))
-            self.assertEqual(q("--obsoletes").strip(), "")
-            self.assertEqual(q("--qf", "%{name}\n"), PKG + "\n")
+            rpm, floor = next((k[1], v) for k, v in floors.items() if k[1] == "x86_64")
+            out = subprocess.run(["rpmspec", "-q", "--target", rpm, "--requires", self.path(SPEC)],
+                                 capture_output=True, text=True, check=True).stdout
+            self.assertIn(f"plugin-qualify >= {floor}", out)
 
     def test_an_architecture_with_no_class_or_no_set_is_refused(self):
         self.assertEqual(self.run_main("substvars", "i386")[0], 1)

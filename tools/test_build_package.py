@@ -85,10 +85,10 @@ class BuildPackage(unittest.TestCase):
     def spec_text(self):
         return self.read(*SPEC)
 
-    def assert_folded_by_the_rpm(self, names):
+    def assert_no_takeover_by_the_rpm(self):
         text = self.spec_text()
-        for n in names:
-            self.assertIn(f"Provides: {n} = %{{version}}-%{{release}}\nObsoletes: {n} < %{{version}}-%{{release}}\n", text)
+        self.assertNotIn("\nProvides: ", text)
+        self.assertNotIn("\nObsoletes: ", text)
 
     def read(self, *path):
         with open(os.path.join(self.tree, *path), encoding="utf-8") as f:
@@ -119,10 +119,8 @@ class BuildPackage(unittest.TestCase):
         for suffix, cell in CELLS.items():
             self.assert_cell_set("x86-64", f"fedora44-{suffix}", cell, f"b{suffix}")
         self.assertIn(f"\nVersion: {VERSION}\n", self.spec_text())
-        # the one package takes over each set's older name; nothing in debian/ is per set
-        self.assert_folded_by_the_rpm(["plugin-db-qualification-x86-64-fedora44", "omx-qualification-x86-64-fedora44",
-                                       "plugin-db-qualification-x86-64-fedora44-48000-512",
-                                       "plugin-db-qualification-x86-64-fedora44-96000-256"])
+        # the one package carries no older name of a set; nothing in debian/ is per set
+        self.assert_no_takeover_by_the_rpm()
         self.assertEqual(self.snapshot("debian"), self.debian)
         self.assertEqual(os.listdir(self.other), ["provenance.json"])
         self.assertEqual(sets.problems(self.tree), [])
@@ -138,18 +136,11 @@ class BuildPackage(unittest.TestCase):
                          ["zynthian-vangelis", "zynthian-vangelis-48000-512", "zynthian-vangelis-96000-256"])
         for suffix, cell in CELLS.items():
             self.assert_cell_set("rpi5", f"zynthian-vangelis-{suffix}", cell, f"b{suffix}")
-        # no stanza and no install file: the arm64 package carries records/rpi5/ whole. The spec's aarch64 block
-        # gains the new sets' names and nothing else moves
+        # no stanza and no install file: the arm64 package carries records/rpi5/ whole, and the spec does not move
         self.assertEqual(self.snapshot("debian"), self.debian)
-        spec = self.spec_text()
-        for suffix in CELLS:
-            self.assertIn(f"Provides: plugin-db-qualification-rpi5-zynthian-vangelis-{suffix} = ", spec)
-        self.assertEqual([l for l in spec.split("\n") if "rpi5" not in l], [l for l in spec_before.split("\n") if "rpi5" not in l])
+        self.assertEqual(self.spec_text(), spec_before)
         self.assertEqual(os.listdir(self.other), ["provenance.json"])
         self.assertEqual(sets.problems(self.tree), [])
-        out = subprocess.run(["python3", os.path.join(self.tree, "tools", "sets.py"), "substvars", "arm64"],
-                             capture_output=True, text=True, check=True).stdout
-        self.assertIn(f"plugin-db-qualification-rpi5-zynthian-vangelis-48000-512 (= {VERSION})", out)
 
     def test_the_version_goes_where_it_lives(self):
         r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101")

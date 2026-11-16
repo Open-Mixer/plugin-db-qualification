@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 """The one records package, plugin-qualification-records, per architecture: which sets each architecture carries,
-what it depends on, which older package names it takes over, and which architectures a tag releases. The workflows,
+what it depends on and which architectures a tag releases. The workflows,
 debian/rules and the spec read all of it from here.
 
     tools/sets.py check                         packaging/arch-classes, packaging/release-arches, debian/control,
@@ -18,16 +18,9 @@ debian/rules and the spec read all of it from here.
                                                 proves every set it carries (tools/prove-set.sh), one after the other
 
 packaging/arch-classes maps a Debian architecture and an RPM architecture to a machine class and the plugin-qualify
-range of that architecture's package. Every set under records/<class>/ goes into the package of its class's
+floor of that architecture's package. Every set under records/<class>/ goes into the package of its class's
 architecture, at /usr/share/omx/qualification/<class>/<set>/; the sync chooses the set. A set is per machine class,
 per sample rate and per quantum: a set named <set>-<rate>-<quantum> holds that one cell.
-
-The package takes over the names the sets were published under before, one package per set: for every set,
-plugin-db-qualification-<class>-<set>, and for the set's name without its cell, plugin-db-qualification-<class>-<base>
-and omx-qualification-<class>-<base>. They are derived from records/ at build time, never written by hand. Debian
-folds the names of its architecture's classes, and on every architecture the names of the Debian packages that were
-Architecture: all (the rpi5 sets): Provides (= this version), Replaces and Breaks (<< this version). The RPM folds the
-names of its architecture's classes: Provides and Obsoletes (< this version-release), in the block `spec` writes.
 """
 import json
 import os
@@ -44,9 +37,6 @@ ARCH_CLASSES = os.path.join("packaging", "arch-classes")
 RELEASE_ARCHES = os.path.join("packaging", "release-arches")
 QUALIFICATION = os.path.join("usr", "share", "omx", "qualification")
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
-# the classes whose Debian packages were Architecture: all, installable on any architecture: their names are folded
-# by the package of every Debian architecture
-DEB_ALL_CLASSES = ("rpi5",)
 BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
 BLOCK_END = "# END per-architecture"
 FORMATS = ("deb", "rpm")
@@ -131,22 +121,6 @@ def qualify_range(root, kind, arch):
     return ranges.pop()
 
 
-def folded_names(root, cls_list):
-    """The names the sets of these classes were published under, one package per set."""
-    names = set()
-    for c in cls_list:
-        for _, s in tree_sets(root, c):
-            names.add(f"plugin-db-qualification-{c}-{s}")
-            base = CELL.sub("", s)
-            names.add(f"plugin-db-qualification-{c}-{base}")
-            names.add(f"omx-qualification-{c}-{base}")
-    return sorted(names)
-
-
-def deb_folded(root, arch):
-    return folded_names(root, sorted(set(classes(root, "deb", arch)) | set(DEB_ALL_CLASSES)))
-
-
 def changelog_version(root):
     m = re.match(r"^\S+ \(([^)]*)\)", read(root, "debian", "changelog"))
     return m.group(1) if m else None
@@ -160,14 +134,7 @@ def spec_version(root):
 def substvars(root, arch):
     carried(root, "deb", arch)
     low = qualify_range(root, "deb", arch)
-    version = changelog_version(root)
-    names = deb_folded(root, arch)
-    return "\n".join([
-        f"qualify:Depends=plugin-qualify (>= {low}~)",
-        "records:Provides=" + ", ".join(f"{n} (= {version})" for n in names),
-        "records:Replaces=" + ", ".join(f"{n} (<< {version})" for n in names),
-        "records:Breaks=" + ", ".join(f"{n} (<< {version})" for n in names),
-    ]) + "\n"
+    return f"qualify:Depends=plugin-qualify (>= {low}~)\n"
 
 
 def install(root, kind, arch, dest):
@@ -195,13 +162,11 @@ def exclusive_arch(root):
 
 
 def spec_block(root):
-    """The spec's per-architecture block: for each architecture it builds, the Requires and the folded names."""
+    """The spec's per-architecture block: for each architecture it builds, the Requires."""
     out = [BLOCK_BEGIN]
     for arch in exclusive_arch(root):
         low = qualify_range(root, "rpm", arch)
         out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}"]
-        for n in folded_names(root, classes(root, "rpm", arch)):
-            out += [f"Provides: {n} = %{{version}}-%{{release}}", f"Obsoletes: {n} < %{{version}}-%{{release}}"]
         out.append("%endif")
     out.append(BLOCK_END)
     return "\n".join(out)
@@ -255,10 +220,8 @@ def problems(root):
         if sorted(b.get("Architecture", "").split()) != deb_arches:
             out.append(f"debian/control: Architecture is {b.get('Architecture')!r}, not the Debian architectures of "
                        f"{ARCH_CLASSES}: {' '.join(deb_arches)}")
-        for field, var in (("Depends", "qualify:Depends"), ("Provides", "records:Provides"),
-                           ("Replaces", "records:Replaces"), ("Breaks", "records:Breaks")):
-            if f"${{{var}}}" not in b.get(field, ""):
-                out.append(f"debian/control: {field} does not carry ${{{var}}}")
+        if "${qualify:Depends}" not in b.get("Depends", ""):
+            out.append("debian/control: Depends does not carry ${qualify:Depends}")
     for name in sorted(os.listdir(os.path.join(root, "debian"))):
         if name == "install" or (name.endswith((".install", ".lintian-overrides")) and name.rsplit(".", 1)[0] != PACKAGE):
             out.append(f"debian/{name}: a file of no package; the one binary package is {PACKAGE}")

@@ -38,13 +38,9 @@ A set measured by an older plugin-qualify is dropped, not kept: the class ships 
 `packaging/arch-classes` is the one map of architectures to classes and plugin-qualify floors: `debian/rules`, the
 spec and `tools/sets.py` read it. There is no aarch64 RPM: no Fedora machine of an arm64 class is measured.
 
-The package takes over the names the sets were published under before, one package per set. On Debian it Provides
-them (at this version), Replaces and Breaks them (below this version): `plugin-db-qualification-rpi5-zynthian-vangelis`
-and `omx-qualification-rpi5-zynthian-vangelis` on every architecture, and on amd64 also
-`plugin-db-qualification-x86-64-fedora44`, `omx-qualification-x86-64-fedora44` and every per-cell
-`plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>`. The x86_64 RPM Provides and Obsoletes the x86-64 names.
-The list is derived from `records/` when the package is built (`tools/sets.py substvars` for Debian, the spec block
-`tools/sets.py spec` writes for the RPM), never kept by hand.
+The package ships under one name, `plugin-qualification-records`: it Provides, Obsoletes, Replaces and Breaks no older
+package name. The plugin-qualify floor is written when the package is built (`tools/sets.py substvars` for Debian, the
+spec block `tools/sets.py spec` writes for the RPM).
 
 The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
 cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it
@@ -158,8 +154,7 @@ dir>` without `--cell` keeps the set name as given. For each set, `plugin-qualif
 records go in, and the script replaces `records/<class>/<set>/` with what it holds. No other set, of the class or of
 another, is touched. Nothing is written per set: the set goes into the package of its class's architecture (the class
 must have a line in `packaging/arch-classes`). The spec's `Version` and the top `debian/changelog` entry take the
-version, and the spec's per-architecture block is written again (`tools/sets.py spec`), so the older names the
-package takes over follow `records/`; write the changelog entry.
+version, and the spec's per-architecture block is written again (`tools/sets.py spec`); write the changelog entry.
 
 `provenance.json` is a JSON file of what the tool cannot know: the image, the board, the package versions and the
 source revisions of the device; the tool adds the schema, the set, the host class, the package and the date. Commit,

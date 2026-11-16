@@ -1,0 +1,183 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.zamaudio.ZaMaximX2"
+  },
+  "binary": {
+    "path": "/usr/lib/clap/ZaMaximX2.clap",
+    "sha256": "6d8dd5239ab38df8c4682d2f97681a5cf2d1d98c6b8390ec117151539cc71566",
+    "files": [
+      {
+        "path": "ZaMaximX2.clap",
+        "sha256": "6d8dd5239ab38df8c4682d2f97681a5cf2d1d98c6b8390ec117151539cc71566"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "9d1cbe79a0be05bdd4a98230327e3d66020889e8b80a6a0193b537ccc8e9e48f"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 0,
+            "syscalls": 0,
+            "locks": 1024
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
+  },
+  "cost": [
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 256,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 480,
+          "measuredFrames": 480
+        },
+        "cost": {
+          "median": 1283.71,
+          "percentile": {
+            "p": 95,
+            "value": 1288.41
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "memory": {
+          "afterInstantiateKb": 4448,
+          "afterActivateKb": 4464,
+          "atRestKb": 4848,
+          "secondInstanceKb": 16,
+          "firstInstanceKb": 4848,
+          "perInstanceKb": 16
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.18.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-05T23:34:55+00:00",
+  "probe": {
+    "file": "com.zamaudio.ZaMaximX2@unversioned-6d8dd5239ab3.default.probe.json",
+    "sha256": "f6f3543a87a184fda4900b87148de449b4fa5469b10b8a4ec20acf739d21f9bd",
+    "bytes": 5456,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "aarch64",
+      "family": "arm",
+      "coreBand": "3-4",
+      "clockBand": "1.5-2.5GHz",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 0.54,
+      "cores": 4
+    }
+  },
+  "run": {
+    "id": "20261105T233455Z-2def6b-412cc88b",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      }
+    ]
+  },
+  "rejudged": {
+    "at": "2026-11-06T16:34:37.320Z",
+    "by": "plugin-qualify 0.19.1",
+    "figures": {
+      "tool": {
+        "runner": "plugin-hostd-probe 0.18.0",
+        "child": "clap-qualify",
+        "interposer": "rt_interpose.so"
+      },
+      "measuredAt": "2026-11-05T23:34:55+00:00",
+      "runId": "20261105T233455Z-2def6b-412cc88b"
+    }
+  }
+}

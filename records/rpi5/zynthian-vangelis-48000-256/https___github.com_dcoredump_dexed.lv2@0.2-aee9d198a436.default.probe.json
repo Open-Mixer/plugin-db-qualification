@@ -1,0 +1,370 @@
+{
+  "format": "plugin-hostd.probe-output",
+  "formatVersion": "1.4",
+  "run": {
+    "id": "20261106T033023Z-2fbecd-8432d70a",
+    "startedAt": "2026-11-06T03:30:23+00:00",
+    "elapsedMs": 417,
+    "complete": true,
+    "outcome": "probe.ok",
+    "reason": "on-request",
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "tools": {
+      "runner": "plugin-hostd-probe 0.18.0",
+      "child": "lv2_measure",
+      "interposer": "rt_interpose.so"
+    },
+    "via": "runner",
+    "realtime": {
+      "class": "fifo",
+      "priority": 99,
+      "requested": 99,
+      "grantedBy": "cap",
+      "capabilityBound": true,
+      "observed": {
+        "policy": "fifo",
+        "priority": 99
+      }
+    },
+    "memoryLock": {
+      "locked": false,
+      "limitBytes": 8388608,
+      "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 2122874880: a lock would fail the plugin's own allocations first"
+    },
+    "parts": [
+      {
+        "id": "20261106T033023Z-2fbecd-8432d70a",
+        "outcome": "probe.ok",
+        "rates": [
+          48000
+        ],
+        "quantum": 256,
+        "elapsedMs": 210
+      },
+      {
+        "id": "20261106T033023Z-2fbed1-fe94ece9",
+        "outcome": "probe.ok",
+        "rates": [
+          96000
+        ],
+        "quantum": 256,
+        "elapsedMs": 207
+      }
+    ]
+  },
+  "plugin": {
+    "format": "lv2",
+    "id": "https://github.com/dcoredump/dexed.lv2",
+    "version": "0.2"
+  },
+  "binary": {
+    "path": "dexed.so",
+    "sha256": "aee9d198a436874d6466831c14514cf8bd41261c5180c7500d176e04870f52f8",
+    "files": [
+      {
+        "path": "Dexed.ttl",
+        "sha256": "1204d31b204d49dc1bc35c42704099bd5b6a1fdcd39ffa21f25b1acec5b6a985"
+      },
+      {
+        "path": "dexed.so",
+        "sha256": "aee9d198a436874d6466831c14514cf8bd41261c5180c7500d176e04870f52f8"
+      },
+      {
+        "path": "manifest.ttl",
+        "sha256": "9cf82fa7e9c127b8a2c2f70f4c1eeabed633a5d4d8e7e7da5bbca151eae11fb5"
+      },
+      {
+        "path": "modgui.ttl",
+        "sha256": "bdd1b1bb9ad650bc22345f135dee38d2ccbe2601f525a7e1e8abf6efdb16066d"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "8b28490bf3851af391905f0cb9ae8ba4e3ab121aea2ef080ea17c72cc7f29a59"
+    }
+  },
+  "machine": {
+    "class": {
+      "arch": "aarch64",
+      "family": "arm",
+      "coreBand": "3-4",
+      "clockBand": "1.5-2.5GHz",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "profile": {
+      "governor": "performance",
+      "turbo": false,
+      "smt": false,
+      "preempt": "PREEMPT",
+      "cpuidle": [],
+      "meetsProtocol": false,
+      "unmet": [
+        "probe.profile.not-pinned"
+      ]
+    },
+    "pinnedCpus": "0-3"
+  },
+  "offer": {
+    "id": "default",
+    "realtime": "fifo"
+  },
+  "limits": {
+    "set": "default",
+    "applied": [
+      {
+        "limit": "wall-clock",
+        "value": 60,
+        "unit": "s",
+        "by": "supervisor"
+      },
+      {
+        "limit": "cpu-time",
+        "value": 540,
+        "unit": "s",
+        "by": "rlimit"
+      },
+      {
+        "limit": "memory",
+        "value": 2122874880,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "files",
+        "value": 256,
+        "unit": "count",
+        "by": "rlimit"
+      },
+      {
+        "limit": "file-size",
+        "value": 67108864,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "core-dump",
+        "value": 0,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "rt-priority",
+        "value": 0,
+        "by": "rlimit"
+      },
+      {
+        "limit": "rt-time",
+        "value": 60000000,
+        "unit": "us",
+        "by": "rlimit"
+      },
+      {
+        "limit": "memory-lock",
+        "value": 8388608,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "no-new-privs",
+        "by": "prctl"
+      }
+    ],
+    "unavailable": [
+      {
+        "limit": "memory",
+        "code": "probe.limit.controller-not-delegated"
+      },
+      {
+        "limit": "tasks",
+        "code": "probe.limit.not-implemented"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "hash",
+      "outcome": "probe.ok",
+      "elapsedMs": 49,
+      "exitStatus": 0
+    },
+    {
+      "step": "instantiate",
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "rt-safety",
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "latency",
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0
+    },
+    {
+      "step": "cost",
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.not-attempted",
+      "elapsedMs": 0,
+      "hostingCode": "hosting.cost.unmeasured-at-rate-and-quantum",
+      "detail": "voices-unknown: an instrument with no probe count (OMX_PROBE_NOTES) to hold: no note was held down"
+    },
+    {
+      "step": "lifecycle",
+      "outcome": "probe.ok",
+      "elapsedMs": 161,
+      "exitStatus": 0
+    },
+    {
+      "step": "hash",
+      "outcome": "probe.ok",
+      "elapsedMs": 46,
+      "exitStatus": 0
+    },
+    {
+      "step": "instantiate",
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "rt-safety",
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "latency",
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0
+    },
+    {
+      "step": "cost",
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.not-attempted",
+      "elapsedMs": 0,
+      "hostingCode": "hosting.cost.unmeasured-at-rate-and-quantum",
+      "detail": "voices-unknown: an instrument with no probe count (OMX_PROBE_NOTES) to hold: no note was held down"
+    },
+    {
+      "step": "lifecycle",
+      "outcome": "probe.ok",
+      "elapsedMs": 161,
+      "exitStatus": 0
+    }
+  ],
+  "grid": [
+    {
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "latency": {
+        "declaredFrames": 0,
+        "measuredFrames": 1,
+        "method": "note-onset",
+        "heard": true
+      },
+      "memory": {
+        "afterInstantiateKb": 3072,
+        "afterActivateKb": 3072,
+        "atRestKb": 3072,
+        "secondInstanceKb": 128,
+        "unmeasuredReason": "voices-unknown",
+        "unmeasuredDetail": "no probe count (OMX_PROBE_NOTES) of notes to hold"
+      },
+      "rtSafety": {
+        "interposer": true,
+        "swept": true,
+        "sweepApplicable": true,
+        "blocks": 512,
+        "allocations": 0,
+        "locks": 0,
+        "syscalls": 0,
+        "events": []
+      },
+      "noteSweep": {
+        "applicable": true,
+        "dialect": "midi",
+        "allocations": 0,
+        "locks": 0,
+        "syscalls": 0
+      }
+    },
+    {
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "latency": {
+        "declaredFrames": 0,
+        "measuredFrames": 2,
+        "method": "note-onset",
+        "heard": true
+      },
+      "memory": {
+        "afterInstantiateKb": 3056,
+        "afterActivateKb": 3056,
+        "atRestKb": 3056,
+        "secondInstanceKb": 128,
+        "unmeasuredReason": "voices-unknown",
+        "unmeasuredDetail": "no probe count (OMX_PROBE_NOTES) of notes to hold"
+      },
+      "rtSafety": {
+        "interposer": true,
+        "swept": true,
+        "sweepApplicable": true,
+        "blocks": 512,
+        "allocations": 0,
+        "locks": 0,
+        "syscalls": 0,
+        "events": []
+      },
+      "noteSweep": {
+        "applicable": true,
+        "dialect": "midi",
+        "allocations": 0,
+        "locks": 0,
+        "syscalls": 0
+      }
+    }
+  ],
+  "behaviour": {
+    "lifecycle": {
+      "cycles": 30,
+      "instantiated": 30,
+      "failed": 0
+    },
+    "threads": {
+      "before": 1,
+      "afterFirstInstantiate": 1,
+      "afterAllFreed": 1
+    },
+    "features": {
+      "required": []
+    }
+  },
+  "logs": [
+    {
+      "name": "stderr",
+      "path": "/run/omx/plugin-qualify-sync/plugin-qualify-probe-CPKd7Z/child.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ]
+}

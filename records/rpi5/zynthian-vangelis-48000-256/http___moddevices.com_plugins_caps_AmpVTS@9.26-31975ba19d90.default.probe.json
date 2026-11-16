@@ -1,0 +1,376 @@
+{
+  "format": "plugin-hostd.probe-output",
+  "formatVersion": "1.4",
+  "run": {
+    "id": "20261106T012605Z-2f1205-fd466ad3",
+    "startedAt": "2026-11-06T01:26:05+00:00",
+    "elapsedMs": 368,
+    "complete": true,
+    "outcome": "probe.ok",
+    "reason": "on-request",
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "tools": {
+      "runner": "plugin-hostd-probe 0.18.0",
+      "child": "lv2_measure",
+      "interposer": "rt_interpose.so"
+    },
+    "via": "runner",
+    "realtime": {
+      "class": "fifo",
+      "priority": 99,
+      "requested": 99,
+      "grantedBy": "cap",
+      "capabilityBound": true,
+      "observed": {
+        "policy": "fifo",
+        "priority": 99
+      }
+    },
+    "memoryLock": {
+      "locked": false,
+      "limitBytes": 8388608,
+      "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 2122874880: a lock would fail the plugin's own allocations first"
+    },
+    "parts": [
+      {
+        "id": "20261106T012605Z-2f1205-fd466ad3",
+        "outcome": "probe.ok",
+        "rates": [
+          48000
+        ],
+        "quantum": 256,
+        "elapsedMs": 185
+      },
+      {
+        "id": "20261106T012605Z-2f1209-2d38d8e7",
+        "outcome": "probe.ok",
+        "rates": [
+          96000
+        ],
+        "quantum": 256,
+        "elapsedMs": 183
+      }
+    ]
+  },
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/AmpVTS",
+    "version": "9.26"
+  },
+  "binary": {
+    "path": "AmpVTS.so",
+    "sha256": "31975ba19d9094869bdd2654b6231a2372dd60c6696bf97c77270703daa32629",
+    "files": [
+      {
+        "path": "AmpVTS.so",
+        "sha256": "31975ba19d9094869bdd2654b6231a2372dd60c6696bf97c77270703daa32629"
+      },
+      {
+        "path": "AmpVTS.ttl",
+        "sha256": "abacf78469940c9f7b03551ff0edeb2bbb35b7ccc8e81076f0bc32f65f942912"
+      },
+      {
+        "path": "manifest.ttl",
+        "sha256": "617da9ce6e5bf5620fbdddf4653f9abfc2a91e32fa2d01186f315db000413667"
+      },
+      {
+        "path": "modgui.ttl",
+        "sha256": "84b2038ea1d540e147df2d66b4d6ea09c03c6f286f3c527f855c064117a211ab"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "de566a5e9233fbe1f7fe7a12b86d4ab5c73cf3011d4e16ee91f17cd922fae9af"
+    }
+  },
+  "machine": {
+    "class": {
+      "arch": "aarch64",
+      "family": "arm",
+      "coreBand": "3-4",
+      "clockBand": "1.5-2.5GHz",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "profile": {
+      "governor": "performance",
+      "turbo": false,
+      "smt": false,
+      "preempt": "PREEMPT",
+      "cpuidle": [],
+      "meetsProtocol": false,
+      "unmet": [
+        "probe.profile.not-pinned"
+      ]
+    },
+    "pinnedCpus": "0-3"
+  },
+  "offer": {
+    "id": "default",
+    "realtime": "fifo"
+  },
+  "limits": {
+    "set": "default",
+    "applied": [
+      {
+        "limit": "wall-clock",
+        "value": 60,
+        "unit": "s",
+        "by": "supervisor"
+      },
+      {
+        "limit": "cpu-time",
+        "value": 540,
+        "unit": "s",
+        "by": "rlimit"
+      },
+      {
+        "limit": "memory",
+        "value": 2122874880,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "files",
+        "value": 256,
+        "unit": "count",
+        "by": "rlimit"
+      },
+      {
+        "limit": "file-size",
+        "value": 67108864,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "core-dump",
+        "value": 0,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "rt-priority",
+        "value": 0,
+        "by": "rlimit"
+      },
+      {
+        "limit": "rt-time",
+        "value": 60000000,
+        "unit": "us",
+        "by": "rlimit"
+      },
+      {
+        "limit": "memory-lock",
+        "value": 8388608,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "no-new-privs",
+        "by": "prctl"
+      }
+    ],
+    "unavailable": [
+      {
+        "limit": "memory",
+        "code": "probe.limit.controller-not-delegated"
+      },
+      {
+        "limit": "tasks",
+        "code": "probe.limit.not-implemented"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "hash",
+      "outcome": "probe.ok",
+      "elapsedMs": 32,
+      "exitStatus": 0
+    },
+    {
+      "step": "instantiate",
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "rt-safety",
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "latency",
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0
+    },
+    {
+      "step": "cost",
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0
+    },
+    {
+      "step": "lifecycle",
+      "outcome": "probe.ok",
+      "elapsedMs": 153,
+      "exitStatus": 0
+    },
+    {
+      "step": "hash",
+      "outcome": "probe.ok",
+      "elapsedMs": 30,
+      "exitStatus": 0
+    },
+    {
+      "step": "instantiate",
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "rt-safety",
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0,
+      "detail": "read from the child's line"
+    },
+    {
+      "step": "latency",
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0
+    },
+    {
+      "step": "cost",
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "elapsedMs": 0
+    },
+    {
+      "step": "lifecycle",
+      "outcome": "probe.ok",
+      "elapsedMs": 153,
+      "exitStatus": 0
+    }
+  ],
+  "grid": [
+    {
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "latency": {
+        "declaredFrames": 0,
+        "measuredFrames": 2,
+        "method": "impulse-onset"
+      },
+      "cost": {
+        "unit": "ns-per-sample",
+        "median": 159.867,
+        "percentile": {
+          "p": 95,
+          "value": 160.809
+        },
+        "min": 116.027,
+        "max": 285.227,
+        "blocks": 512,
+        "warmupBlocks": 64
+      },
+      "memory": {
+        "afterInstantiateKb": 2864,
+        "afterActivateKb": 2864,
+        "atRestKb": 2864,
+        "secondInstanceKb": 48
+      },
+      "rtSafety": {
+        "interposer": true,
+        "swept": true,
+        "sweepApplicable": true,
+        "blocks": 512,
+        "allocations": 0,
+        "locks": 0,
+        "syscalls": 0,
+        "events": []
+      },
+      "noteSweep": {
+        "applicable": false
+      }
+    },
+    {
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.ok",
+      "latency": {
+        "declaredFrames": 0,
+        "measuredFrames": 2,
+        "method": "impulse-onset"
+      },
+      "cost": {
+        "unit": "ns-per-sample",
+        "median": 157.914,
+        "percentile": {
+          "p": 95,
+          "value": 159.145
+        },
+        "min": 114.293,
+        "max": 284.793,
+        "blocks": 512,
+        "warmupBlocks": 64
+      },
+      "memory": {
+        "afterInstantiateKb": 2864,
+        "afterActivateKb": 2864,
+        "atRestKb": 2864,
+        "secondInstanceKb": 48
+      },
+      "rtSafety": {
+        "interposer": true,
+        "swept": true,
+        "sweepApplicable": true,
+        "blocks": 512,
+        "allocations": 0,
+        "locks": 0,
+        "syscalls": 0,
+        "events": []
+      },
+      "noteSweep": {
+        "applicable": false
+      }
+    }
+  ],
+  "behaviour": {
+    "lifecycle": {
+      "cycles": 30,
+      "instantiated": 30,
+      "failed": 0
+    },
+    "threads": {
+      "before": 1,
+      "afterFirstInstantiate": 1,
+      "afterAllFreed": 1
+    },
+    "features": {
+      "required": []
+    }
+  },
+  "logs": [
+    {
+      "name": "stderr",
+      "path": "/run/omx/plugin-qualify-sync/plugin-qualify-probe-weJNRf/child.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ]
+}

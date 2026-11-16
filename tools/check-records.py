@@ -18,6 +18,8 @@ Without arguments every set under records/ is checked. A set passes when:
   comparison-summary.json, a publishable plugin-qualify.comparison-summary/1 of exactly those records, in which mod-host
   and jalv ran: a comparison without its references is never shipped;
 - nothing else is in the directory (no *.unmeasured.json: an unmeasured record never applies);
+- every record holds one cell of measurements.grid: a record of several is refused by name ("multi-cell record: one
+  set per cell since 2026-11-16"), never read as a second shape;
 - a set of one cell, named <set>-<rate>-<quantum> (fedora44-48000-512), holds only records whose measurement grid
   holds that cell, and its provenance's grid names it: a set is per machine class, per sample rate and per quantum.
 
@@ -213,6 +215,10 @@ def check_set(path):
             continue
         if rec.get("schema") != RECORD_SCHEMA:
             bad(name, f"schema is {rec.get('schema')!r}")
+        measured = sorted(record_cells(rec), key=str)
+        if len(measured) > 1:
+            bad(name, "multi-cell record: one set per cell since 2026-11-16 "
+                      f"(it measured {', '.join(f'{r}/{q}' for r, q in measured)})")
         if cell is not None and cell not in record_cells(rec):
             cells = ", ".join(f"{r}/{q}" for r, q in sorted(record_cells(rec), key=str)) or "no cell"
             bad(name, f"measured {cells}, not {cell[0]}/{cell[1]}, the cell of the set's name")

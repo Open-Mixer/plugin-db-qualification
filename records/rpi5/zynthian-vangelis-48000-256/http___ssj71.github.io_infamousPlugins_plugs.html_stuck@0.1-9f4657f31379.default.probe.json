@@ -1,0 +1,228 @@
+{
+  "format": "plugin-hostd.probe-output",
+  "formatVersion": "1.4",
+  "run": {
+    "id": "20261106T013820Z-2f2e24-2b870249",
+    "startedAt": "2026-11-06T01:38:20+00:00",
+    "elapsedMs": 120046,
+    "complete": false,
+    "outcome": "probe.timeout",
+    "reason": "on-request",
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "tools": {
+      "runner": "plugin-hostd-probe 0.18.0",
+      "child": "lv2_measure"
+    },
+    "via": "runner",
+    "realtime": {
+      "class": "fifo",
+      "priority": 99,
+      "requested": 99,
+      "grantedBy": "cap",
+      "capabilityBound": true,
+      "observed": {
+        "policy": "fifo",
+        "priority": 99
+      }
+    },
+    "memoryLock": {
+      "locked": false,
+      "limitBytes": 8388608,
+      "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 2122874880: a lock would fail the plugin's own allocations first"
+    },
+    "parts": [
+      {
+        "id": "20261106T013820Z-2f2e24-2b870249",
+        "outcome": "probe.timeout",
+        "rates": [
+          48000
+        ],
+        "quantum": 256,
+        "elapsedMs": 60020
+      },
+      {
+        "id": "20261106T013920Z-2f2e96-20ca2cd6",
+        "outcome": "probe.timeout",
+        "rates": [
+          96000
+        ],
+        "quantum": 256,
+        "elapsedMs": 60026
+      }
+    ]
+  },
+  "plugin": {
+    "format": "lv2",
+    "id": "http://ssj71.github.io/infamousPlugins/plugs.html#stuck",
+    "version": "0.1"
+  },
+  "binary": {
+    "path": "stuck.so",
+    "sha256": "9f4657f31379a3cdc77ec71dc8b0c2f6018cb0d7665d39eb53bc6784e03526c5",
+    "files": [
+      {
+        "path": "manifest.ttl",
+        "sha256": "261a12cb7385ca3a15dc6a098de26ee29827c40fac60110eb7140a537e5017c7"
+      },
+      {
+        "path": "stuck.so",
+        "sha256": "9f4657f31379a3cdc77ec71dc8b0c2f6018cb0d7665d39eb53bc6784e03526c5"
+      },
+      {
+        "path": "stuck.ttl",
+        "sha256": "8e49daa0422df2ebf5a450afae78ca38958b82656ded8048aa26a63739369809"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "10645ff8b43d9ee857cecb2e13d8cd98d2b1c27c3328d494904628375ee8ee8a"
+    }
+  },
+  "machine": {
+    "class": {
+      "arch": "aarch64",
+      "family": "arm",
+      "coreBand": "3-4",
+      "clockBand": "1.5-2.5GHz",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "profile": {
+      "governor": "performance",
+      "turbo": false,
+      "smt": false,
+      "preempt": "PREEMPT",
+      "cpuidle": [],
+      "meetsProtocol": false,
+      "unmet": [
+        "probe.profile.not-pinned"
+      ]
+    },
+    "pinnedCpus": "0-3"
+  },
+  "offer": {
+    "id": "default",
+    "realtime": "fifo"
+  },
+  "limits": {
+    "set": "default",
+    "applied": [
+      {
+        "limit": "wall-clock",
+        "value": 60,
+        "unit": "s",
+        "by": "supervisor"
+      },
+      {
+        "limit": "cpu-time",
+        "value": 540,
+        "unit": "s",
+        "by": "rlimit"
+      },
+      {
+        "limit": "memory",
+        "value": 2122874880,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "files",
+        "value": 256,
+        "unit": "count",
+        "by": "rlimit"
+      },
+      {
+        "limit": "file-size",
+        "value": 67108864,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "core-dump",
+        "value": 0,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "rt-priority",
+        "value": 0,
+        "by": "rlimit"
+      },
+      {
+        "limit": "rt-time",
+        "value": 60000000,
+        "unit": "us",
+        "by": "rlimit"
+      },
+      {
+        "limit": "memory-lock",
+        "value": 8388608,
+        "unit": "bytes",
+        "by": "rlimit"
+      },
+      {
+        "limit": "no-new-privs",
+        "by": "prctl"
+      }
+    ],
+    "unavailable": [
+      {
+        "limit": "memory",
+        "code": "probe.limit.controller-not-delegated"
+      },
+      {
+        "limit": "tasks",
+        "code": "probe.limit.not-implemented"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "step": "hash",
+      "outcome": "probe.ok",
+      "elapsedMs": 33,
+      "exitStatus": 0
+    },
+    {
+      "step": "lifecycle",
+      "outcome": "probe.timeout",
+      "elapsedMs": 59987,
+      "detail": "the wall clock of 60 s passed; the process tree was killed"
+    },
+    {
+      "step": "hash",
+      "outcome": "probe.ok",
+      "elapsedMs": 31,
+      "exitStatus": 0
+    },
+    {
+      "step": "lifecycle",
+      "outcome": "probe.timeout",
+      "elapsedMs": 59995,
+      "detail": "the wall clock of 60 s passed; the process tree was killed; 1 process(es) left behind were killed"
+    }
+  ],
+  "logs": [
+    {
+      "name": "stderr",
+      "path": "/run/omx/plugin-qualify-sync/plugin-qualify-probe-wRp52d/child.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  ],
+  "grid": [
+    {
+      "rate": 48000,
+      "quantum": 256,
+      "outcome": "probe.timeout"
+    },
+    {
+      "rate": 96000,
+      "quantum": 256,
+      "outcome": "probe.timeout"
+    }
+  ]
+}

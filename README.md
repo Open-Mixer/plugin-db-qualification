@@ -32,10 +32,10 @@ A set measured by an older plugin-qualify is dropped, not kept: the class ships 
 
 | architecture | host class | machine | sets | tier | depends on | released as |
 | --- | --- | --- | --- | --- | --- | --- |
-| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 up to 0.21 | deb, Debian trixie |
-| amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify 0.20.1 up to 0.21, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
+| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify from 0.20.0 | deb, Debian trixie |
+| amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify from 0.20.1, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
 
-`packaging/arch-classes` is the one map of architectures to classes and plugin-qualify ranges: `debian/rules`, the
+`packaging/arch-classes` is the one map of architectures to classes and plugin-qualify floors: `debian/rules`, the
 spec and `tools/sets.py` read it. There is no aarch64 RPM: no Fedora machine of an arm64 class is measured.
 
 The package takes over the names the sets were published under before, one package per set. On Debian it Provides
@@ -82,9 +82,8 @@ but only when nothing else runs on it: the measurement plays every plugin on the
 plugin-db's store (`/var/lib/plugin-db`) holds a machine's own layers and names no place for shipped records, so the
 records stay where plugin-qualify-sync reads them (`distributed_dir`, `/usr/share/omx/qualification`). The package of
 an architecture holds `<host class>/` for each class of that architecture, every set of the class beside the others,
-and depends on the plugin-qualify range of that architecture, up to the next minor: on arm64
-`plugin-qualify (>= 0.20.0~), plugin-qualify (<< 0.21~)`, on amd64 `plugin-qualify (>= 0.20.1~),
-plugin-qualify (<< 0.21~)`, on x86_64 `(plugin-qualify >= 0.20.1 with plugin-qualify < 0.21)`.
+and depends on the plugin-qualify floor of that architecture, no ceiling: on arm64
+`plugin-qualify (>= 0.20.0~)`, on amd64 `plugin-qualify (>= 0.20.1~)`, on x86_64 `plugin-qualify >= 0.20.1`.
 
 Each record is held with its probe output. Both are the files the measuring machine wrote, unchanged. The plugins
 that could not be measured (`*.unmeasured.json`) are not here: an unmeasured record never applies.

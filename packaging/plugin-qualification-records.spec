@@ -33,7 +33,7 @@ BuildRequires: python3
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
-Requires: (plugin-qualify >= 0.20.1 with plugin-qualify < 0.21)
+Requires: plugin-qualify >= 0.20.1
 Provides: omx-qualification-x86-64-fedora44 = %{version}-%{release}
 Obsoletes: omx-qualification-x86-64-fedora44 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44 = %{version}-%{release}
@@ -60,7 +60,7 @@ Provides: plugin-db-qualification-x86-64-fedora44-96000-64 = %{version}-%{releas
 Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-64 < %{version}-%{release}
 %endif
 %ifarch aarch64
-Requires: (plugin-qualify >= 0.20.0 with plugin-qualify < 0.21)
+Requires: plugin-qualify >= 0.20.0
 Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
 Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
 Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}

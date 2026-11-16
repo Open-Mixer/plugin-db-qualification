@@ -177,9 +177,24 @@ class OneCellSets(unittest.TestCase):
         self.add_record("c", [])
         self.assertTrue(any("c.default.qualification.json: measured no cell, not 48000/512" in p for p in self.problems()))
 
-    def test_a_record_that_also_measured_other_cells_passes(self):
+    def test_a_multi_cell_record_is_refused_by_name(self):
         self.add_record("d", [(48000, 256), (48000, 512)])
-        self.assertEqual(self.problems(), [])
+        self.assertIn(f"{self.set}/d.default.qualification.json: multi-cell record: one set per cell since 2026-11-16 "
+                      "(it measured 48000/256, 48000/512)", self.problems())
+
+    def test_a_multi_cell_record_is_refused_in_a_set_that_names_no_cell(self):
+        # the shape of records/rpi5/zynthian-vangelis before its conversion: no cell in the name, several in each record
+        old = os.path.join(self.tmp.name, "rpi5", "zynthian-vangelis")
+        os.makedirs(old)
+        for n in os.listdir(self.set):
+            with open(os.path.join(self.set, n), "rb") as f, open(os.path.join(old, n), "wb") as g:
+                g.write(f.read())
+        with open(os.path.join(old, "provenance.json"), "w", encoding="utf-8") as f:
+            json.dump({**self.prov, "set": "zynthian-vangelis", "hostClass": "rpi5", "grid": "48000/256,96000/256",
+                       "package": {"name": "plugin-db-qualification-rpi5-zynthian-vangelis"}}, f)
+        self.set = old
+        self.add_record("e", [(48000, 256), (96000, 256)])
+        self.assertTrue(any("e.default.qualification.json: multi-cell record: one set per cell since" in p for p in self.problems()))
 
     def test_the_provenance_names_the_cell(self):
         self.write("provenance.json", {**self.prov, "grid": "96000/256"})

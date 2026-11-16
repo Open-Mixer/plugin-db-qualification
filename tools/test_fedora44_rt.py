@@ -4,7 +4,6 @@
 import os
 import re
 import shutil
-import stat
 import subprocess
 import tempfile
 import unittest
@@ -18,13 +17,16 @@ with open(os.path.join(HERE, "fedora44", "job.yaml"), encoding="utf-8") as _f:
 with open(MEASURE_PATH, encoding="utf-8") as _f:
     MEASURE = _f.read()
 
-# a stand-in chrt: the policy of a thread is the content of the file the fake /proc tree holds for it
-FAKE_CHRT = """#!/bin/bash
-[ "$1" = -p ] || exit 2
-f=$(ls "$PROC"/*/task/"$2"/policy 2>/dev/null | head -1)
-[ -n "$f" ] || exit 1
-echo "pid $2's current scheduling policy: $(cat "$f")"
-echo "pid $2's current scheduling priority: 70"
+# a stand-in chrt, defined as a shell function ahead of measure.sh's own (nothing is executed from a temp directory):
+# the policy of a thread is the content of the file the fake /proc tree holds for it
+FAKE_CHRT = """chrt() {
+  [ "$1" = -p ] || return 2
+  local f
+  f=$(ls "$PROC"/*/task/"$2"/policy 2>/dev/null | head -1)
+  [ -n "$f" ] || return 1
+  echo "pid $2's current scheduling policy: $(cat "$f")"
+  echo "pid $2's current scheduling priority: 70"
+}
 """
 
 
@@ -52,12 +54,6 @@ class FifoCheck(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.proc = os.path.join(self.tmp.name, "proc")
-        self.bin = os.path.join(self.tmp.name, "bin")
-        os.makedirs(self.bin)
-        chrt = os.path.join(self.bin, "chrt")
-        with open(chrt, "w") as f:
-            f.write(FAKE_CHRT)
-        os.chmod(chrt, os.stat(chrt).st_mode | stat.S_IXUSR)
         # the two functions only, cut out of the script (sourcing measure.sh would run the whole Job)
         defs = re.search(r"(?ms)^fifo_threads\(\) \{.*?^\}\n^fifo_refused\(\)[^\n]*\n", MEASURE)
         self.assertIsNotNone(defs)
@@ -74,10 +70,11 @@ class FifoCheck(unittest.TestCase):
                 f.write(pol)
 
     def refused(self, pid):
-        env = {"PATH": self.bin + ":/usr/bin:/bin", "PROC": self.proc}
-        r = subprocess.run(["bash", "-c", self.defs + f'fifo_refused "$1"', "x", pid], env=env,
+        env = {"PATH": "/usr/bin:/bin", "PROC": self.proc}
+        r = subprocess.run(["bash", "-c", FAKE_CHRT + self.defs + 'fifo_refused "$1"', "x", pid], env=env,
                            capture_output=True, text=True)
-        self.assertEqual(r.stderr, "")
+        tree = sorted(os.path.join(d, f) for d, _, fs in os.walk(self.proc) for f in fs)
+        self.assertEqual(r.stderr, "", (pid, r.returncode, tree))
         return r.returncode == 0
 
     def test_a_base_without_sched_fifo_is_refused(self):
@@ -88,7 +85,7 @@ class FifoCheck(unittest.TestCase):
         self.assertTrue(self.refused("999"))
         # jack2 keeps its main thread at SCHED_OTHER; its audio thread is the one at SCHED_FIFO
         self.jackd(200, "SCHED_OTHER", "SCHED_FIFO")
-        self.assertFalse(self.refused("200"))
+        self.assertFalse(self.refused("200"), os.listdir(self.proc))
 
 
 if __name__ == "__main__":

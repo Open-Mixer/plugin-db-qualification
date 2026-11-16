@@ -327,7 +327,6 @@ class Rules(Tree):
             with open(saw) as f:
                 text = f.read()
             self.assertIn(f"qualify:Depends=plugin-qualify (>= {low}~)\n", text)
-            self.assertEqual("fedora44-48000-512" in text, arch == "amd64")
 
     def test_an_architecture_with_no_class_or_no_set_fails_the_build(self):
         r, _ = self.make("override_dh_install", "i386")

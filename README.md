@@ -49,6 +49,9 @@ device wrote except that its grid holds that cell alone, and its probe output is
 cell of the memory pass only, so its set holds the 1602 records that pass reached. `tools/check-records.py` refuses a
 record of several cells by name.
 
+Measured values are never rewritten; the 2026-11-16 reshape (one set per cell) kept every value exact (round-trip). It
+was approved by the owner on 2026-11-16: `--rejudge` split, convert stored records once.
+
 plugin-qualify knows a class by the board's device tree (`rpi5` on a Raspberry Pi 5) or by `host_class` in
 `/etc/omx/qualify.conf`; it does not tell machines apart by CPU or kernel. The worker image and a desk are both
 `x86-64`. The class's set is the worker image's, because it is measured in the cluster from the channel's packages

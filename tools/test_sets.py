@@ -280,6 +280,31 @@ class FloorsOnly(Tree):
             self.assertIsNone(re.search(r"\b(omx|plugin)-[a-z0-9-]+\s*(<=|<)", line), line)
 
 
+class OneName(Tree):
+    """Audit row 1, 2026-11-16: the records ship under one name. No Provides, Obsoletes, Replaces or Breaks on the
+    older package names (omx-qualification-<class>, plugin-db-qualification-<class>[-<rate>-<quantum>]) is generated
+    or committed."""
+
+    OLD = re.compile(r"^(Provides|Obsoletes|Replaces|Breaks):", re.M)
+
+    def test_the_generator_writes_no_takeover_name(self):
+        self.with_two_cells()
+        for arch in ("arm64", "amd64"):
+            v = self.run_main("substvars", arch)[1]
+            self.assertNotIn("records:", v)
+            self.assertNotIn("qualification-", v)
+        block = sets.spec_block(self.root)
+        self.assertIsNone(self.OLD.search(block), block)
+        self.assertIn("Requires: plugin-qualify >= ", block)
+
+    def test_the_committed_spec_and_control_carry_no_takeover_name(self):
+        for rel in (SPEC, os.path.join("debian", "control")):
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as f:
+                text = f.read()
+            self.assertIsNone(self.OLD.search(text), rel)
+            self.assertNotIn("omx-qualification-", text, rel)
+
+
 @unittest.skipUnless(shutil.which("make"), "make is not installed")
 class Rules(Tree):
     """debian/rules' own steps, as dpkg-buildpackage runs them for one architecture."""

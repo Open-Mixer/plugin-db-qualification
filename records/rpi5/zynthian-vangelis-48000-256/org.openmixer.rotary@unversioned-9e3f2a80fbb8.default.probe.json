@@ -1,0 +1,59 @@
+{
+  "format": "plugin-hostd.probe-output",
+  "formatVersion": "1.4",
+  "run": {
+    "id": "20261105T235556Z-2e4fb5-aa8273c0",
+    "startedAt": "2026-11-05T23:55:56+00:00",
+    "elapsedMs": 99,
+    "complete": true,
+    "outcome": "probe.ok",
+    "reason": "on-request",
+    "protocol": {"name": "plugin-hostd.probe-protocol", "version": 1},
+    "tools": {"runner": "plugin-hostd-probe 0.18.0", "child": "clap-qualify", "interposer": "rt_interpose.so"},
+    "via": "runner",
+    "realtime": {"class": "fifo", "priority": 99, "requested": 99, "grantedBy": "cap", "capabilityBound": true, "observed": {"policy": "fifo", "priority": 99}},
+    "memoryLock": {"locked": false, "limitBytes": 8388608, "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 2122874880: a lock would fail the plugin's own allocations first"}
+  },
+  "plugin": {"format": "clap", "id": "org.openmixer.rotary"},
+  "binary": {"path": "/usr/lib/clap/omx-rotary.clap", "sha256": "9e3f2a80fbb89c2d5a049f60d7908b48add130c5904972ed158782fbcf14bd43", "files": [{"path": "omx-rotary.clap", "sha256": "9e3f2a80fbb89c2d5a049f60d7908b48add130c5904972ed158782fbcf14bd43"}], "layout": {"scheme": "omx-layout/1", "sha256": "4f487dacf1c5f4a6c1dd390bdf9573509e1697b8215f7ce771e0ace49977918d"}},
+  "machine": {
+    "class": {"arch": "aarch64", "family": "arm", "coreBand": "3-4", "clockBand": "1.5-2.5GHz", "preemptRt": false, "cstatesLimited": false},
+    "profile": {"governor": "performance", "turbo": false, "smt": false, "preempt": "PREEMPT",
+      "cpuidle": [],
+      "meetsProtocol": false, "unmet": ["probe.profile.not-pinned"]},
+    "pinnedCpus": "0-3"
+  },
+  "offer": {"id": "default", "clapExtensions": ["clap.log", "clap.thread-check", "clap.latency", "clap.params", "clap.audio-ports", "clap.state", "clap.note-ports", "clap.note-name", "clap.voice-info", "clap.event-registry", "clap.timer-support", "clap.posix-fd-support", "clap.thread-pool", "clap.tail", "clap.surround/4", "clap.ambisonic/3", "clap.audio-ports-config"], "realtime": "fifo"},
+  "limits": {"set": "default",
+    "applied": [
+      {"limit": "wall-clock", "value": 60, "unit": "s", "by": "supervisor"},
+      {"limit": "cpu-time", "value": 540, "unit": "s", "by": "rlimit"},
+      {"limit": "memory", "value": 2122874880, "unit": "bytes", "by": "rlimit"},
+      {"limit": "files", "value": 256, "unit": "count", "by": "rlimit"},
+      {"limit": "file-size", "value": 67108864, "unit": "bytes", "by": "rlimit"},
+      {"limit": "core-dump", "value": 0, "unit": "bytes", "by": "rlimit"},
+      {"limit": "rt-priority", "value": 0, "by": "rlimit"},
+      {"limit": "rt-time", "value": 60000000, "unit": "us", "by": "rlimit"},
+      {"limit": "memory-lock", "value": 8388608, "unit": "bytes", "by": "rlimit"},
+      {"limit": "no-new-privs", "by": "prctl"}
+    ],
+    "unavailable": [
+      {"limit": "memory", "code": "probe.limit.controller-not-delegated"},
+      {"limit": "tasks", "code": "probe.limit.not-implemented"}
+    ]
+  },
+  "steps": [
+    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 0},
+    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 98, "exitStatus": 0},
+    {"step": "instantiate", "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "latency", "rate": 48000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "latency", "rate": 96000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "rt-safety", "outcome": "probe.ok", "elapsedMs": 0, "detail": "counts are totals over every rate, read from the child's line"},
+    {"step": "note-sweep", "outcome": "probe.not-attempted", "elapsedMs": 0, "detail": "no note input"}
+  ],
+  "grid": [
+    {"rate": 48000, "quantum": 256, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 18, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 1.5918, "percentile": {"p": 95, "value": 192.707}, "min": 1.30078, "max": 217.52, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 272, "afterActivateKb": 512, "atRestKb": 512, "secondInstanceKb": 16}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 1024, "allocations": 0, "locks": 0, "syscalls": 0, "threadViolations": 0, "processErrors": 0, "events": []}, "noteSweep": {"applicable": false}},
+    {"rate": 96000, "quantum": 256, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 37, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 1.58984, "percentile": {"p": 95, "value": 192.483}, "min": 1.30469, "max": 200.449, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 272, "afterActivateKb": 512, "atRestKb": 512, "secondInstanceKb": 16}}
+  ],
+  "logs": [{"name": "stderr", "path": "/run/omx/plugin-qualify-sync/plugin-qualify-probe-9IUtIP/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
+}

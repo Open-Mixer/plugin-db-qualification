@@ -1,0 +1,59 @@
+{
+  "format": "plugin-hostd.probe-output",
+  "formatVersion": "1.4",
+  "run": {
+    "id": "20261105T233621Z-2df1e0-5fa648d2",
+    "startedAt": "2026-11-05T23:36:21+00:00",
+    "elapsedMs": 447,
+    "complete": true,
+    "outcome": "probe.ok",
+    "reason": "on-request",
+    "protocol": {"name": "plugin-hostd.probe-protocol", "version": 1},
+    "tools": {"runner": "plugin-hostd-probe 0.18.0", "child": "clap-qualify", "interposer": "rt_interpose.so"},
+    "via": "runner",
+    "realtime": {"class": "fifo", "priority": 99, "requested": 99, "grantedBy": "cap", "capabilityBound": true, "observed": {"policy": "fifo", "priority": 99}},
+    "memoryLock": {"locked": false, "limitBytes": 8388608, "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 2122874880: a lock would fail the plugin's own allocations first"}
+  },
+  "plugin": {"format": "clap", "id": "com.zamaudio.ZamNoise"},
+  "binary": {"path": "/usr/lib/clap/ZamNoise.clap", "sha256": "9b2e56bd2106afb21ef2b08ad9778decbb44b96fc0c065062bb6305a4d81254b", "files": [{"path": "ZamNoise.clap", "sha256": "9b2e56bd2106afb21ef2b08ad9778decbb44b96fc0c065062bb6305a4d81254b"}], "layout": {"scheme": "omx-layout/1", "sha256": "6106f0e728e885c9b9695d235a79cbecbde58ac78a6e951d27905ee71f956568"}},
+  "machine": {
+    "class": {"arch": "aarch64", "family": "arm", "coreBand": "3-4", "clockBand": "1.5-2.5GHz", "preemptRt": false, "cstatesLimited": false},
+    "profile": {"governor": "performance", "turbo": false, "smt": false, "preempt": "PREEMPT",
+      "cpuidle": [],
+      "meetsProtocol": false, "unmet": ["probe.profile.not-pinned"]},
+    "pinnedCpus": "0-3"
+  },
+  "offer": {"id": "custom", "clapExtensions": ["clap.log", "clap.thread-check", "clap.latency", "clap.params", "clap.audio-ports", "clap.state", "clap.note-ports", "clap.note-name", "clap.voice-info", "clap.event-registry", "clap.timer-support", "clap.posix-fd-support", "clap.thread-pool", "clap.tail", "clap.surround/4", "clap.ambisonic/3", "clap.audio-ports-config", "clap.preset-load/2", "clap.track-info/1", "clap.remote-controls/2"], "realtime": "fifo"},
+  "limits": {"set": "default",
+    "applied": [
+      {"limit": "wall-clock", "value": 60, "unit": "s", "by": "supervisor"},
+      {"limit": "cpu-time", "value": 540, "unit": "s", "by": "rlimit"},
+      {"limit": "memory", "value": 2122874880, "unit": "bytes", "by": "rlimit"},
+      {"limit": "files", "value": 256, "unit": "count", "by": "rlimit"},
+      {"limit": "file-size", "value": 67108864, "unit": "bytes", "by": "rlimit"},
+      {"limit": "core-dump", "value": 0, "unit": "bytes", "by": "rlimit"},
+      {"limit": "rt-priority", "value": 0, "by": "rlimit"},
+      {"limit": "rt-time", "value": 60000000, "unit": "us", "by": "rlimit"},
+      {"limit": "memory-lock", "value": 8388608, "unit": "bytes", "by": "rlimit"},
+      {"limit": "no-new-privs", "by": "prctl"}
+    ],
+    "unavailable": [
+      {"limit": "memory", "code": "probe.limit.controller-not-delegated"},
+      {"limit": "tasks", "code": "probe.limit.not-implemented"}
+    ]
+  },
+  "steps": [
+    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 0},
+    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 447, "exitStatus": 0},
+    {"step": "instantiate", "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "latency", "rate": 48000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "latency", "rate": 96000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "rt-safety", "outcome": "probe.ok", "elapsedMs": 0, "detail": "counts are totals over every rate, read from the child's line"},
+    {"step": "note-sweep", "outcome": "probe.not-attempted", "elapsedMs": 0, "detail": "no note input"}
+  ],
+  "grid": [
+    {"rate": 48000, "quantum": 256, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 0, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 193.795, "percentile": {"p": 95, "value": 2053.06}, "min": 4.91797, "max": 2076.96, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 7568, "afterActivateKb": 7552, "atRestKb": 7856, "secondInstanceKb": 304}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 1024, "allocations": 1028, "locks": 1024, "syscalls": 0, "threadViolations": 0, "processErrors": 0, "events": ["pthread_mutex_trylock", "malloc", "free", "pthread_mutex_trylock", "malloc", "free", "pthread_mutex_trylock", "malloc", "free", "pthread_mutex_trylock", "malloc", "free", "pthread_mutex_trylock", "malloc", "free", "pthread_mutex_trylock"]}, "noteSweep": {"applicable": false}},
+    {"rate": 96000, "quantum": 256, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 0, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 193.758, "percentile": {"p": 95, "value": 2053.4}, "min": 4.98828, "max": 2077.4, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 7568, "afterActivateKb": 7552, "atRestKb": 7856, "secondInstanceKb": 304}}
+  ],
+  "logs": [{"name": "stderr", "path": "/run/omx/plugin-qualify-sync/plugin-qualify-probe-xlARPC/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
+}

@@ -32,7 +32,7 @@ A set measured by an older plugin-qualify is dropped, not kept: the class ships 
 
 | architecture | host class | machine | sets | tier | depends on | released as |
 | --- | --- | --- | --- | --- | --- | --- |
-| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 up to 0.21 | deb, Debian trixie |
+| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis-<rate>-<quantum>`, three cells (48000/256 and 96000/256, 1863 records a set; 48000/128, 1602), measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1 | hardware | plugin-qualify 0.20.0 up to 0.21 | deb, Debian trixie |
 | amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify 0.20.1 up to 0.21, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
 
 `packaging/arch-classes` is the one map of architectures to classes and plugin-qualify ranges: `debian/rules`, the
@@ -46,10 +46,12 @@ and `omx-qualification-rpi5-zynthian-vangelis` on every architecture, and on amd
 The list is derived from `records/` when the package is built (`tools/sets.py substvars` for Debian, the spec block
 `tools/sets.py spec` writes for the RPM), never kept by hand.
 
-The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
-cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it
-becomes `zynthian-vangelis-48000-256` and `zynthian-vangelis-96000-256`. A record or probe file is never rewritten:
-they are the bytes the device wrote.
+The rpi5 sets are `zynthian-vangelis-48000-256`, `zynthian-vangelis-96000-256` and `zynthian-vangelis-48000-128`: one
+set per cell, like every other. The measurement that made them held several cells in each record; `tools/rpi5/split-cells.py`
+split it once, with nothing measured again: each record went into the set of every cell it measured, equal to what the
+device wrote except that its grid holds that cell alone, and its probe output is the device's bytes. 48000/128 is the
+cell of the memory pass only, so its set holds the 1602 records that pass reached. `tools/check-records.py` refuses a
+record of several cells by name.
 
 plugin-qualify knows a class by the board's device tree (`rpi5` on a Raspberry Pi 5) or by `host_class` in
 `/etc/omx/qualify.conf`; it does not tell machines apart by CPU or kernel. The worker image and a desk are both

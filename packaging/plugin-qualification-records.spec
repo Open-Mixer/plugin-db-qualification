@@ -65,6 +65,12 @@ Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
 Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
 Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
 Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
+Provides: plugin-db-qualification-rpi5-zynthian-vangelis-48000-128 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis-48000-128 < %{version}-%{release}
+Provides: plugin-db-qualification-rpi5-zynthian-vangelis-48000-256 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis-48000-256 < %{version}-%{release}
+Provides: plugin-db-qualification-rpi5-zynthian-vangelis-96000-256 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis-96000-256 < %{version}-%{release}
 %endif
 # END per-architecture
 

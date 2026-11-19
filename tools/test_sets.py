@@ -423,7 +423,7 @@ class Prove(Tree):
         self.with_two_cells()
         rc, out, log = self.prove("rpm", "x86_64")
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("2 of 2 sets proven", out)
+        self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
         self.assertEqual(self.steps(log), [
             f"dnf install -y --setopt=install_weak_deps=False ./pkgs/{PKG}-[0-9]*.x86_64.rpm",
             "dnf install -y --setopt=install_weak_deps=False omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
@@ -438,19 +438,19 @@ class Prove(Tree):
         self.with_two_cells()
         rc, out, log = self.prove("rpm", "x86_64", BAD_GRID="96000/256")
         self.assertEqual(rc, 1)
-        self.assertIn("1 of 2 sets proven; failed: fedora44-96000-256", out)
+        self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class); failed: fedora44-96000-256", out)
 
     def test_plugins_taken_from_another_set_fail_the_proof(self):
         self.with_two_cells()
         rc, out, log = self.prove("rpm", "x86_64", WRONG_SET="fedora44-48000-512")
         self.assertEqual(rc, 1)
-        self.assertIn("1 of 2 sets proven; failed: fedora44-96000-256", out)
+        self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class); failed: fedora44-96000-256", out)
 
     def test_the_arm64_deb_is_proven_with_no_grid(self):
         self.with_two_cells()
         rc, out, log = self.prove("deb", "arm64")
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("1 of 1 sets proven", out)
+        self.assertIn("1 of 1 sets proven, 0 not proven (measured on another host class)", out)
         self.assertEqual(self.steps(log), [
             f"apt-get install -y --no-install-recommends ./pkgs/trixie/{PKG}_*_arm64.deb lv2vocoder",
             "plugin-qualify-sync --system", "host_class rpi5",
@@ -473,7 +473,7 @@ class Prove(Tree):
         for s in CELLS:
             self.assertIn(f"::notice::x86-64/{s}: measured on fedora44, not proven in fedora45", out)
         self.assertIn("2 sets measured on another host class, not proven in fedora45", out)
-        self.assertIn("1 of 1 sets proven", out)
+        self.assertIn("1 of 3 sets proven, 2 not proven (measured on another host class)", out)
         self.assertEqual(log.count("plugin-qualify-sync --system"), 1)
         self.assertNotIn("::warning::", out)
 
@@ -481,7 +481,7 @@ class Prove(Tree):
         self.with_two_cells()
         rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "44"))
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("2 of 2 sets proven", out)
+        self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
         self.assertNotIn("not proven", out)
 
     def test_a_matching_set_that_fails_still_fails(self):
@@ -490,20 +490,22 @@ class Prove(Tree):
         self.respec()
         rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), BAD_GRID="48000/64", STUB_HOST="fedora45")
         self.assertEqual(rc, 1, out)
-        self.assertIn("0 of 1 sets proven; failed: fedora45-48000-64", out)
+        self.assertIn("0 of 3 sets proven, 2 not proven (measured on another host class); failed: fedora45-48000-64", out)
 
     def test_no_matching_set_warns_and_does_not_fail(self):
         self.with_two_cells()
         rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
         self.assertEqual(rc, 0, out + log)
         self.assertIn("::warning::proved 0 of 2 sets: none was measured on fedora45", out)
+        self.assertIn("0 of 2 sets proven, 2 not proven (measured on another host class)", out)
+        self.assertNotIn("0 of 0", out)
         self.assertNotIn("plugin-qualify-sync", log)
 
     def test_a_set_without_a_host_class_in_its_name_is_always_proven(self):
         self.with_two_cells()
         rc, out, log = self.prove("deb", "arm64", image=("debian", "13"))
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("1 of 1 sets proven", out)
+        self.assertIn("1 of 1 sets proven, 0 not proven (measured on another host class)", out)
 
     def test_no_set_is_not_a_proof(self):
         os.environ["PROVE_ARCH"] = "x86_64"

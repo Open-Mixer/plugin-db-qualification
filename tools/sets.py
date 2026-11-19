@@ -18,7 +18,7 @@ debian/rules and the spec read all of it from here.
                                                 proves every set it carries (tools/prove-set.sh), one after the other
 
 packaging/arch-classes maps a Debian architecture and an RPM architecture to a machine class and the plugin-qualify
-range of that architecture's package. Every set under records/<class>/ goes into the package of its class's
+floor of that architecture's package. Every set under records/<class>/ goes into the package of its class's
 architecture, at /usr/share/omx/qualification/<class>/<set>/; the sync chooses the set. A set is per machine class,
 per sample rate and per quantum: a set named <set>-<rate>-<quantum> holds that one cell.
 
@@ -66,12 +66,12 @@ def rows(text):
 
 
 def arch_classes(root):
-    """[{deb, rpm, class, from, below}] of packaging/arch-classes, in file order."""
+    """[{deb, rpm, class, from}] of packaging/arch-classes, in file order."""
     out = []
     for r in rows(read(root, ARCH_CLASSES)):
-        if len(r) != 5:
-            raise Refused(f"{ARCH_CLASSES}: {' '.join(r)!r} is not <deb arch> <rpm arch> <class> <from> <below>")
-        out.append(dict(zip(("deb", "rpm", "class", "from", "below"), r)))
+        if len(r) != 4:
+            raise Refused(f"{ARCH_CLASSES}: {' '.join(r)!r} is not <deb arch> <rpm arch> <class> <from>")
+        out.append(dict(zip(("deb", "rpm", "class", "from"), r)))
     return out
 
 
@@ -123,12 +123,12 @@ def carried(root, kind, arch):
     return out
 
 
-def qualify_range(root, kind, arch):
-    """(from, below) of <arch>; refused when its classes give two ranges."""
-    ranges = {(line["from"], line["below"]) for line in lines_of(root, kind, arch)}
-    if len(ranges) != 1:
-        raise Refused(f"{kind} architecture {arch} has {len(ranges)} plugin-qualify ranges in {ARCH_CLASSES}, not one")
-    return ranges.pop()
+def qualify_floor(root, kind, arch):
+    """The plugin-qualify floor of <arch>; refused when its classes give two."""
+    floors = {line["from"] for line in lines_of(root, kind, arch)}
+    if len(floors) != 1:
+        raise Refused(f"{kind} architecture {arch} has {len(floors)} plugin-qualify floors in {ARCH_CLASSES}, not one")
+    return floors.pop()
 
 
 def folded_names(root, cls_list):
@@ -159,11 +159,11 @@ def spec_version(root):
 
 def substvars(root, arch):
     carried(root, "deb", arch)
-    low, below = qualify_range(root, "deb", arch)
+    low = qualify_floor(root, "deb", arch)
     version = changelog_version(root)
     names = deb_folded(root, arch)
     return "\n".join([
-        f"qualify:Depends=plugin-qualify (>= {low}~), plugin-qualify (<< {below}~)",
+        f"qualify:Depends=plugin-qualify (>= {low}~)",
         "records:Provides=" + ", ".join(f"{n} (= {version})" for n in names),
         "records:Replaces=" + ", ".join(f"{n} (<< {version})" for n in names),
         "records:Breaks=" + ", ".join(f"{n} (<< {version})" for n in names),
@@ -198,8 +198,8 @@ def spec_block(root):
     """The spec's per-architecture block: for each architecture it builds, the Requires and the folded names."""
     out = [BLOCK_BEGIN]
     for arch in exclusive_arch(root):
-        low, below = qualify_range(root, "rpm", arch)
-        out += [f"%ifarch {arch}", f"Requires: (plugin-qualify >= {low} with plugin-qualify < {below})"]
+        low = qualify_floor(root, "rpm", arch)
+        out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}"]
         for n in folded_names(root, classes(root, "rpm", arch)):
             out += [f"Provides: {n} = %{{version}}-%{{release}}", f"Obsoletes: {n} < %{{version}}-%{{release}}"]
         out.append("%endif")
@@ -243,7 +243,7 @@ def problems(root):
     for kind in FORMATS:
         for arch in sorted({line[kind] for line in lines}):
             try:
-                qualify_range(root, kind, arch)
+                qualify_floor(root, kind, arch)
             except Refused as e:
                 out.append(str(e))
 
@@ -364,7 +364,7 @@ def main(argv, root=os.path.dirname(HERE)):
                 for line in arch_classes(root):
                     n = len(tree_sets(root, line['class']))
                     print(f"{line['deb']}/{line['rpm']}: {line['class']}, {n} set{'' if n == 1 else 's'}, "
-                          f"plugin-qualify {line['from']} up to {line['below']}")
+                          f"plugin-qualify {line['from']} or later")
                 rel = release_arches(root)
                 print(f"this version releases: deb {' '.join(rel['deb']) or 'none'}, rpm {' '.join(rel['rpm']) or 'none'}")
             return 1 if p else 0

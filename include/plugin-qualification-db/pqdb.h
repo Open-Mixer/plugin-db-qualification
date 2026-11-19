@@ -40,17 +40,25 @@ const char *pqdb_code(int status);                 /* the name of a refusal: "qu
    query asks for rate 0 and quantum 0 and matches nothing. Start from PQDB_QUERY_ANY and set the fields you filter on:
    pqdb_query q = PQDB_QUERY_ANY; q.sha256 = ...; */
 /* positional, in the struct's order: valid C and C++11 (designated initializers are C++20); tests check the fields */
-#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL }
+#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 typedef struct {
     const char *sha256, *format, *uri, *offer, *host_class;
     int rate, quantum;
     const char *pkg_format, *pkg_name, *pkg_version, *pkg_release, *pkg_distro, *pkg_arch;
+    const char *binary_path;                        /* the main binary's path below its install root, as stored (exact) */
+    const char *layer;                              /* "user": the scope's user layer only, no shadowing; "base": the base only;
+                                                       NULL: both, merged (section 4). Any other name is refused:
+                                                       qualification-db.layer-unknown */
 } pqdb_query;
 
 typedef struct {
     const char *layer;                              /* "user" or "base" */
     const char *sha256, *format, *uri, *offer, *host_class, *set;   /* set: NULL in the user layer */
     const char *pkg_format, *pkg_name, *pkg_version, *pkg_release, *pkg_distro, *pkg_arch;  /* NULL: not known */
+    const char *binary_path;                        /* the record's, below its install root */
+    const char *layout_scheme, *layout_sha256;      /* NULL: the record holds no layout */
+    const char *tested_version;                     /* NULL: not known */
+    int unpinnable;                                 /* 1 when the record's binary is unpinnable, else 0 */
     int rate, quantum;
     const char *outcome;                            /* the cell's outcome word */
     double cost_median_ns, cost_p_ns;  int cost_p; int has_cost;
@@ -61,6 +69,12 @@ typedef struct {
 /* Calls each(result, ctx) for every result the query matches, user first, a base result only when the user layer has
    no record of its shadow key (section 4), in key order. A non-zero return of each stops the walk and is returned. */
 int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result *, void *), void *ctx);
+
+/* The per-file list of a result's record (what a pin matches on), in its order (ascending by path, bytewise), as
+   each(path, sha256, ctx). Every cell of a record gives the same list. The strings are valid until each returns; the
+   reader hashes nothing, the caller compares the list with what it hashed. A non-zero return of each stops the walk
+   and is returned. 0, or a refusal status. */
+int  pqdb_files(const pqdb *db, const pqdb_result *r, int (*each)(const char *path, const char *sha256, void *), void *ctx);
 
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none).
    0; 1 when the record has no verdict of that host; a refusal status otherwise. The strings are valid until the next

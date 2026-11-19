@@ -25,11 +25,12 @@
 
 /* the statuses: negative, named by pqdb_code(); a callback of pqdb_each returns a positive value of its own */
 enum { S_OK = 0, S_ABSENT = -1, S_UNREADABLE = -2, S_NOT_A_STORE = -3, S_SCHEMA_MISMATCH = -4, S_SCHEMA_OTHER = -5,
-       S_DOMAIN_TOO_OLD = -6, S_WORD_UNKNOWN = -7, S_HOT_JOURNAL = -8, S_BUSY = -9, S_CONTRACT = -10 };
+       S_DOMAIN_TOO_OLD = -6, S_WORD_UNKNOWN = -7, S_HOT_JOURNAL = -8, S_BUSY = -9, S_CONTRACT = -10, S_LAYER = -11 };
 static const char *const CODES[] = {
     NULL, "qualification-db.absent", "qualification-db.unreadable", "qualification-db.not-a-store",
     "qualification-db.schema-mismatch", "qualification-db.schema-other", "qualification-db.domain-too-old",
-    "qualification-db.word-unknown", "qualification-db.hot-journal", "qualification-db.busy", NULL };
+    "qualification-db.word-unknown", "qualification-db.hot-journal", "qualification-db.busy", NULL,
+    "qualification-db.layer-unknown" };
 
 struct pqdb {
     sqlite3 *base, *user;
@@ -38,7 +39,7 @@ struct pqdb {
 
 const char *pqdb_code(int status)
 {
-    if (status >= 0 || status < S_CONTRACT)
+    if (status >= 0 || status < S_LAYER)
         return NULL;
     return CODES[-status];   /* NULL for S_CONTRACT: the loader's own code is in the error's code */
 }
@@ -473,7 +474,8 @@ static const char *const SELECT =
     "SELECT p.sha256, p.format, p.uri, r.offer, r.host_class, s.name, "
     "r.pkg_format, r.pkg_name, r.pkg_version, r.pkg_release, r.pkg_distro, r.pkg_arch, "
     "c.rate, c.quantum, c.outcome, c.cost_median, c.cost_percentile_p, c.cost_percentile_value, "
-    "c.latency_measured_frames, c.latency_declared_frames, c.mem_first_instance_kb, c.mem_per_instance_kb "
+    "c.latency_measured_frames, c.latency_declared_frames, c.mem_first_instance_kb, c.mem_per_instance_kb, "
+    "r.binary_path, r.layout_scheme, r.layout_sha256, r.tested_version, r.unpinnable "
     "FROM cell c JOIN record r ON r.record_id = c.record_id JOIN plugin p ON p.plugin_id = r.plugin_id "
     "LEFT JOIN record_set s ON s.set_id = r.set_id "
     "WHERE (?1 IS NULL OR p.sha256 = ?1) AND (?2 IS NULL OR p.format = ?2) AND (?3 IS NULL OR p.uri = ?3) "
@@ -481,6 +483,7 @@ static const char *const SELECT =
     "AND (?7 < 0 OR c.quantum = ?7) AND (?8 IS NULL OR r.pkg_format = ?8) AND (?9 IS NULL OR r.pkg_name = ?9) "
     "AND (?10 IS NULL OR r.pkg_version = ?10) AND (?11 IS NULL OR r.pkg_release = ?11) "
     "AND (?12 IS NULL OR r.pkg_distro = ?12) AND (?13 IS NULL OR r.pkg_arch = ?13) "
+    "AND (?14 IS NULL OR r.binary_path = ?14) "
     "ORDER BY p.sha256, p.format, p.uri, r.offer, r.host_class, c.rate, c.quantum";
 
 static const char *const SHADOWED =
@@ -510,6 +513,8 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
     for (int i = 0; i < 2; i++)
         if (qs2[i])
             sqlite3_bind_text(st, 12 + i, qs2[i], -1, SQLITE_STATIC);
+    if (q->binary_path)
+        sqlite3_bind_text(st, 14, q->binary_path, -1, SQLITE_STATIC);
     while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
         pqdb_result r;
         const char *t[6];
@@ -550,6 +555,11 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
             r.mem_first_kb = (long)sqlite3_column_int64(st, 20);
             r.mem_per_instance_kb = (long)sqlite3_column_int64(st, 21);
         }
+        r.binary_path = (const char *)sqlite3_column_text(st, 22);
+        r.layout_scheme = (const char *)sqlite3_column_text(st, 23);
+        r.layout_sha256 = (const char *)sqlite3_column_text(st, 24);
+        r.tested_version = (const char *)sqlite3_column_text(st, 25);
+        r.unpinnable = sqlite3_column_int(st, 26) == 1;
         if ((ret = each(&r, ctx)) != 0)
             break;
     }
@@ -562,10 +572,43 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
 
 int pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result *, void *), void *ctx)
 {
-    int ret = 0;
-    if (db->user && (ret = walk_layer(db->user, "user", NULL, q, each, ctx)) != 0)
+    int ret = 0, want_user = 1, want_base = 1;
+    sqlite3 *shadow = db->user;
+    if (q->layer) {
+        /* a named layer is that layer's records alone, none shadowed (section 8, change 3, case 19) */
+        if (strcmp(q->layer, "user") == 0) want_base = 0;
+        else if (strcmp(q->layer, "base") == 0) want_user = 0, shadow = NULL;
+        else return S_LAYER;
+    }
+    if (want_user && db->user && (ret = walk_layer(db->user, "user", NULL, q, each, ctx)) != 0)
         return ret;
-    return walk_layer(db->base, "base", db->user, q, each, ctx);
+    return want_base ? walk_layer(db->base, "base", shadow, q, each, ctx) : 0;
+}
+
+/* the list of the record a result is a cell of: the record_file rows in ord order (section 3.7) */
+int pqdb_files(const pqdb *db, const pqdb_result *r, int (*each)(const char *path, const char *sha256, void *), void *ctx)
+{
+    sqlite3 *h = strcmp(r->layer, "user") == 0 ? db->user : db->base;
+    sqlite3_stmt *st;
+    int rc, ret = 0;
+    if (!h)
+        return 0;
+    if (sqlite3_prepare_v2(h, "SELECT f.path, f.sha256 FROM record_file f "
+                           "JOIN claim cl ON cl.record_id = f.record_id JOIN plugin p ON p.plugin_id = cl.plugin_id "
+                           "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND cl.offer = ?4 AND cl.host_class = ?5 "
+                           "AND cl.rate = ?6 AND cl.quantum = ?7 ORDER BY f.ord", -1, &st, NULL) != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_text(st, 1, r->sha256, -1, SQLITE_STATIC); sqlite3_bind_text(st, 2, r->format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, r->uri, -1, SQLITE_STATIC); sqlite3_bind_text(st, 4, r->offer, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 5, r->host_class, -1, SQLITE_STATIC); sqlite3_bind_int(st, 6, r->rate);
+    sqlite3_bind_int(st, 7, r->quantum);
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW)
+        if ((ret = each((const char *)sqlite3_column_text(st, 0), (const char *)sqlite3_column_text(st, 1), ctx)) != 0)
+            break;
+    if (ret == 0 && rc != SQLITE_DONE && rc != SQLITE_ROW)
+        ret = status_of(h);
+    sqlite3_finalize(st);
+    return ret;
 }
 
 int pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char *host, const pqdb_verdict *, void *), void *ctx)

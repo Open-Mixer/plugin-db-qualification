@@ -499,6 +499,8 @@ static void spec17_identity(void)
     sqlite3 *h[2] = { raw(fx("user.sqlite")), raw(fx("base.sqlite")) };
     int seen_layout = 0, seen_unpinnable = 0, seen_tested = 0;
     if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    for (int pass = 0; pass < 2; pass++) {     /* the merged answer, then the base whole: the user layer shadows the one with a layout */
+    q.layer = pass ? "base" : NULL;
     CHECK(walk(db, &q, &o) == 0 && o.n > 0, "walk");
     for (int i = 0; i < o.n; i++) {
         const row *r = &o.r[i];
@@ -519,6 +521,7 @@ static void spec17_identity(void)
         seen_layout += strcmp(r->layout_scheme, "(null)") != 0; seen_unpinnable += r->unpinnable; seen_tested += strcmp(r->tested, "(null)") != 0;
         if (strcmp(r->layout_scheme, "(null)") == 0) CHECK(strcmp(r->layout_sha, "(null)") == 0, "a record with no layout gives NULL for both");
         sqlite3_finalize(st);
+    }
     }
     CHECK(seen_layout > 0 && seen_unpinnable > 0 && seen_tested > 0, "the fixtures hold no layout, no unpinnable record or no tested version to read");
     pqdb_close(db);

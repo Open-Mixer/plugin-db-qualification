@@ -7,7 +7,7 @@ name: release
 # attached to the GitHub release; the arm64 one is then installed in Debian trixie on arm64 beside plugin-qualify
 # from the channel, and plugin-qualify-sync --system takes plugins from every set it carries. The RPMs are built from
 # packaging/plugin-qualification-records.spec (whose Version is the tag's too), published into the rpm/ tree and
-# proven the same way in Fedora 44 on x86_64 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
+# proven the same way in each Fedora cell on x86_64, fc44 and fc45 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
 # the same and publishes nothing unless `publish` is set, and even then only on a tag. The build and the publish are
 # in Open-Mixer/.github; the secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
@@ -45,8 +45,18 @@ jobs:
       rpm-run: ${{ steps.read.outputs.rpm-run }}
       rpm-names: ${{ steps.read.outputs.rpm-names }}
       rpm-prove: ${{ steps.read.outputs.rpm-prove }}
+      rpm-cells: ${{ steps.cells.outputs.rpm }}
+      rpm-cells-count: ${{ steps.cells.outputs.rpm-count }}
     steps:
       - uses: actions/checkout@v4
+      # the cells the RPM is installed in: check-matrix's answer, fc44 and fc45 on x86_64 (rule 11-10; the quick set
+      # while a release wave is open, the whole matrix declared here otherwise)
+      - id: cells
+        uses: Open-Mixer/.github/.github/actions/check-matrix@openmixer-v1
+        with:
+          wave: ${{ vars.OMX_RELEASE_MATRIX }}
+          rpm-releases: '["44", "45"]'
+          rpm-arches: '["x86_64"]'
       - id: read
         run: |
           set -euo pipefail
@@ -140,21 +150,25 @@ jobs:
       channel-deps: false
     secrets: inherit
 
-  # The x86_64 RPM installed where it is used, each set in turn: Fedora 44 x86_64 with plugin-qualify and the
+  # The x86_64 RPM installed where it is used, each set in turn, in each Fedora cell with plugin-qualify and the
   # channel's omx-plugins at the version the set measured (its provenance.json). A container has no device tree, and
   # an x86_64 machine never has one, so the host class is the settings file's. The sync takes the omx plugins from the
   # records and measures nothing. When the channel's omx-plugins of that version is rebuilt with other bytes this
   # step fails with `binary differs`: the set is then due to be measured again.
   rpm-installed:
-    name: Install and sync (Fedora 44, x86_64)
+    name: Install and sync (${{ matrix.cell.image }}, ${{ matrix.cell.arch }})
     needs: [plan, rpm]
-    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.plan.outputs.rpm-prove == 'true' }}
+    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.plan.outputs.rpm-prove == 'true' && needs.plan.outputs.rpm-cells-count != '0' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: ${{ fromJSON(needs.plan.outputs.rpm-cells) }}
     container:
-      image: fedora:44
+      image: ${{ matrix.cell.image }}
     defaults:
       run:
         shell: bash
@@ -163,7 +177,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: plugin-qualification-records-rpms-fc44-x86_64
+          name: plugin-qualification-records-rpms-fc${{ matrix.cell.fedora }}-${{ matrix.cell.arch }}
           path: pkgs
 
       - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
@@ -171,6 +185,6 @@ jobs:
       - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |
           set -euo pipefail
-          # fedora:44 has no python3; tools/sets.py and the provenance read need it
+          # the Fedora container has no python3; tools/sets.py and the provenance read need it
           dnf install -y --setopt=install_weak_deps=False python3
           python3 tools/sets.py prove rpm pkgs

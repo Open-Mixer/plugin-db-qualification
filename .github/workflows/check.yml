@@ -22,6 +22,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # no Fedora release written into a job: the cells come from check-matrix (rule 11-10, ruling D25)
+  fedora-cells:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows
+      - uses: Open-Mixer/.github/.github/actions/fedora-cells@openmixer-v1
+
   records:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

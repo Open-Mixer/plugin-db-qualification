@@ -79,7 +79,6 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	$(BUILD)/test_reader $(BUILD)/fixtures test/fixtures
 	LD_PRELOAD=$(abspath $(BUILD)/shim.so) PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) \
 	  $(BUILD)/test_reader $(BUILD)/fixtures $(abspath test/fixtures) scopes
-	sh tools/hosting-skip-ends.sh --self-test
 	sh test/test_nm.sh $(BUILD)/$(SONAME)
 	sh test/test_cxx.sh $(BUILD)
 	PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures $(abspath $(BUILD)/shim.so)

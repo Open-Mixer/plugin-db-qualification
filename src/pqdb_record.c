@@ -102,17 +102,44 @@ static void jreal(buf *b, double v)
     bs(b, out);
 }
 
-/* a number as JSON.stringify writes it (latencyLineMs, latencyMs): the shortest of %.15g, %.16g and %.17g that reads back
- * the same double, so 2.0 is 2 and 0.1 is 0.1 */
+/* a number as JSON.stringify writes it (ECMAScript Number::toString): the shortest digits that read back the same double,
+ * then laid out as the standard has it: plain from 1e-6 up to (not including) 1e21, else d[.ddd]e(+|-)x with no padding;
+ * 2.0 is 2, -0 is 0 */
 static void jnum(buf *b, double v)
 {
-    char t[40];
-    for (int p = 15; p <= 17; p++) {
-        snprintf(t, sizeof t, "%.*g", p, v);
+    char t[40], digits[24], out[64];
+    int p, nd = 0, e10, n, o = 0;
+    char *e;
+    if (v == 0) { bs(b, "0"); return; }
+    if (v < 0) { out[o++] = '-'; v = -v; }
+    for (p = 1; p <= 17; p++) {                     /* the first that reads back equal is the shortest */
+        snprintf(t, sizeof t, "%.*e", p - 1, v);
         if (strtod(t, NULL) == v)
             break;
     }
-    bs(b, t);
+    e = strchr(t, 'e');
+    e10 = atoi(e + 1);
+    for (char *c = t; c < e; c++)
+        if (*c != '.')
+            digits[nd++] = *c;
+    digits[nd] = 0;
+    n = e10 + 1;                                    /* the value is 0.digits x 10^n */
+    if (nd <= n && n <= 21) {
+        o += snprintf(out + o, sizeof out - (size_t)o, "%s", digits);
+        for (int i = 0; i < n - nd; i++) out[o++] = '0';
+    } else if (0 < n && n <= 21) {
+        o += snprintf(out + o, sizeof out - (size_t)o, "%.*s.%s", n, digits, digits + n);
+    } else if (-6 < n && n <= 0) {
+        o += snprintf(out + o, sizeof out - (size_t)o, "0.");
+        for (int i = 0; i < -n; i++) out[o++] = '0';
+        o += snprintf(out + o, sizeof out - (size_t)o, "%s", digits);
+    } else {
+        o += snprintf(out + o, sizeof out - (size_t)o, "%c", digits[0]);
+        if (nd > 1) o += snprintf(out + o, sizeof out - (size_t)o, ".%s", digits + 1);
+        o += snprintf(out + o, sizeof out - (size_t)o, "e%c%d", n - 1 < 0 ? '-' : '+', n - 1 < 0 ? 1 - n : n - 1);
+    }
+    out[o] = 0;
+    bs(b, out);
 }
 
 /* a key of the object or array being written: a comma unless it is the first */

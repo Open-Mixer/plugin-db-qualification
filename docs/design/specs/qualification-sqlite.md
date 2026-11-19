@@ -561,7 +561,7 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `cell.mem_limit_mechanism` | plugin-qualify | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
 | `cell.note_sweep_dialect` | plugin-qualify | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
 | `run_step.step` | plugin-qualify | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
-| `run_step.result` | plugin-qualify, plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...) and `PROBE_OUTCOMES` | added |
+| `run_step.result` | plugin-qualify, plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...), `PROBE_OUTCOMES` and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (a step ends `probe.oom` when plugin-qualify's own bound stops it) | added |
 | `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
 | `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
@@ -726,7 +726,13 @@ lists (section 9, ruling 1).
   whose content is `$Format:%H$` and which `.gitattributes` marks `export-subst`: `git archive` writes the commit into
   it. The tool takes `--built-from-file BUILT_FROM` from `debian/rules` and the spec file. A tree with neither a `.git`
   nor a substituted `BUILT_FROM` (the file still holding `$Format:%H$`) is refused (`built-from-unknown`); the commit is
-  never guessed and never left NULL in the base.
+  never guessed and never left NULL in the base. In a git checkout `BUILT_FROM` still holds the placeholder: the tool
+  then takes `git rev-parse HEAD`, and outside one it refuses.
+- **Domain floors.** `--min-domain <domain>=<version>` (repeatable) refuses a domain whose `info.version` is lower
+  (`qualification-db.domain-too-old`, naming the domain and both versions). The spec names no floor value: the
+  package's floors are its Build-Depends on the contract packages (section 7), which is what guarantees the
+  `info.version` the words need, so the packaging does not pass the flag; it is for a caller with a contract directory
+  of its own.
 - **The round-trip proof** (`tools/test_records_db.py`, `unittest` like the repository's other tools):
   - build the base database of every set of `records/` (both classes, not one architecture);
   - for every record file, export the record from the database and compare it with the parsed file as JSON values,
@@ -855,7 +861,7 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
 
 | package | ships | built how | new dependencies (floors only) |
 | --- | --- | --- | --- |
-| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same three contract floors. Run time: none |
+| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `omx-clap-core-contract (>= <the release publishing the `hosting` domain>~)`, `pkg-config` and the contract directory's path (the `contractdir` variable of `libomx-domain.pc`, which the reader's Build-Depends already carry); RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same four contract floors. Run time: none |
 | `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
 | `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc`, and the DDL at `<datadir>/plugin-qualification-db/qualification.sql` (the `.pc`'s `schema` variable) | | `libplugin-qualification-db0 (= ${binary:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
@@ -916,8 +922,9 @@ makes it fail.
 16. **Formats against plugin-db's own item.** With a fixture `plugin-db` domain whose `PLUGIN_DB_ADDRESS_FORMATS`
     holds `clap` only, an LV2 record is refused as `word-unknown`, naming `plugin.format` and `lv2`. Fails when the
     writer checks the formats against a list of its own or of the `qualification` domain.
-17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string. Fails when a word list
-    is written into a `CHECK`.
+17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string, apart from the SQLite
+    type names of `typeof(c) IN ('integer', 'real')` (the param numbers of section 3.3), which the check skips: only a
+    list of words is refused. Fails when a word list is written into a `CHECK`.
 18. **Fractional reason param.** A fixture reason with `params.coreFractionP95: 0.37` and another with `params.blocks: 40` read back as 0.37 and 40, the second an integer (`typeof` `integer`, `real` for the first). Fails when `reason_param.number` is `INTEGER` (the fraction is refused or rounded) or when the exporter writes 40 as 40.0.
 19. **Adapter params round trip.** A fixture record with `adapter.params: {}`, one with `adapter.params: {"resp": 3, "step": "add"}`, one without `params`, and an adapter cell with `params: {"peak": 0.5}` and one with `params: {}` read back exactly, `{}` staying `{}` and absence staying absent. Fails when presence is not stored (`record.adapter_params`, `adapter_cell.params`) or a param is dropped.
 

@@ -694,8 +694,8 @@ def _insert_tree(cur, row, parent, record_id):
 class Writer:
     """Builds a new base database file."""
 
-    def __init__(self, contract_dir, built_from):
-        self.domains = Domains(contract_dir)
+    def __init__(self, domains, built_from):
+        self.domains = domains
         self.checker = Checker(self.domains)
         self.built_from = built_from
         self.version = schema_version()
@@ -854,7 +854,7 @@ def walk(records_dir, classes=None):
 
 
 def built_from(records_dir, built_from_file=None):
-    """The commit the base is built from: BUILT_FROM when given, else git's HEAD; never guessed."""
+    """The commit the base is built from: a substituted BUILT_FROM, else git's HEAD in a checkout; never guessed."""
     if built_from_file:
         try:
             with open(built_from_file, encoding="utf-8") as f:
@@ -863,20 +863,48 @@ def built_from(records_dir, built_from_file=None):
             raise Refusal("built-from-unknown", f"{built_from_file}: {e}") from e
         if re.fullmatch(r"[0-9a-f]{40}", text):
             return text
-        raise Refusal("built-from-unknown", f"{built_from_file} holds no commit ({text[:48]!r}: not substituted by git archive)")
+        if not text.startswith("$Format:"):
+            raise Refusal("built-from-unknown", f"{built_from_file} holds no commit ({text[:48]!r})")
+        # the placeholder git archive substitutes: in a checkout it is still the placeholder, and git knows the commit
     try:
         out = subprocess.run(["git", "-C", records_dir, "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError) as e:
-        raise Refusal("built-from-unknown", f"{records_dir} is no git checkout and no BUILT_FROM file was given") from e
+        raise Refusal("built-from-unknown", f"{records_dir} is no git checkout and no substituted BUILT_FROM file was given") from e
     if not re.fullmatch(r"[0-9a-f]{40}", out):
         raise Refusal("built-from-unknown", f"git rev-parse HEAD gave {out!r}")
     return out
 
 
-def build_base(records_dir, out, contract_dir, built_from_file=None, classes=None):
+def _version_tuple(text):
+    if not re.fullmatch(r"\d+(\.\d+)*", text):
+        raise Refusal("min-domain.invalid", f"{text!r} is no version")
+    return tuple(int(x) for x in text.split("."))
+
+
+def parse_min_domain(items):
+    """{domain: version} from ["<domain>=<version>", ...]."""
+    floors = {}
+    for item in items or ():
+        dom, eq, ver = item.partition("=")
+        if not eq or not dom:
+            raise Refusal("min-domain.invalid", f"{item}: expected <domain>=<version>")
+        if not re.fullmatch(r"\d+(\.\d+)*", ver):
+            raise Refusal("min-domain.invalid", f"{item}: {ver!r} is no version")
+        floors[dom] = ver
+    return floors
+
+
+def build_base(records_dir, out, contract_dir, built_from_file=None, classes=None, min_domain=None):
+    floors = parse_min_domain(min_domain)
     sets = walk(records_dir, classes)
     # the contract directory is read first: an absent one is the first refusal
-    writer = Writer(contract_dir, built_from(records_dir, built_from_file))
+    domains = Domains(contract_dir)
+    for dom, floor in floors.items():
+        if dom not in domains.version:
+            raise Refusal("contract.domain.absent", f"--min-domain {dom}={floor}: the store checks no domain {dom}")
+        if _version_tuple(domains.version[dom]) < _version_tuple(floor):
+            raise Refusal("qualification-db.domain-too-old", f"the {dom} domain is at {domains.version[dom]}, below the floor {floor}")
+    writer = Writer(domains, built_from(records_dir, built_from_file))
     writer.build(sets, out)
 
 

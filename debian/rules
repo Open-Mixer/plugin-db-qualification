@@ -2,22 +2,37 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 #
-# One package, plugin-qualification-records, per architecture: it carries the record sets of the classes
-# packaging/arch-classes gives its architecture, at /usr/share/omx/qualification/<class>/<set>/. tools/sets.py reads
-# the file and records/; it refuses an architecture with no class and a class with no set.
+# plugin-qualification-records, per architecture: it carries the record sets of the classes packaging/arch-classes
+# gives its architecture, at /usr/share/omx/qualification/<class>/<set>/. tools/sets.py reads the file and records/;
+# it refuses an architecture with no class and a class with no set. Beside it, the reader (the Makefile): the
+# library, its development files and the command, installed under debian/tmp and split by the .install files.
 
 DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
+DEB_HOST_MULTIARCH ?= $(shell dpkg-architecture -qDEB_HOST_MULTIARCH)
+READER := PREFIX=/usr LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH)
 PKG := plugin-qualification-records
 
 %:
 	dh $@
 
-# the records are data: nothing to configure, build or test
-override_dh_auto_configure override_dh_auto_build override_dh_auto_test:
+# the records are data: nothing to configure; the reader is built, tested and installed with its Makefile
+override_dh_auto_configure:
 
-# the sets of this architecture's classes, byte for byte
+override_dh_auto_build:
+	$(MAKE) $(READER) all
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	$(MAKE) $(READER) check
+endif
+
+override_dh_auto_install:
+	$(MAKE) $(READER) install DESTDIR=$(CURDIR)/debian/tmp
+
+# the sets of this architecture's classes, byte for byte, then the reader's files by their .install lists
 override_dh_install:
 	python3 tools/sets.py install deb $(DEB_HOST_ARCH) debian/$(PKG)/usr/share/omx/qualification
+	dh_install --sourcedir=debian/tmp
 
 # the plugin-qualify range of this architecture and the older package names it takes over
 override_dh_gencontrol:

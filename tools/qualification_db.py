@@ -143,6 +143,7 @@ def _cell():
         "rate": L(c, "rate", "int"),
         "quantum": L(c, "quantum", "int"),
         "outcome": L(c, "outcome"),
+        "latencyMs": O(c, "latency_ms", "real"),
         "latency": Obj({
             "declaredFrames": O(c, "latency_declared_frames", "int"),
             "measuredFrames": O(c, "latency_measured_frames", "int"),
@@ -221,6 +222,8 @@ def _record():
                               flag=(r, "host_extensions")),
         "testedVersion": O(r, "tested_version"),
         "measuredAt": L(r, "measured_at"),
+        "latencyLineMs": O(r, "latency_line_ms", "real"),
+        "rules": O(r, "rules"),
         "run": Obj({
             "id": L(r, "run_id"),
             "steps": Arr("run_step", Obj({
@@ -382,7 +385,7 @@ def _q(name):
     return ("qualification", "QUALIFICATION_" + name)
 
 
-_ADAPTER_PARTS = [_q("HOST_PROFILES"), _q("ADAPTER_CODE_KINDS"), ("probe", "PROBE_SIGNALS")]
+_ADAPTER_PARTS = [_q("ADAPTER_HOSTS"), _q("ADAPTER_CODE_KINDS"), ("probe", "PROBE_SIGNALS")]
 _HOSTING = (HOSTING, "HOSTING_*CODES")  # every item of the package named HOSTING_<group>_CODES
 _PROBE_OUT = [("probe", "PROBE_OUTCOMES"), _q("MEMORY_BOUND_OUTCOMES")]
 _RATING = [_q("MEASUREMENT_VERDICT_RATINGS")]
@@ -398,7 +401,7 @@ WORDS = {
     ("verdict", "host"): _PROFILE,
     ("cost_entry", "host"): _PROFILE,
     ("tier", "host"): _PROFILE,
-    ("record", "adapter_host"): _PROFILE,
+    ("record", "adapter_host"): [_q("ADAPTER_HOSTS")],
     ("set_setting", "key"): [_q("SYNC_SETTINGS")],
     ("record", "offer"): [_q("OFFERS")],
     ("record", "pkg_format"): [_q("PACKAGE_FORMATS")],
@@ -544,7 +547,7 @@ class Checker:
 
     def _adapter_code(self, s, word):
         host, dot, rest = word.partition(".")
-        if not dot or not any(host in w for (d, n), w in s.items() if n == "QUALIFICATION_HOST_PROFILES"):
+        if not dot or not any(host in w for (d, n), w in s.items() if n == "QUALIFICATION_ADAPTER_HOSTS"):
             return False
         kinds = set().union(*[w for (d, n), w in s.items() if n == "QUALIFICATION_ADAPTER_CODE_KINDS"])
         signals = set().union(*[w for (d, n), w in s.items() if n == "PROBE_SIGNALS"])

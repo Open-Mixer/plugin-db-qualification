@@ -36,7 +36,11 @@ void pqdb_close(pqdb *db);
 const char *pqdb_code(int status);                 /* the name of a refusal: "qualification-db.absent" ...; NULL for 0 and for a
                                                       status that carries the loader's own code (err->code) */
 
-typedef struct {                                    /* every field optional: NULL or -1 is "any" */
+/* A query with every field optional: a string of NULL, and a rate or quantum of -1, is "any". 0 is not "any": a zeroed
+   query asks for rate 0 and quantum 0 and matches nothing. Start from PQDB_QUERY_ANY and set the fields you filter on:
+   pqdb_query q = PQDB_QUERY_ANY; q.sha256 = ...; */
+#define PQDB_QUERY_ANY { .rate = -1, .quantum = -1 }
+typedef struct {
     const char *sha256, *format, *uri, *offer, *host_class;
     int rate, quantum;
     const char *pkg_format, *pkg_name, *pkg_version, *pkg_release, *pkg_distro, *pkg_arch;

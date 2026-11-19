@@ -81,6 +81,10 @@ USER = [
     rec((P2, "clap", "urn:p2"), "default", "rpi5", cells=[cell(48000, 256, (9.0, 95, 10.0), (1, 2), (3, 4))]),
 ]
 
+def binary_path(r):
+    """The main binary's path below its install root (section 3.7): the file's own name, whatever directory it is in."""
+    return r["key"][2].split(":")[-1] + (".clap" if r["key"][1] == "clap" else ".so")
+
 def word_checks(c):
     c.executemany("INSERT INTO store_domain VALUES (?, ?)", sorted(DOMAINS.items()))
     c.executemany("INSERT INTO word_check VALUES (?, ?, ?, ?)", WORD_CHECK)
@@ -119,13 +123,15 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
             probe_reason, probe_outcome, probe_complete, probe_meets_protocol, probe_loadavg1, probe_cores,
             mc_arch, mc_family, mc_core_band, mc_clock_band, mc_preempt_rt, mc_cstates_limited,
             adapter_admitted, adapter_host, adapter_measured, adapter_code, adapter_params)
-            VALUES (?, ?, ?, ?, ?, ?, 'plugin-qualify.qualification-record/1', ?, ?, ?, ?, ?, ?, '/usr/lib/p',
+            VALUES (?, ?, ?, ?, ?, ?, 'plugin-qualify.qualification-record/1', ?, ?, ?, ?, ?, ?, ?,
             '2026-11-19T00:00:00Z', 'run', 'runner', 'child', 'p.probe.json', ?, 10, 'probe', 1,
             'on-request', 'probe.ok', 1, 1, 0.5, 4, 'x86_64', 'zen4', 'cores-4', 'ghz-3', 0, 0,
             ?, ?, ?, ?, ?)""",
-                  (rid, pid, set_id, r["cls"], r["offer"], "rec%d" % rid, *pkg, "e" * 64,
+                  (rid, pid, set_id, r["cls"], r["offer"], "rec%d" % rid, *pkg, binary_path(r), "e" * 64,
                    1 if code else None, "omx-clap-host" if code else None, 1 if code else None, code,
                    0 if code else None))
+        # section 3.7: the list holds the binary's entry, and the key is that entry's SHA-256
+        c.execute("INSERT INTO record_file VALUES (?, 0, ?, ?)", (rid, binary_path(r), r["key"][0]))
         c.execute("INSERT INTO verdict VALUES (?, 0, 'omx-clap-host', 1, ?, 1, 'isolated', 'run', NULL)",
                   (rid, r["verdict_rating"]))
         c.execute("INSERT INTO verdict VALUES (?, 1, 'openmixer-console', 1, 'qualified', 1, 'in-process', "

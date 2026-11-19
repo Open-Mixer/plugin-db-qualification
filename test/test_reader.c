@@ -643,6 +643,154 @@ static void spec19_filters(void)
     pqdb_close(db);
 }
 
+/* ---- change 3, cases 20, 21 and 24 of section 8: counts, whole records, read only ---- */
+typedef struct { char fmt[8][8]; long plugins[8], offered[8], not_offered[8]; int n; } tally;
+static int collect_count(const char *format, long plugins, long offered, long not_offered, void *ctx)
+{
+    tally *t = ctx;
+    if (t->n < 8) {
+        snprintf(t->fmt[t->n], 8, "%s", format);
+        t->plugins[t->n] = plugins; t->offered[t->n] = offered; t->not_offered[t->n] = not_offered;
+    }
+    t->n++;
+    return 0;
+}
+/* the counts the fixtures' own model worked out (make-fixtures.py), one line a format */
+static int counts_match(const tally *t, const char *file)
+{
+    FILE *f = fopen(file, "r");
+    char line[128], fmt[16];
+    long p, o, n;
+    int i = 0, ok = 1;
+    if (!f) { printf("  no %s\n", file); return 0; }
+    while (fgets(line, sizeof line, f)) {
+        if (sscanf(line, "%15s %ld %ld %ld", fmt, &p, &o, &n) != 4) { ok = 0; break; }
+        if (i >= t->n || strcmp(t->fmt[i], fmt) || t->plugins[i] != p || t->offered[i] != o || t->not_offered[i] != n) {
+            printf("  format %d: got %s %ld %ld %ld (of %d formats); want %s", i, i < t->n ? t->fmt[i] : "-",
+                   i < t->n ? t->plugins[i] : -1, i < t->n ? t->offered[i] : -1, i < t->n ? t->not_offered[i] : -1, t->n, line);
+            ok = 0;
+        }
+        i++;
+    }
+    fclose(f);
+    return ok && i == t->n;
+}
+static void spec20_counts(void)
+{
+    pqdb *db;
+    tally t;
+    memset(&t, 0, sizeof t);
+    /* the case of the spec: three plugins, two clap and one lv2 */
+    if (open_ok(fx("base.sqlite"), fx("counts-user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_counts(db, "user", collect_count, &t) == 0 && t.n == 2, "%d formats", t.n);
+    CHECK(t.n == 2 && strcmp(t.fmt[0], "clap") == 0 && t.plugins[0] == 2 && t.offered[0] == 1 && t.not_offered[0] == 1,
+          "clap: %ld plugins, %ld offered, %ld not (two records of one plugin count once, offered when either is)", t.plugins[0], t.offered[0], t.not_offered[0]);
+    CHECK(t.n == 2 && strcmp(t.fmt[1], "lv2") == 0 && t.plugins[1] == 1 && t.offered[1] == 1 && t.not_offered[1] == 0,
+          "lv2: %ld plugins, %ld offered, %ld not", t.plugins[1], t.offered[1], t.not_offered[1]);
+    pqdb_close(db);
+    /* a layer, the other layer and both merged count their own sets */
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    memset(&t, 0, sizeof t);
+    CHECK(pqdb_counts(db, "user", collect_count, &t) == 0 && counts_match(&t, fx("expect-counts-user.tsv")), "layer user");
+    memset(&t, 0, sizeof t);
+    CHECK(pqdb_counts(db, "base", collect_count, &t) == 0 && counts_match(&t, fx("expect-counts-base.tsv")), "layer base");
+    memset(&t, 0, sizeof t);
+    CHECK(pqdb_counts(db, NULL, collect_count, &t) == 0 && counts_match(&t, fx("expect-counts-merged.tsv")), "merged");
+    CHECK(pqdb_counts(db, "system", collect_count, &t) != 0, "an unknown layer name was accepted");
+    pqdb_close(db);
+}
+
+typedef struct { pqdb *db; int docs, bad, last_n; char last_key[200]; char *last_doc; } jwalk;
+static int check_json(const pqdb_result *x, void *ctx)
+{
+    jwalk *w = ctx;
+    char name[300], path[400], key[200], *json = NULL, *want;
+    const char *tail = strrchr(x->uri, ':');
+    size_t n;
+    pqdb_error e;
+    snprintf(name, sizeof name, "records/%s-%s.%s.%s.json", x->format, tail ? tail + 1 : x->uri, x->offer, x->host_class);
+    snprintf(path, sizeof path, "%s/%s", CT, name);
+    want = slurp(path, &n);
+    if (!want) { printf("  no expected document %s\n", path); w->bad++; return 0; }
+    want[n] = 0;
+    if (pqdb_record_json(w->db, x, &json, &e) != 0 || !json) {
+        printf("  pqdb_record_json refused %s: %s\n", name, e.message); w->bad++; free(want); return 0;
+    }
+    if (strcmp(json, want) != 0) {
+        size_t i = 0;
+        while (json[i] && json[i] == want[i]) i++;
+        printf("  %s differs at byte %zu: got ...%.60s\n                          want ...%.60s\n", name, i, json + (i > 20 ? i - 20 : 0), want + (i > 20 ? i - 20 : 0));
+        w->bad++;
+    }
+    if (strstr(json, "\"detail\"") || strstr(json, "\"unmeasuredDetail\"") || strstr(json, "\"dimmed\"") || strstr(json, "\"unpinnable\"")) {
+        printf("  %s holds a sentence path\n", name); w->bad++;
+    }
+    snprintf(key, sizeof key, "%s/%s/%s/%s", x->layer, x->sha256, x->offer, x->host_class);
+    if (w->last_doc && strcmp(key, w->last_key) == 0 && strcmp(json, w->last_doc) != 0) {
+        printf("  the cells of %s give other documents\n", key); w->bad++;
+    }
+    free(w->last_doc);
+    w->last_doc = json;
+    snprintf(w->last_key, sizeof w->last_key, "%s", key);
+    w->docs++;
+    free(want);
+    return 0;
+}
+static void spec21_record_json(void)
+{
+    pqdb *db;
+    jwalk w;
+    pqdb_query q = any();
+    pqdb_result none;
+    pqdb_error e;
+    char *json = (char *)1;
+    memset(&w, 0, sizeof w);
+    if (open_ok(fx("records.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open"); return; }
+    w.db = db;
+    CHECK(pqdb_each(db, &q, check_json, &w) == 0, "walk");
+    CHECK(w.docs >= 4 && w.bad == 0, "%d documents, %d wrong", w.docs, w.bad);
+    free(w.last_doc);
+    memset(&none, 0, sizeof none);
+    none.layer = "base"; none.sha256 = SHA('0'); none.format = "clap"; none.uri = "urn:none"; none.offer = "default";
+    none.host_class = "x86-64"; none.rate = 48000; none.quantum = 256;
+    memset(&e, 0, sizeof e);
+    CHECK(pqdb_record_json(db, &none, &json, &e) != 0 && e.code != NULL && e.message[0] != 0 && json == NULL, "a result of no record gave a document");
+    pqdb_close(db);
+}
+
+static int touch_file(const char *path, const char *sha, void *ctx) { (void)path; (void)sha; (void)ctx; return 0; }
+static int touch_count(const char *f, long a, long b, long c, void *ctx) { (void)f; (void)a; (void)b; (void)c; (void)ctx; return 0; }
+static int touch_json(const pqdb_result *x, void *ctx)
+{
+    pqdb *db = ctx;
+    char *json = NULL;
+    pqdb_error e;
+    pqdb_files(db, x, touch_file, NULL);
+    if (pqdb_record_json(db, x, &json, &e) == 0) free(json);
+    return 0;
+}
+static void spec24_read_only(void)
+{
+    char *t = tmpdir();
+    ent a[32], b[32];
+    int na, nb;
+    pqdb *db;
+    pqdb_query q = any();
+    copy(fx("base.sqlite"), under(t, "base.sqlite"));
+    copy(fx("user.sqlite"), under(t, "user.sqlite"));
+    na = snapshot(t, a); qsort(a, (size_t)na, sizeof *a, by_name);
+    if (open_ok(under(t, "base.sqlite"), under(t, "user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_each(db, &q, touch_json, db) == 0, "walk");
+    q.layer = "base";
+    CHECK(pqdb_each(db, &q, touch_json, db) == 0, "walk base");
+    CHECK(pqdb_counts(db, NULL, touch_count, NULL) == 0 && pqdb_counts(db, "user", touch_count, NULL) == 0, "counts");
+    pqdb_close(db);
+    nb = snapshot(t, b); qsort(b, (size_t)nb, sizeof *b, by_name);
+    CHECK(na == nb, "directory listing changed: %d -> %d entries", na, nb);
+    for (int i = 0; i < na && i < nb; i++)
+        CHECK(strcmp(a[i].name, b[i].name) == 0 && a[i].size == b[i].size && a[i].mtime == b[i].mtime, "%s changed", a[i].name);
+}
+
 /* ---- under test/shim.so ---- */
 static int has_sha(const rows *o, const char *c)
 {
@@ -735,7 +883,9 @@ static const test TESTS[] = {
     { "16 hot journal", t16_hot_journal, 0 }, { "17 adapter code in parts", t17_adapter_code, 0 },
     { "18 verdict of a result", t18_verdict, 0 },
     { "spec 17 the identity fields", spec17_identity, 0 }, { "spec 18 pqdb_files", spec18_files, 0 },
-    { "spec 19 binary_path and layer filters", spec19_filters, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "spec 19 binary_path and layer filters", spec19_filters, 0 },
+    { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
+    { "spec 24 read only still", spec24_read_only, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

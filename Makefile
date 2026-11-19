@@ -81,7 +81,7 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	  $(BUILD)/test_reader $(BUILD)/fixtures $(abspath test/fixtures) scopes
 	sh test/test_nm.sh $(BUILD)/$(SONAME)
 	sh test/test_cxx.sh $(BUILD)
-	sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures
+	PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures $(abspath $(BUILD)/shim.so)
 	rm -rf $(BUILD)/stage
 	$(MAKE) install DESTDIR=$(abspath $(BUILD)/stage) PREFIX=/usr
 	sh test/test_install.sh $(abspath $(BUILD)/stage) $(LIBDIR)

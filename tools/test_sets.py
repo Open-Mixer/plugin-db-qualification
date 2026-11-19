@@ -167,7 +167,7 @@ class Check(Tree):
         self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
         self.respec()
         self.assertEqual(sets.problems(self.root), [])
-        self.edit("packaging/arch-classes", "0.20.1 ", "0.20.2 ")
+        self.edit("packaging/arch-classes", "0.20.1\n", "0.20.2\n")
         self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
 
     def test_debian_control_is_one_package_for_the_mapped_architectures(self):

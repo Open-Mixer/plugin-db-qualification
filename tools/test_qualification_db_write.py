@@ -10,9 +10,11 @@ The words come from the owners' contract documents, assembled by tools/test_reco
 """
 import contextlib
 import copy
+import json
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -279,6 +281,107 @@ class Delete(Layer):
         with self.assertRaises(q.Refusal) as cm:
             q.delete(scope="user", root=self.root, **self.key(sha256="abc"))
         self.assertEqual(cm.exception.name, "field-type")
+
+
+COMMAND = os.path.join(HERE, "plugin-qualification-db-write")
+
+
+class Command(Layer):
+    """Section 6.1's command: put reads one record on standard input; refusals are named on standard error, exit 1."""
+
+    def run_cmd(self, *args, stdin=""):
+        cmd = [sys.executable, "-B", COMMAND, *args]
+        return subprocess.run(cmd, input=stdin, capture_output=True, text=True)
+
+    def put_cmd(self, rec=None, *extra, offer=None, cls=None, scope="user"):
+        return self.run_cmd("put", "--scope", scope, "--offer", offer or self.offer, "--host-class", cls or self.cls,
+                            "--root", self.root, "--contract-dir", T.contract_dir(), *extra,
+                            stdin=json.dumps(rec if rec is not None else self.rec))
+
+    def key_args(self, **kw):
+        k = dict(sha256=self.rec["binary"]["sha256"], format=self.rec["plugin"]["format"], uri=self.rec["plugin"]["id"],
+                 offer=self.offer, host_class=self.cls)
+        k.update(kw)
+        return ["--sha256", k["sha256"], "--format", k["format"], "--uri", k["uri"], "--offer", k["offer"],
+                "--host-class", k["host_class"]]
+
+    def test_the_command_exists_and_is_executable(self):
+        self.assertTrue(os.access(COMMAND, os.X_OK), COMMAND)
+
+    def test_put_writes_the_record_and_prints_nothing(self):
+        r = self.put_cmd()
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        self.assertEqual(self.rows("SELECT offer, host_class FROM record"), [(self.offer, self.cls)])
+
+    def test_the_system_scope(self):
+        r = self.put_cmd(scope="system")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(os.path.exists(self.db))
+
+    def test_delete_removes_the_record(self):
+        self.assertEqual(self.put_cmd().returncode, 0)
+        r = self.run_cmd("delete", "--scope", "user", "--root", self.root, *self.key_args())
+        self.assertEqual((r.returncode, r.stdout, r.stderr), (0, "", ""))
+        self.assertEqual(self.rows("SELECT count(*) FROM record"), [(0,)])
+
+    def test_delete_of_a_key_the_layer_lacks_exits_0(self):
+        self.assertEqual(self.put_cmd().returncode, 0)
+        r = self.run_cmd("delete", "--scope", "user", "--root", self.root, *self.key_args(host_class="x86-64"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.rows("SELECT count(*) FROM record"), [(1,)])
+
+    def test_every_refusal_is_named_on_standard_error_with_exit_1_and_writes_nothing(self):
+        lv2, loffer, lcls = first_record(LV2, lambda r, n: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
+                                         and r["binary"]["files"][0]["path"] != r["binary"]["path"])
+        swapped = copy.deepcopy(lv2)
+        swapped["binary"]["files"][0], swapped["binary"]["files"][1] = swapped["binary"]["files"][1], swapped["binary"]["files"][0]
+        twice = copy.deepcopy(lv2)
+        twice["binary"]["files"].insert(1, dict(twice["binary"]["files"][0]))
+        cases = {
+            "path-absolute": (self.edited(lambda r: r["binary"].update(path="/usr/lib/clap/" + r["binary"]["path"])), {}),
+            "binary-not-in-files": (self.edited(lambda r: r["binary"].update(path="Other.clap")), {}),
+            "key-not-the-binary": (self.edited(lambda r: r["binary"].update(sha256="0" * 64)), {}),
+            "files-unordered": (swapped, {"offer": loffer, "cls": lcls}),
+            "files-duplicate": (twice, {"offer": loffer, "cls": lcls}),
+            "files-empty": (self.edited(lambda r: r["binary"].update(files=[])), {}),
+            "word-unknown": (self.edited(lambda r: r["verdicts"][0].update(rating="excellent")), {}),
+            "field-unmapped": (self.edited(lambda r: r["verdicts"][0].update(mood="calm")), {}),
+            "schema-refused": (self.edited(lambda r: (r["binary"].update(path="../" + r["binary"]["path"]),
+                                                      r["binary"]["files"][0].update(path="../" + r["binary"]["path"]))), {}),
+        }
+        for name, (rec, kw) in cases.items():
+            with self.subTest(name):
+                r = self.put_cmd(rec, **kw)
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertEqual(r.stdout, "")
+                self.assertTrue(r.stderr.startswith(f"plugin-qualification-db-write: refused: {name}: "), r.stderr)
+                self.assertFalse(os.path.exists(self.db), "a refusal created the layer")
+
+    def test_a_word_of_the_command_line_is_checked(self):
+        r = self.put_cmd(offer="gold")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("refused: word-unknown:", r.stderr)
+
+    def test_standard_input_that_is_no_json_is_refused(self):
+        r = self.run_cmd("put", "--scope", "user", "--offer", self.offer, "--host-class", self.cls, "--root", self.root,
+                         "--contract-dir", T.contract_dir(), stdin="{not json")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("refused: file-unreadable:", r.stderr)
+
+    def test_an_absent_contract_directory_is_refused(self):
+        r = self.run_cmd("put", "--scope", "user", "--offer", self.offer, "--host-class", self.cls, "--root", self.root,
+                         "--contract-dir", os.path.join(self.tmp, "nope"), stdin=json.dumps(self.rec))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("refused: contract.dir.absent:", r.stderr)
+
+    def test_a_scope_that_is_none_is_a_usage_error(self):
+        r = self.run_cmd("put", "--scope", "world", "--offer", "default", "--host-class", "x86-64")
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(self.run_cmd().returncode, 2)
+
+    def test_delete_with_a_missing_flag_is_a_usage_error(self):
+        r = self.run_cmd("delete", "--scope", "user", "--sha256", "0" * 64)
+        self.assertEqual(r.returncode, 2)
 
 
 class Version(unittest.TestCase):

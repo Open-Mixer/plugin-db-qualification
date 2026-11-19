@@ -78,8 +78,14 @@ def contract_dir():
         if not os.path.isdir(clone):
             raise unittest.SkipTest(f"{clone}: no such sibling clone")
         os.makedirs(os.path.join(root, dom))
-        with open(os.path.join(root, dom, dom + ".json"), "wb") as f:
-            f.write(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
+        doc = json.loads(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
+        if dom == "qualification":
+            # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
+            # in its line 3; until its domain publishes the item the fixture adds it
+            doc["components"]["schemas"].setdefault("QUALIFICATION_ADAPTER_HOSTS", {
+                "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
+        with open(os.path.join(root, dom, dom + ".json"), "w") as f:
+            json.dump(doc, f)
     core = os.path.join(SIBLINGS, "omx-clap-core")
     if not os.path.isdir(core):
         raise unittest.SkipTest(f"{core}: no such sibling clone")

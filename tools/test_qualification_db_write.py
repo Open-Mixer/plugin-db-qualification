@@ -10,8 +10,8 @@ refusal by its exact name.
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones
 (TEST ONLY, the writer reads no variable for it): PDQ_SIBLINGS names the directory that holds the clones
 (plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
-(default origin/main); the hosting words come from the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them out (<contractdir>/3/omx-clap-core/ and its MANIFEST.json). Without PDQ_SIBLINGS the tests that need the words are
+(default origin/main), the hosting domain at PDQ_HOSTING_REF (default origin/lane/omx-clap-core-hosting-domain:
+omx-clap-core's #136, until it merges, then origin/main). Without PDQ_SIBLINGS the tests that need the words are
 skipped, saying so. The fixture records are records of records/, in the section 3.7 form the rewrite of records/ gives
 them (a CLAP record's relative binary.path and its hostExtensions).
 """
@@ -34,9 +34,11 @@ import qualification_db as q  # noqa: E402
 RECORDS = os.path.join(REPO, "records")
 HEADER = os.path.join(REPO, "include", "plugin-qualification-db", "pqdb.h")
 DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
-               "plugin-db": "plugin-db"}
+               "plugin-db": "plugin-db", "hosting": "omx-clap-core"}
 SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
 REF = os.environ.get("PDQ_REF", "origin/main")
+# the hosting domain is omx-clap-core's #136 until it merges; then main (the switch: delete this default)
+HOSTING_REF = os.environ.get("PDQ_HOSTING_REF", "origin/lane/omx-clap-core-hosting-domain")
 X86 = ("x86-64", "fedora44-48000-512")
 LV2 = ("rpi5", "zynthian-vangelis")
 _contract = {}
@@ -51,8 +53,7 @@ def git_show(clone, ref, path):
 
 def contract_dir():
     """The contract directory assembled from the sibling clones, once; skips the test when they are not given. The
-    domains are documents (<domain>/<domain>.json); the hosting words are the package omx-clap-core's data/, installed as
-    `make install-contract` does: <schema major>/omx-clap-core/ with the files as they are and a MANIFEST.json."""
+    domains are documents (<domain>/<domain>.json), the hosting one included."""
     if "dir" in _contract:
         return _contract["dir"]
     if not SIBLINGS:
@@ -63,7 +64,7 @@ def contract_dir():
         if not os.path.isdir(clone):
             raise unittest.SkipTest(f"{clone}: no such sibling clone")
         os.makedirs(os.path.join(root, dom))
-        doc = json.loads(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
+        doc = json.loads(git_show(clone, HOSTING_REF if dom == "hosting" else REF, f"contract.d/{dom}/{dom}.json"))
         if dom == "qualification":
             # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
             # in its line 3; until its domain publishes the item the fixture adds it
@@ -71,20 +72,6 @@ def contract_dir():
                 "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
         with open(os.path.join(root, dom, dom + ".json"), "w") as f:
             json.dump(doc, f)
-    core = os.path.join(SIBLINGS, "omx-clap-core")
-    if not os.path.isdir(core):
-        raise unittest.SkipTest(f"{core}: no such sibling clone")
-    names = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", REF, "data"], capture_output=True, text=True,
-                           check=True).stdout.split("\n")
-    dest = os.path.join(root, "3", "omx-clap-core")
-    for n in sorted(x for x in names if x.endswith(".json")):
-        rel = n[len("data/"):]
-        os.makedirs(os.path.join(dest, os.path.dirname(rel)), exist_ok=True)
-        with open(os.path.join(dest, rel), "wb") as f:
-            f.write(git_show(core, REF, n))
-    version = git_show(core, REF, "VERSION").decode().strip()
-    with open(os.path.join(dest, "MANIFEST.json"), "w") as f:
-        json.dump({"package": "omx-clap-core", "version": version, "schemaMajor": 3, "files": {}}, f)
     _contract["dir"] = root
     return root
 
@@ -333,7 +320,7 @@ class Put(Layer):
                          [(1, q.RECORD_SCHEMA, None)])
         self.assertEqual(self.rows("SELECT set_id, host_class, offer FROM record"), [(None, self.cls, self.offer)])
         self.assertEqual(self.rows("SELECT count(*) FROM record_set"), [(0,)])
-        self.assertEqual(sorted(d for (d,) in self.rows("SELECT domain FROM store_domain")), sorted(q.STORE_DOMAINS))
+        self.assertEqual(sorted(d for (d,) in self.rows("SELECT domain FROM store_domain")), sorted(q.DOMAINS))
         self.assertGreater(self.rows("SELECT count(*) FROM word_check")[0][0], 50)
 
     def test_the_record_reads_back_equal(self):
@@ -390,26 +377,13 @@ class Put(Layer):
 
 
 class HostingWords(Layer):
-    """The hosting.* words are the codes of the package omx-clap-core (its data/hosting.json and data/hosting/*.json,
-    items of kind codes), read from the contract directory the package installs into; no hosting domain document."""
+    """The hosting.* words are a domain like the others: <contractdir>/hosting/hosting.json, its items' consts."""
 
-    def test_the_package_is_recorded_with_its_version(self):
+    def test_the_domain_is_recorded_at_its_version(self):
         self.put()
-        manifest = load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))
-        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(manifest["version"],)])
-        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = 'omx-clap-core'"), [(0,)])
+        doc = load(os.path.join(contract_dir(), "hosting", "hosting.json"))
+        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(doc["info"]["version"],)])
         self.assertGreater(self.rows("SELECT count(*) FROM word_check WHERE domain = 'hosting'")[0][0], 3)
-
-    def test_a_hosting_code_of_the_package_is_a_word(self):
-        words = set()
-        for n in ("hosting.json",) + tuple("hosting/" + f for f in sorted(os.listdir(os.path.join(contract_dir(), "3", "omx-clap-core", "hosting")))):
-            for item in load(os.path.join(contract_dir(), "3", "omx-clap-core", n)).values():
-                if isinstance(item, dict) and item.get("kind") == "codes":
-                    words.update(c["code"] for c in item["codes"].values())
-        self.assertIn("hosting.clap.extensions-not-covered", words)
-        dom = q.Domains(contract_dir())
-        self.assertEqual(set(dom.items[("hosting", "HOSTING_CLAP_CODES")]),
-                         {c["code"] for c in load(os.path.join(contract_dir(), "3", "omx-clap-core", "hosting", "clap.json"))["HOSTING_CLAP_CODES"]["codes"].values()})
 
     def test_a_hosting_code_that_is_none_is_refused(self):
         rec = self.edited(lambda r: r["verdicts"][0]["reasons"].append(
@@ -420,25 +394,32 @@ class HostingWords(Layer):
         self.assertEqual(cm.exception.name, "word-unknown")
         self.assertIn("hosting.clap.not-a-code", str(cm.exception))
 
-    def test_a_contract_directory_without_the_package_is_refused_by_name(self):
+    def test_a_contract_directory_without_the_hosting_domain_is_refused_by_name(self):
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)
-        shutil.rmtree(os.path.join(c, "3"))
+        shutil.rmtree(os.path.join(c, "hosting"))
         with self.assertRaises(q.Refusal) as cm:
             q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
         self.assertEqual(cm.exception.name, "contract.domain.absent")
-        self.assertIn("omx-clap-core", str(cm.exception))
+        self.assertIn("hosting", str(cm.exception))
         self.assertFalse(os.path.exists(self.db))
 
-    def test_a_hosting_domain_document_is_no_source_of_words(self):
-        """A hosting/hosting.json beside the package is not read: the package's items are the words."""
+    def test_the_package_form_alone_is_no_hosting_domain(self):
+        """A contract directory holding omx-clap-core's package files (<major>/omx-clap-core/) and no hosting document is
+        refused: the package is no source of the words."""
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)
-        os.makedirs(os.path.join(c, "hosting"))
-        with open(os.path.join(c, "hosting", "hosting.json"), "w") as f:
-            json.dump({"info": {"version": "9.9.9"}, "components": {"schemas": {}}}, f)
-        q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
-        self.assertNotEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [("9.9.9",)])
+        shutil.rmtree(os.path.join(c, "hosting"))
+        pkg = os.path.join(c, "3", "omx-clap-core", "hosting")
+        os.makedirs(pkg)
+        with open(os.path.join(c, "3", "omx-clap-core", "MANIFEST.json"), "w") as f:
+            json.dump({"package": "omx-clap-core", "version": "0.33.1", "schemaMajor": 3, "files": {}}, f)
+        with open(os.path.join(pkg, "clap.json"), "w") as f:
+            json.dump({"HOSTING_CLAP_CODES": {"kind": "codes", "codes": {"x": {"code": "hosting.clap.extensions-not-covered"}}}}, f)
+        with self.assertRaises(q.Refusal) as cm:
+            q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
+        self.assertEqual(cm.exception.name, "contract.domain.absent")
+        self.assertFalse(os.path.exists(self.db))
 
 
 class Refusals(Layer):

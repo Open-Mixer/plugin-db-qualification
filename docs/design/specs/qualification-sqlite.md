@@ -1043,6 +1043,8 @@ int  pqdb_record_json(const pqdb *db, const pqdb_result *r, char **json, pqdb_er
    `layer` is "user", "base" or NULL (both, merged as section 4). A plugin is offered when any of its records has a
    `tier_offered` row. The strings are valid until each returns; a non-zero return stops the walk and is returned. */
 int  pqdb_counts(const pqdb *db, const char *layer, int (*each)(const char *format, long plugins, long offered, long not_offered, void *), void *ctx);
+const char *pqdb_message(const pqdb *db);     /* the last refusal of pqdb_each: layer, record, column; NULL if none */
+int  pqdb_number(double value, char *out, size_t n);   /* a number as JSON.stringify writes it, C locale; -1: not finite or too long */
 
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none). */
 typedef struct { const char *rating, *deciding; int measured, qualified; } pqdb_verdict;
@@ -1058,6 +1060,10 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
   `binary_path` and `uri` (a `.clap`: the CLAP id), then `pqdb_files` of each result, compared with the files the caller
   hashed. The merged answer shadows whole records (section 4), so the caller compares the records it gets; a result
   whose list does not equal what is installed is not the installed binary's.
+- **Numbers and non-finite values.** Every reader path (`pqdb_each`, `pqdb_record_json`, the command's `query --json`)
+  writes a REAL through `pqdb_number`: the layout of `JSON.stringify`, under the C locale whatever the program's. A
+  non-finite REAL is refused as `qualification-db.not-a-store` by every path; `pqdb_message` names the layer, the
+  record and the column of `pqdb_each`'s last refusal, and the command prints the code and message and exits 1.
 - **Every cell of a record** is one result; `pqdb_files` and `pqdb_record_json` give the same answer for each of a
   record's results. `pqdb_record_json` is the exporter of section 5 in C: its output equals the Python exporter's, byte
   for byte after JSON normalisation, for every record of the fixtures (section 8, change 3).

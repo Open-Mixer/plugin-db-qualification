@@ -192,7 +192,7 @@ class Check(Tree):
             f.write("\n\n".join(keep + extra) + "\n")
         text = re.sub(r"^%package .*\n", "", self.read_file(SPEC), flags=re.M)
         with open(self.path(*SPEC.split(os.sep)), "w") as f:
-            f.write(text.replace("%prep", "".join("%package -n " + n + "\n" for n in rpm) + "\n%prep", 1))
+            f.write(text.replace("\n%prep\n", "\n" + "".join("%package -n " + n + "\n" for n in rpm) + "\n%prep\n", 1))
         for n in DEB_NAMES[1:]:
             for ext in ("install", "symbols", "lintian-overrides"):
                 if os.path.exists(self.path("debian", f"{n}.{ext}")):
@@ -314,7 +314,7 @@ class Substvars(Tree):
                                       capture_output=True, text=True, check=True).stdout
             self.assertIn("plugin-qualify >= 0.20.1", q("--requires"))
             self.assertIn("plugin-db-qualification-x86-64-fedora44-48000-512 <", q("--obsoletes"))
-            self.assertEqual(q("--qf", "%{name}\n"), PKG + "\n")
+            self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
     def test_an_architecture_with_no_class_or_no_set_is_refused(self):
         self.assertEqual(self.run_main("substvars", "i386")[0], 1)
@@ -332,6 +332,10 @@ class Rules(Tree):
         with open(os.path.join(bin_, "dh_gencontrol"), "w") as f:
             f.write(f"#!/bin/sh\ncp debian/{PKG}.substvars \"$GENCONTROL_SAW\"\n")
         os.chmod(os.path.join(bin_, "dh_gencontrol"), 0o755)
+        # the reader's files are split by dh_install from the .install lists: not this test's concern
+        with open(os.path.join(bin_, "dh_install"), "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(os.path.join(bin_, "dh_install"), 0o755)
         saw = os.path.join(self.tmp.name, "substvars")
         env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"], GENCONTROL_SAW=saw)
         r = subprocess.run(["make", "-f", "debian/rules", target, f"DEB_HOST_ARCH={arch}"], cwd=self.root,

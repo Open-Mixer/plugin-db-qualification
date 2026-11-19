@@ -80,7 +80,7 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures
 	rm -rf $(BUILD)/stage
 	$(MAKE) install DESTDIR=$(abspath $(BUILD)/stage) PREFIX=/usr
-	sh test/test_install.sh $(abspath $(BUILD)/stage)
+	sh test/test_install.sh $(abspath $(BUILD)/stage) $(LIBDIR)
 
 clean:
 	rm -rf $(BUILD)

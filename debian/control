@@ -2,7 +2,8 @@ Source: plugin-db-qualification
 Section: sound
 Priority: optional
 Maintainer: Pau Aliagas <linuxnow@gmail.com>
-Build-Depends: debhelper-compat (= 13), python3:native
+Build-Depends: debhelper-compat (= 13), python3:native, pkgconf, libsqlite3-dev (>= 3.37.0),
+ libomx-domain-dev (>= 3.20.0)
 Standards-Version: 4.6.2
 Homepage: https://github.com/Open-Mixer/plugin-db-qualification
 Rules-Requires-Root: no
@@ -32,3 +33,32 @@ Description: plugin-db qualification layer: records of OpenMixer plugin sets
   quantum. Provisional records: measured on JACK's dummy driver without
   real-time priority; the crash, hang and unmeasured verdicts hold, the
   cost, latency and xrun figures are not reference figures.
+
+Package: libplugin-qualification-db0
+Section: libs
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}, libsqlite3-0 (>= 3.37.0), libomx-domain0 (>= 3.20.0)
+Description: reader of the OpenMixer qualification store
+ The C library that reads the qualification store: the base database of
+ plugin-qualification-records and a user layer, merged by whole record, with
+ every word column checked against the contract domains that own its words.
+ It reads figures at start-up, never in a real-time path.
+
+Package: libplugin-qualification-db-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: libplugin-qualification-db0 (= ${binary:Version}), ${misc:Depends}
+Description: reader of the OpenMixer qualification store, development files
+ The header, the shared library link, plugin-qualification-db.pc and the DDL
+ of the store (the pkg-config variable schema names it).
+
+Package: plugin-qualification-db
+Section: sound
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: command to query the OpenMixer qualification store
+ plugin-qualification-db query --json prints the results of the base
+ database and the user layer, one JSON object per line; check opens both
+ layers and the words they hold.

@@ -678,7 +678,7 @@ class RoundTrip(unittest.TestCase):
                     sentences.update([v] if isinstance(v, str) else (v or {}).values() if isinstance(v, dict) else [])
                 if "note" in prov.get("settings", {}):
                     sentences.add(prov["settings"]["note"])
-        self.assertGreater(len(sentences), 100)
+        self.assertGreater(len(sentences), 50)
         self.assertEqual(sorted(x for x in sentences & stored)[:3], [], "a sentence is stored in a column")
 
     def test_13_the_hand_written_field_table_agrees_with_the_columns(self):

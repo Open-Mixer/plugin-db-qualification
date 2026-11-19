@@ -330,9 +330,9 @@ class HostingWords(Layer):
     def test_the_package_is_recorded_with_its_version(self):
         self.put()
         manifest = load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))
-        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'omx-clap-core'"), [(manifest["version"],)])
-        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = 'hosting'"), [(0,)])
-        self.assertGreater(self.rows("SELECT count(*) FROM word_check WHERE domain = 'omx-clap-core'")[0][0], 3)
+        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(manifest["version"],)])
+        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = 'omx-clap-core'"), [(0,)])
+        self.assertGreater(self.rows("SELECT count(*) FROM word_check WHERE domain = 'hosting'")[0][0], 3)
 
     def test_a_hosting_code_of_the_package_is_a_word(self):
         words = set()
@@ -342,7 +342,7 @@ class HostingWords(Layer):
                     words.update(c["code"] for c in item["codes"].values())
         self.assertIn("hosting.clap.extensions-not-covered", words)
         dom = q.Domains(contract_dir())
-        self.assertEqual(set(dom.items[("omx-clap-core", "HOSTING_CLAP_CODES")]),
+        self.assertEqual(set(dom.items[("hosting", "HOSTING_CLAP_CODES")]),
                          {c["code"] for c in load(os.path.join(contract_dir(), "3", "omx-clap-core", "hosting", "clap.json"))["HOSTING_CLAP_CODES"]["codes"].values()})
 
     def test_a_hosting_code_that_is_none_is_refused(self):
@@ -372,7 +372,7 @@ class HostingWords(Layer):
         with open(os.path.join(c, "hosting", "hosting.json"), "w") as f:
             json.dump({"info": {"version": "9.9.9"}, "components": {"schemas": {}}}, f)
         q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
-        self.assertNotEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'omx-clap-core'"), [("9.9.9",)])
+        self.assertNotEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [("9.9.9",)])
 
 
 class Refusals(Layer):

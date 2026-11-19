@@ -30,7 +30,8 @@ DOMAINS = ("qualification", "machine", "probe", "plugin-db")   # domain document
 # the hosting words are no domain document: they are the codes of the package omx-clap-core (its data/hosting.json and
 # data/hosting/*.json, items of kind codes), installed by `make install-contract` as <contractdir>/<schema major>/omx-clap-core/
 HOSTING_PACKAGE = "omx-clap-core"
-STORE_DOMAINS = DOMAINS + (HOSTING_PACKAGE,)
+HOSTING = "hosting"   # the label the store gives them: store_domain ('hosting', the package's version), word_check domain 'hosting'
+STORE_DOMAINS = DOMAINS + (HOSTING,)
 
 
 class Refusal(Exception):
@@ -382,7 +383,7 @@ def _q(name):
 
 
 _ADAPTER_PARTS = [_q("HOST_PROFILES"), _q("ADAPTER_CODE_KINDS"), ("probe", "PROBE_SIGNALS")]
-_HOSTING = (HOSTING_PACKAGE, "HOSTING_*CODES")  # every item of the package named HOSTING_<group>_CODES
+_HOSTING = (HOSTING, "HOSTING_*CODES")  # every item of the package named HOSTING_<group>_CODES
 _PROBE_OUT = [("probe", "PROBE_OUTCOMES"), _q("MEMORY_BOUND_OUTCOMES")]
 _RATING = [_q("MEASUREMENT_VERDICT_RATINGS")]
 _DIM = [_q("MEASUREMENT_DIMENSIONS")]
@@ -490,14 +491,14 @@ class Domains:
         pkg = os.path.dirname(found[0])
         try:
             with open(found[0], encoding="utf-8") as f:
-                self.version[HOSTING_PACKAGE] = json.load(f)["version"]
+                self.version[HOSTING] = json.load(f)["version"]
             files = [os.path.join(pkg, "hosting.json")] + sorted(glob.glob(os.path.join(glob.escape(pkg), "hosting", "*.json")))
             for path in files:
                 with open(path, encoding="utf-8") as f:
                     doc = json.load(f)
                 for name, item in doc.items():
                     if isinstance(item, dict) and item.get("kind") == "codes":
-                        self.items[(HOSTING_PACKAGE, name)] = [c["code"] for c in item["codes"].values()]
+                        self.items[(HOSTING, name)] = [c["code"] for c in item["codes"].values()]
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             raise Refusal("contract.domain.invalid", f"{pkg}: {e}") from e
 

@@ -63,7 +63,7 @@ and its DDL holds no list of words.
 | base database | `/usr/share/omx/qualification/qualification.sqlite` | the package `plugin-qualification-records`, one per architecture, built at package build from `records/` | read only, immutable |
 | user layer, user scope | `<home>/.local/share/omx/qualification/qualification.sqlite`: the XDG data directory's default, `<home>` from `getpwuid(geteuid())`; `XDG_DATA_HOME` is not read | plugin-qualify-sync of that user, after the consumer switch; nobody before it | read only by readers; read-write by the writer only |
 | user layer, system scope | `/var/lib/omx/qualification/qualification.sqlite` (the system sync's `qualification_dir`) | `plugin-qualify-sync --system`, after the consumer switch | the same |
-| the DDL | `schema/qualification.sql` in this repository | read by the writer at build and when it creates a user layer | |
+| the DDL | `schema/qualification.sql` in this repository; installed as `<datadir>/plugin-qualification-db/qualification.sql` by `libplugin-qualification-db-dev`, named by the `schema` variable of `plugin-qualification-db.pc` (`pkg-config --variable=schema plugin-qualification-db`) | read by the writer at build and when it creates a user layer, and by test fixtures, from the installed file, with no checkout | |
 
 The base database sits beside today's `<host class>/<set>/` directories, which stay as they are (section 5). A
 database file in that directory is no `<host class>` directory, so `plugin-qualify-sync`'s distributed reader, which
@@ -765,7 +765,7 @@ lists (section 9, ruling 1).
 One implementation, in C, so the two consumers cannot answer differently.
 
 **Header** `<plugin-qualification-db/pqdb.h>`, library `libplugin-qualification-db.so.0`, pkg-config
-`plugin-qualification-db`:
+`plugin-qualification-db`, whose `schema` variable names the installed DDL (`<datadir>/plugin-qualification-db/qualification.sql`, section 2). Errors are strings by name: `pqdb_error.code` and `pqdb_code(status)` give `qualification-db.*`; the header defines no numeric error constants, the names are the contract. `pqdb_verdicts` walks every verdict of a result's record (the command prints them):
 
 ```c
 typedef struct pqdb pqdb;                          /* an opened base and user layer; opaque */
@@ -804,6 +804,8 @@ int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_resul
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none). */
 typedef struct { const char *rating, *deciding; int measured, qualified; } pqdb_verdict;
 int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_verdict *out);
+/* Every verdict of the result's record, in the record's order. */
+int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char *host, const pqdb_verdict *, void *), void *ctx);
 ```
 
 - **From an installed package to its results:** `pqdb_each` with the `pkg_*` fields of the query set (format, name,
@@ -853,7 +855,7 @@ int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqd
 | --- | --- | --- | --- |
 | `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same three contract floors. Run time: none |
 | `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
-| `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` | | `libplugin-qualification-db0 (= ${binary:Version})` |
+| `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc`, and the DDL at `<datadir>/plugin-qualification-db/qualification.sql` (the `.pc`'s `schema` variable) | | `libplugin-qualification-db0 (= ${binary:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
 
 **Generated, not committed.** Today's records are text (JSON, 248 MB unpacked), reviewed as text and never rewritten.

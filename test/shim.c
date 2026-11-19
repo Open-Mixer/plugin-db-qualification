@@ -14,16 +14,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 
 static void trace(const char *path)
 {
     const char *t = getenv("PQDB_SHIM_TRACE");
-    FILE *f;
-    if (!t || !path || !(f = fopen(t, "a")))
+    int fd;
+    if (!t || !path)
         return;
-    fprintf(f, "%s\n", path);
-    fclose(f);
+    /* raw system calls: the shim's own file access must not come back through the shim */
+    fd = (int)syscall(SYS_openat, AT_FDCWD, t, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (fd < 0)
+        return;
+    (void)!write(fd, path, strlen(path));
+    (void)!write(fd, "\n", 1);
+    syscall(SYS_close, fd);
 }
 
 static const char *map(const char *path, char *buf, size_t n)

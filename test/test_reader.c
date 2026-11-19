@@ -41,6 +41,17 @@ static char *contract(const char *name)
 }
 #define GOOD contract("contract-good")
 
+static const char *sha_of(char c)
+{
+    static char b[4][65];
+    static int n;
+    char *p = b[n++ & 3];
+    memset(p, c, 64);
+    p[64] = 0;
+    return p;
+}
+#define SHA(c) sha_of(c)
+
 static char *slurp(const char *path, size_t *len)
 {
     FILE *f = fopen(path, "rb");
@@ -70,14 +81,23 @@ static int same_file(const char *a, const char *b)
     free(x); free(y);
     return eq;
 }
+static char tmp_made[64][256];
+static int tmp_n;
 static char *tmpdir(void)
 {
-    static char t[8][256];
-    static int n;
-    char *p = t[n++ & 7];
-    snprintf(p, 256, "/tmp/pqdb-test-XXXXXX");
+    const char *base = getenv("TMPDIR");
+    char *p = tmp_made[tmp_n++];
+    snprintf(p, 256, "%s/pqdb-test-XXXXXX", base && *base ? base : "/tmp");
     if (!mkdtemp(p)) { perror("mkdtemp"); exit(2); }
     return p;
+}
+static void tmp_clean(void)
+{
+    char cmd[300];
+    for (int i = 0; i < tmp_n; i++) {
+        snprintf(cmd, sizeof cmd, "rm -rf '%s'", tmp_made[i]);
+        if (system(cmd)) perror("rm");
+    }
 }
 static char *under(const char *dir, const char *name)
 {
@@ -140,9 +160,13 @@ static int open_ok(const char *base, const char *user, const char *cdir, pqdb **
 static int expect_refusal(const char *base, const char *user, const char *cdir, const char *code, pqdb_error *e)
 {
     pqdb *db = (pqdb *)1;
-    int rc = pqdb_open_at(base, user, cdir, &db, e);
+    int rc;
+    memset(e, 0, sizeof *e);
+    rc = pqdb_open_at(base, user, cdir, &db, e);
     CHECK(rc != 0, "open succeeded, wanted %s", code);
     CHECK(e->code && strcmp(e->code, code) == 0, "code %s, wanted %s (%s)", e->code ? e->code : "(null)", code, e->message);
+    if (strncmp(code, "qualification-db.", 17) == 0)
+        CHECK(pqdb_code(rc) && strcmp(pqdb_code(rc), code) == 0, "pqdb_code(%d) is not %s", rc, code);
     if (rc) { CHECK(db == NULL, "out not cleared"); }
     else pqdb_close(db);
     return rc;
@@ -229,7 +253,7 @@ static void t06_whole_record_merge(void)
     pqdb *db;
     rows o;
     pqdb_query q = any();
-    q.sha256 = "a" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; q.offer = "default"; q.host_class = "x86-64";
+    q.sha256 = SHA('a'); q.offer = "default"; q.host_class = "x86-64";
     q.rate = 48000; q.quantum = 256;
     if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
     CHECK(walk(db, &q, &o) == 0 && o.n == 1, "%d results", o.n);
@@ -242,7 +266,7 @@ static void t07_shadows_whole(void)
     pqdb *db;
     rows o;
     pqdb_query q = any();
-    q.sha256 = "a" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; q.format = "clap"; q.uri = "urn:p1";
+    q.sha256 = SHA('a'); q.format = "clap"; q.uri = "urn:p1";
     q.offer = "default"; q.host_class = "x86-64";
     char *tmp = tmpdir();
     copy(fx("base.sqlite"), under(tmp, "base.sqlite"));
@@ -260,15 +284,15 @@ static void t08_other_key_not_shadowed(void)
     rows o;
     pqdb_query q = any();
     if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
-    q.sha256 = "c" "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"; q.offer = "default"; q.host_class = "x86-64";
+    q.sha256 = SHA('c'); q.offer = "default"; q.host_class = "x86-64";
     CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].layer, "base") == 0, "other offer or class shadowed: %d", o.n);
     q = any();
-    q.sha256 = "a" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; q.offer = "custom";
+    q.sha256 = SHA('a'); q.offer = "custom";
     CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].layer, "base") == 0, "offer in the key: %d", o.n);
     q.offer = "default"; q.host_class = "rpi5";
     CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].layer, "base") == 0, "class in the key: %d", o.n);
     q = any();
-    q.sha256 = "b" "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    q.sha256 = SHA('b');
     CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].layer, "user") == 0, "user record of other bytes");
     q = any();
     q.uri = "urn:p1"; q.offer = "default"; q.host_class = "x86-64";
@@ -479,12 +503,13 @@ static void t15_scopes(void)
 {
     char *root = tmpdir();
     const char *compiled = getenv("PQDB_TEST_CONTRACTDIR");
-    char *trace = under(root, "trace.txt");
+    char trace[512];
     pqdb *db;
     pqdb_error e;
     rows o;
     pqdb_query q = any();
     setup_root(root, compiled);
+    snprintf(trace, sizeof trace, "%s/trace.txt", root);
     setenv("PQDB_SHIM_TRACE", trace, 1);
     CHECK(pqdb_open(PQDB_SCOPE_USER, &db, &e) == 0, "%s: %s", e.code, e.message);
     CHECK(walk(db, &q, &o) == 0, "walk");
@@ -529,6 +554,7 @@ int main(int argc, char **argv)
         printf("%s %s\n", failures == before ? "ok    " : "not ok", TESTS[i].name);
         ran++; bad += failures != before;
     }
+    tmp_clean();
     printf("%d tests, %d failed, %d checks\n", ran, bad, checks);
     return bad ? 1 : 0;
 }

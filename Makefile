@@ -10,7 +10,8 @@
 
 CC       ?= cc
 CFLAGS   ?= -O2 -g
-WARN     := -Wall -Wextra -Werror -std=c11
+# messages are bounded by pqdb_error.message: a long path truncates, by design
+WARN     := -Wall -Wextra -Werror -Wno-format-truncation -std=c11
 PREFIX   ?= /usr
 LIBDIR   ?= $(PREFIX)/lib
 BINDIR   ?= $(PREFIX)/bin
@@ -36,9 +37,9 @@ all: lib cmd $(BUILD)/plugin-qualification-db.pc
 $(BUILD):
 	mkdir -p $(BUILD)
 
-# only pqdb_* is exported (src/pqdb.map), and nothing is visible by default
+# only pqdb_* is exported: src/pqdb.map names it and hides the rest
 $(BUILD)/$(SONAME): src/pqdb.c src/pqdb.map include/plugin-qualification-db/pqdb.h | $(BUILD)
-	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) -fPIC -fvisibility=hidden $(INC) $(SQLITE_CFLAGS) $(DOMAIN_CFLAGS) -shared \
+	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) -fPIC $(INC) $(SQLITE_CFLAGS) $(DOMAIN_CFLAGS) -shared \
 	  -Wl,-soname,$(SONAME) -Wl,--version-script=src/pqdb.map $(LDFLAGS) src/pqdb.c -o $@ $(SQLITE_LIBS) $(DOMAIN_LIBS)
 	ln -sf $(SONAME) $(BUILD)/libplugin-qualification-db.so
 

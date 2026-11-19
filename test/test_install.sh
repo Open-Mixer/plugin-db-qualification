@@ -8,8 +8,8 @@ fail=0
 note() { echo "  FAIL: $*"; fail=1; }
 pc=$root/usr/lib/pkgconfig/plugin-qualification-db.pc
 [ -f "$pc" ] || note "no $pc"
-schema=$(PKG_CONFIG_PATH=$root/usr/lib/pkgconfig pkg-config --variable=schema plugin-qualification-db --define-variable=prefix="$root/usr" 2>&1)
-[ "$schema" = "$root/usr/share/plugin-qualification-db/qualification.sql" ] || note "pkg-config --variable=schema gave '$schema'"
+schema=$(PKG_CONFIG_PATH=$root/usr/lib/pkgconfig pkg-config --variable=schema plugin-qualification-db 2>&1)
+[ "$schema" = "/usr/share/plugin-qualification-db/qualification.sql" ] || note "pkg-config --variable=schema gave '$schema'"
 cmp -s "$root/usr/share/plugin-qualification-db/qualification.sql" schema/qualification.sql || note "the installed DDL is not schema/qualification.sql"
 [ -f "$root/usr/include/plugin-qualification-db/pqdb.h" ] || note "no header"
 [ -x "$root/usr/bin/plugin-qualification-db" ] || note "no command"

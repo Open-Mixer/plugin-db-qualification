@@ -244,6 +244,108 @@ class Base(unittest.TestCase):
             return db.execute(sql, args).fetchall()
 
 
+def to_relative(setdir):
+    """Section 3.7's rewrite on a fixture copy: a CLAP record's binary.path is its file's own name and its hostExtensions
+    are the probe output's offer.clapExtensions. (records/ itself gets it once, in a commit of its own.)"""
+    for f in os.listdir(setdir):
+        if f.endswith(".qualification.json"):
+            p = os.path.join(setdir, f)
+            rec = load(p)
+            if rec["plugin"]["format"] == "clap":
+                rec["binary"]["path"] = rec["binary"]["files"][0]["path"]
+                rec["hostExtensions"] = load(os.path.join(setdir, rec["probe"]["file"]))["offer"]["clapExtensions"]
+            dump(p, rec)
+
+
+class DdlColumns(Base):
+    """Case 24: the columns of the row judge (record_extension, record.host_extensions, cell.rt_own_threads and
+    rt_other_*) are written and exported, and the DDL's own checks hold."""
+    LV2 = ("rpi5", "zynthian-vangelis")
+
+    def made(self, fn=None, src=SRC_SET, files=None, n=2):
+        d = make_set(self.tmp, files, n=n, src=src)
+        to_relative(d)
+        names = sorted(f for f in os.listdir(d) if f.endswith(".qualification.json"))
+        if fn:
+            edit(d, names[0], fn)
+        return d, names[0]
+
+    def exported(self, d, name):
+        build_ok(self, os.path.join(self.tmp, "records"), self.db)
+        sys.path.insert(0, HERE)
+        import qualification_db
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            ids = {f"{r[1]}.{r[2]}.qualification.json": r[0] for r in db.execute("SELECT record_id, name, offer FROM record")}
+            got = qualification_db.Exporter(db).export_record(ids[name])
+        return got
+
+    def same(self, d, name):
+        got = self.exported(d, name)
+        want = RoundTrip.strip(load(os.path.join(d, name)))
+        self.assertIsNone(RoundTrip.first_difference(want, got), name)
+        return got
+
+    def test_24_host_extensions_of_a_clap_record_round_trip(self):
+        d, f = self.made(lambda r: r.update(hostExtensions=["clap.log", "clap.params"]))
+        got = self.same(d, f)
+        self.assertEqual(got["hostExtensions"], ["clap.log", "clap.params"])
+        self.assertEqual(self.rows("SELECT host_extensions FROM record WHERE name || '.' || offer || '.qualification.json' = ?", f), [(1,)])
+        self.assertEqual(self.rows("SELECT ord, extension FROM record_extension JOIN record USING (record_id) "
+                                   "WHERE name || '.' || offer || '.qualification.json' = ? ORDER BY ord", f),
+                         [(0, "clap.log"), (1, "clap.params")])
+
+    def test_24_an_empty_list_of_host_extensions_is_data(self):
+        d, f = self.made(lambda r: r.update(hostExtensions=[]))
+        self.assertEqual(self.same(d, f)["hostExtensions"], [])
+        self.assertEqual(self.rows("SELECT host_extensions FROM record WHERE name || '.' || offer || '.qualification.json' = ?", f), [(1,)])
+        self.assertEqual(self.rows("SELECT count(*) FROM record_extension JOIN record USING (record_id) "
+                                   "WHERE name || '.' || offer || '.qualification.json' = ?", f), [(0,)])
+
+    def test_24_an_lv2_record_has_no_host_extensions(self):
+        f = find(lambda r, n: r["plugin"]["format"] == "lv2", self.LV2)
+        d, f = self.made(src=self.LV2, files=[f])
+        got = self.same(d, f)
+        self.assertNotIn("hostExtensions", got)
+        self.assertEqual(self.rows("SELECT host_extensions FROM record"), [(None,)])
+        self.assertEqual(self.rows("SELECT count(*) FROM record_extension"), [(0,)])
+
+    def test_24_a_clap_record_without_host_extensions_is_refused(self):
+        d, f = self.made(lambda r: r.pop("hostExtensions"))
+        self.refused("field-absent", f, "hostExtensions")
+
+    def test_24_an_lv2_record_with_host_extensions_is_refused(self):
+        f = find(lambda r, n: r["plugin"]["format"] == "lv2", self.LV2)
+        d, f = self.made(lambda r: r.update(hostExtensions=["clap.log"]), src=self.LV2, files=[f])
+        self.refused("field-unmapped", f, "hostExtensions")
+
+    def test_24_own_threads_and_other_threads_round_trip(self):
+        def put(r):
+            rt = r["measurements"]["grid"][0]["rtSafety"]
+            rt["ownThreads"] = 2
+            rt["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+        d, f = self.made(put)
+        got = self.same(d, f)
+        rt = got["measurements"]["grid"][0]["rtSafety"]
+        self.assertEqual((rt["ownThreads"], rt["otherThreads"]),
+                         (2, {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}))
+        self.assertEqual(self.rows("SELECT rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls FROM cell "
+                                   "WHERE ord = 0 AND rt_own_threads IS NOT NULL"), [(2, 5, 0, 7)])
+
+    def test_24_records_of_today_hold_none_and_read_back_none(self):
+        d, f = self.made()
+        got = self.same(d, f)
+        for c in got["measurements"]["grid"]:
+            self.assertNotIn("ownThreads", c.get("rtSafety", {}))
+            self.assertNotIn("otherThreads", c.get("rtSafety", {}))
+        self.assertEqual(self.rows("SELECT count(*) FROM cell WHERE rt_own_threads IS NOT NULL OR rt_other_locks IS NOT NULL"), [(0,)])
+
+    def test_24_other_threads_with_one_count_only_is_refused_by_the_schema(self):
+        def put(r):
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locksInRun": 1}
+        d, f = self.made(put)
+        self.refused("schema-refused", f)
+
+
 class Refusals(Base):
     def one(self, fn, n=2):
         d = make_set(self.tmp, n=n)

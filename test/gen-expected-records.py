@@ -8,20 +8,20 @@ the reader compares with pqdb_record_json, byte for byte.
     gen-expected-records.py <qualification_db.py> <records.sqlite> <out dir>
 
 The exporter's own tree does not yet map the three fields section 3.5 added (hostExtensions, rtSafety.ownThreads and
-rtSafety.otherThreads); this script adds them after the exporter has run, at the places the spec's table names:
-hostExtensions after testedVersion, ownThreads and otherThreads after processErrors. Delete that part when the exporter
+rtSafety.otherThreads); this script adds them after the exporter has run, where the reader writes them:
+hostExtensions before measuredAt, ownThreads and otherThreads before the events of rtSafety. Delete that part when the exporter
 maps them itself and the files below are unchanged. A document is the compact JSON of one record, no trailing newline.
 Usage of the fixture store: make-fixtures.py <dir> writes <dir>/records.sqlite."""
 import importlib.util, json, os, sqlite3, sys
 
-def after(d, anchor, new):
-    """d with the items of `new` inserted after the key `anchor` (the order of a dict is the order of the document)."""
+def before(d, anchor, new):
+    """d with the items of `new` inserted before the key `anchor` (the order of a dict is the order of the document)."""
     out = {}
     for k, v in d.items():
-        out[k] = v
         if k == anchor:
             out.update(new)
-    return out if anchor in d else {**d, **new}
+        out[k] = v
+    return out
 
 def main(module, store, out_dir):
     spec = importlib.util.spec_from_file_location("qualification_db", module)
@@ -36,7 +36,7 @@ def main(module, store, out_dir):
         doc = exp.export_record(rid)
         if ext == 1:
             names = [r[0] for r in db.execute("SELECT extension FROM record_extension WHERE record_id = ? ORDER BY ord", (rid,))]
-            doc = after(doc, "testedVersion", {"hostExtensions": names})
+            doc = before(doc, "measuredAt", {"hostExtensions": names})
         cells = db.execute("SELECT rt_interposer, rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls "
                            "FROM cell WHERE record_id = ? ORDER BY ord", (rid,)).fetchall()
         for c, (interposer, own, oa, ol, osy) in zip(doc["measurements"]["grid"], cells):
@@ -46,7 +46,7 @@ def main(module, store, out_dir):
             if oa is not None:
                 add["otherThreads"] = {"allocationsInRun": oa, "locksInRun": ol, "syscallsInRun": osy}
             if add and interposer is not None:
-                c["rtSafety"] = after(c["rtSafety"], "processErrors", add)
+                c["rtSafety"] = before(c["rtSafety"], "events", add)
         name = "%s-%s.%s.%s.json" % (fmt, uri.split(":")[-1], offer, cls)
         with open(os.path.join(out_dir, name), "w", encoding="utf-8", newline="") as f:
             f.write(json.dumps(doc, separators=(",", ":"), ensure_ascii=False))

@@ -76,6 +76,19 @@ int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_resul
    and is returned. 0, or a refusal status. */
 int  pqdb_files(const pqdb *db, const pqdb_result *r, int (*each)(const char *path, const char *sha256, void *), void *ctx);
 
+/* The record of a result as one JSON document of `plugin-qualify.qualification-record/1`, as this repository's
+   qualification store spec (section 5) has its exporter write it: the same bytes as the Python exporter's, the sentences
+   of section 3.5 absent. `*json` is memory the caller frees with free(). 0, or a refusal status with `err` filled; on a
+   refusal `*json` is NULL. Every cell of a record gives the same document. */
+int  pqdb_record_json(const pqdb *db, const pqdb_result *r, char **json, pqdb_error *err);
+
+/* What a layer holds per plugin (a plugin: a format and a uri), by format in format order, as
+   each(format, plugins, offered, not_offered, ctx). `layer` is "user", "base" or NULL (both, merged as section 4). A
+   plugin is offered when any of its records has a tier_offered row; two records of one plugin count once. The strings
+   are valid until each returns; a non-zero return of each stops the walk and is returned. 0, or a refusal status. */
+int  pqdb_counts(const pqdb *db, const char *layer,
+                 int (*each)(const char *format, long plugins, long offered, long not_offered, void *), void *ctx);
+
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none).
    0; 1 when the record has no verdict of that host; a refusal status otherwise. The strings are valid until the next
    pqdb_verdict_of or pqdb_close of the handle. */

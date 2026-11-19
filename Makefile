@@ -39,9 +39,9 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 # only pqdb_* is exported: src/pqdb.map names it and hides the rest
-$(BUILD)/$(SONAME): src/pqdb.c src/pqdb.map include/plugin-qualification-db/pqdb.h | $(BUILD)
+$(BUILD)/$(SONAME): src/pqdb.c src/pqdb_record.c src/pqdb_record.h src/pqdb.map include/plugin-qualification-db/pqdb.h | $(BUILD)
 	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) -fPIC $(INC) $(SQLITE_CFLAGS) $(DOMAIN_CFLAGS) -shared \
-	  -Wl,-soname,$(SONAME) -Wl,--version-script=src/pqdb.map $(LDFLAGS) src/pqdb.c -o $@ $(SQLITE_LIBS) $(DOMAIN_LIBS)
+	  -Wl,-soname,$(SONAME) -Wl,--version-script=src/pqdb.map $(LDFLAGS) src/pqdb.c src/pqdb_record.c -o $@ $(SQLITE_LIBS) $(DOMAIN_LIBS)
 	ln -sf $(SONAME) $(BUILD)/libplugin-qualification-db.so
 
 $(BUILD)/plugin-qualification-db: src/plugin-qualification-db.c $(BUILD)/$(SONAME)

@@ -718,8 +718,9 @@ lists (section 9, ruling 1).
     hold every leaf at least once, the test reads each path's value from the JSON and the column's value with its own
     SQL, and compares them. A mapping that is wrong in both directions (two columns swapped by the writer and the
     exporter alike) passes the round trip and fails this check.
-- **The old package and files.** Nothing is removed in this pass. `plugin-qualification-records` keeps installing
-  every `<class>/<set>/` file byte for byte, and adds `qualification.sqlite` beside them. The package's name, its
+- **The old package and files.** Changes 1 to 3 remove nothing: `plugin-qualification-records` keeps installing every
+  `<class>/<set>/` file byte for byte, and adds `qualification.sqlite` beside them, until the consumer switch, later in
+  this pass, stops installing them. The package's name, its
   Provides, Replaces and Breaks, and its dependencies stay as they are. The switch is one change, made in the same
   release pass as this one, before the console's 0.2.1 release (section 9, ruling 8). That change, the consumer switch,
   is the one that stops installing the JSON files: in the same change the consumers read the database and the

@@ -383,7 +383,7 @@ class Rules(Tree):
 
 
 class Prove(Tree):
-    def prove(self, kind, arch, extra_classes=(), **env_extra):
+    def prove(self, kind, arch, extra_classes=(), image=None, **env_extra):
         bin_ = os.path.join(self.tmp.name, "bin")
         os.makedirs(bin_, exist_ok=True)
         for tool in ("apt-get", "dpkg", "dpkg-query", "dnf", "rpm", "plugin-qualify-sync"):
@@ -396,6 +396,11 @@ class Prove(Tree):
             self.add_set(cls, s, under=fake)
         for cls, s in extra_classes:
             self.add_set(cls, s, under=fake)
+        # the image's own identity: /etc/os-release under PROVE_ROOT (a Fedora 44 container, or Debian 13 for the deb)
+        image = image or ("fedora", "44") if kind == "rpm" else image or ("debian", "13")
+        os.makedirs(os.path.join(fake, "etc"), exist_ok=True)
+        with open(os.path.join(fake, "etc", "os-release"), "w") as f:
+            f.write(f'NAME="Test"\nID={image[0]}\nVERSION_ID="{image[1]}"\n')
         os.makedirs(self.path("pkgs", "trixie"), exist_ok=True)
         log = os.path.join(self.tmp.name, "log")
         open(log, "w").close()
@@ -458,6 +463,47 @@ class Prove(Tree):
         self.assertEqual(rc, 1)
         self.assertNotIn("plugin-qualify-sync", log)
         self.assertIn(f"apt-get remove -y {PKG}", log)
+
+    def test_a_set_measured_on_another_host_class_is_named_and_not_proven(self):
+        self.with_two_cells()
+        self.add_set("x86-64", "fedora45-48000-64")
+        self.respec()
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
+        self.assertEqual(rc, 0, out + log)
+        for s in CELLS:
+            self.assertIn(f"::notice::x86-64/{s}: measured on fedora44, not proven in fedora45", out)
+        self.assertIn("2 sets measured on another host class, not proven in fedora45", out)
+        self.assertIn("1 of 1 sets proven", out)
+        self.assertEqual(log.count("plugin-qualify-sync --system"), 1)
+        self.assertNotIn("::warning::", out)
+
+    def test_a_set_measured_on_this_host_class_is_proven(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "44"))
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("2 of 2 sets proven", out)
+        self.assertNotIn("not proven", out)
+
+    def test_a_matching_set_that_fails_still_fails(self):
+        self.with_two_cells()
+        self.add_set("x86-64", "fedora45-48000-64")
+        self.respec()
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), BAD_GRID="48000/64")
+        self.assertEqual(rc, 1, out)
+        self.assertIn("0 of 1 sets proven; failed: fedora45-48000-64", out)
+
+    def test_no_matching_set_warns_and_does_not_fail(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("::warning::proved 0 of 2 sets: none was measured on fedora45", out)
+        self.assertNotIn("plugin-qualify-sync", log)
+
+    def test_a_set_without_a_host_class_in_its_name_is_always_proven(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("deb", "arm64", image=("debian", "13"))
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("1 of 1 sets proven", out)
 
     def test_no_set_is_not_a_proof(self):
         os.environ["PROVE_ARCH"] = "x86_64"

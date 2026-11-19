@@ -67,14 +67,16 @@ jobs:
       - run: make check
 
   # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the
-  # owners' own, read from their main (the test assembles the contract directory from these clones); the hosting words
-  # are the data/ of omx-clap-core's main, laid out as its install-contract lays them.
+  # owners' own, read from their main (the test assembles the contract directory from these clones); the hosting domain
+  # is read from omx-clap-core's branch lane/omx-clap-core-hosting-domain (#136) until it merges. THE SWITCH, when it has:
+  # set PDQ_HOSTING_REF to origin/main below (and the test's default likewise).
   layer-writer:
     name: the layer writer refuses by name
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PDQ_SIBLINGS: ${{ github.workspace }}/siblings
+      PDQ_HOSTING_REF: origin/lane/omx-clap-core-hosting-domain
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4

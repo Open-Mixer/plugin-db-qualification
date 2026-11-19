@@ -28,6 +28,7 @@ WORDS = {
         "QUALIFICATION_HOST_CLASSES": ["rpi5", "x86-64"],
         "QUALIFICATION_SET_TIERS": ["reference", "provisional", "hardware"],
         "QUALIFICATION_HOST_PROFILES": ["omx-clap-host", "openmixer-console"],
+        "QUALIFICATION_ADAPTER_HOSTS": ["omx-clap-host", "mod-host", "jalv"],
         "QUALIFICATION_OFFERS": ["default", "custom"],
         "QUALIFICATION_PACKAGE_FORMATS": ["deb", "rpm"],
         "QUALIFICATION_PACKAGE_DISTROS": ["trixie", "fc44", "fc45"],

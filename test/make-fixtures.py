@@ -24,7 +24,7 @@ WORD_CHECK = [
     ("record_set", "tier", "qualification", "QUALIFICATION_SET_TIERS"),
     ("record_set", "host_profile", "qualification", "QUALIFICATION_HOST_PROFILES"),
     ("verdict", "host", "qualification", "QUALIFICATION_HOST_PROFILES"),
-    ("record", "adapter_host", "qualification", "QUALIFICATION_HOST_PROFILES"),
+    ("record", "adapter_host", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("record", "offer", "qualification", "QUALIFICATION_OFFERS"),
     ("record", "pkg_format", "qualification", "QUALIFICATION_PACKAGE_FORMATS"),
     ("record", "pkg_distro", "qualification", "QUALIFICATION_PACKAGE_DISTROS"),
@@ -42,7 +42,7 @@ WORD_CHECK = [
     ("verdict", "arm", "qualification", "QUALIFICATION_VERDICT_ARMS"),
     ("verdict", "deciding", "probe", "PROBE_OUTCOMES"),
     ("verdict", "deciding", "hosting", "HOSTING_CODES"),
-    ("record", "adapter_code", "qualification", "QUALIFICATION_HOST_PROFILES"),
+    ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
     # the hosting columns (section 3.4): mixed with probe words, or hosting words only
@@ -50,7 +50,7 @@ WORD_CHECK = [
     ("tier", "deciding", "hosting", "HOSTING_CODES"),
     ("reason", "code", "hosting", "HOSTING_CODES"),
     ("not_measured", "code", "hosting", "HOSTING_CODES"),
-    ("adapter_cell", "code", "qualification", "QUALIFICATION_HOST_PROFILES"),
+    ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("adapter_cell", "code", "probe", "PROBE_SIGNALS"),
 ]
@@ -211,17 +211,23 @@ def build_records(path):
     c = sqlite3.connect(path)
     c.execute("PRAGMA foreign_keys = ON")
     # record 1 holds every column; 2 is an LV2 record with none of the CLAP-only parts; 3 a CLAP record with an empty extension list
-    fill_nulls(c, "record", "record_id = 1", skip=("pkg_format", "pkg_name", "pkg_version", "pkg_release", "pkg_distro", "pkg_arch"),
+    fill_nulls(c, "record", "record_id = 1", skip=("pkg_format", "pkg_name", "pkg_version", "pkg_release", "pkg_distro", "pkg_arch", "rules", "latency_line_ms"),
                flags=("host_extensions", "adapter_params", "unpinnable"))
     # strings the JSON must escape or pass through exactly: a non-ASCII letter (2 bytes) and a 4-byte character, the
     # control characters U+0001 and U+001F, the named escapes, a quote and a backslash, and DEL, which is not escaped
     c.execute("UPDATE record SET run_id = ?, tool_interposer = ?, tested_version = ? WHERE record_id = 1",
               ("run-\u00e9-\u0001-\u001f", "q\"b\\n\n\t\r\b\f\x7f", "1.2.3-\u00e9\U0001d11e"))
+    # latencyLineMs, rules and a cell's latencyMs (section 3.5): shortest decimals that read back the same double
+    c.execute("UPDATE record SET latency_line_ms = 0.1, rules = 'plugin-qualify-rules/1.2' WHERE record_id = 1")
+    c.execute("UPDATE record SET latency_line_ms = 10, rules = 'plugin-qualify-rules/2.0' WHERE record_id = 3")
+    c.execute("UPDATE cell SET latency_ms = 1.3333333333333333 WHERE record_id = 1 AND ord = 0")
+    c.execute("UPDATE cell SET latency_ms = 0.30000000000000004 WHERE record_id = 1 AND ord = 1")
+    c.execute("UPDATE cell SET latency_ms = 2.0 WHERE record_id = 3 AND ord = 0")
     c.execute("UPDATE record SET host_extensions = 1 WHERE record_id = 3")
     c.execute("UPDATE record SET adapter_params = NULL WHERE record_id = 3")
     for rid in (1, 2, 3):
         c.execute("UPDATE record SET layout_scheme = NULL, layout_sha256 = NULL WHERE record_id = ? AND ? <> 1", (rid, rid))
-    fill_nulls(c, "cell", "record_id = 1 AND ord = 0", skip=("rt_other_allocations", "rt_other_locks", "rt_other_syscalls"), bools=("rt_interposer", "rt_swept", "rt_sweep_applicable", "note_sweep_applicable"))
+    fill_nulls(c, "cell", "record_id = 1 AND ord = 0", skip=("rt_other_allocations", "rt_other_locks", "rt_other_syscalls", "latency_ms"), bools=("rt_interposer", "rt_swept", "rt_sweep_applicable", "note_sweep_applicable"))
     c.execute("UPDATE cell SET rt_other_allocations = 11, rt_other_locks = 12, rt_other_syscalls = 13 WHERE record_id = 1 AND ord = 0")
     c.execute("UPDATE cell SET rt_own_threads = 2 WHERE record_id = 1 AND ord = 1")   # own threads, and no other-thread counts
     c.execute("UPDATE cell SET rt_interposer = 0, rt_swept = 0, rt_sweep_applicable = 0, rt_blocks = 0, rt_allocations = 0, rt_locks = 0, rt_syscalls = 0 WHERE record_id = 1 AND ord = 1")

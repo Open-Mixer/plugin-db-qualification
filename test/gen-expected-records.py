@@ -8,8 +8,9 @@ the reader compares with pqdb_record_json, byte for byte.
     gen-expected-records.py <qualification_db.py> <records.sqlite> <out dir>
 
 The exporter's own tree does not yet map the three fields section 3.5 added (hostExtensions, rtSafety.ownThreads and
-rtSafety.otherThreads); this script adds them after the exporter has run, where the reader writes them:
-hostExtensions before measuredAt, ownThreads and otherThreads before the events of rtSafety. Delete that part when the exporter
+rtSafety.otherThreads, latencyLineMs, rules and a cell's latencyMs); this script adds them after the exporter has run, where the reader writes them:
+hostExtensions before measuredAt, latencyLineMs and rules after it, a cell's latencyMs after its latency (the order of
+plugin-qualify's record), ownThreads and otherThreads before the events of rtSafety. Delete that part when the exporter
 maps them itself and the files below are unchanged. A document is the compact JSON of one record, no trailing newline.
 Usage of the fixture store: make-fixtures.py <dir> writes <dir>/records.sqlite."""
 import importlib.util, json, os, sqlite3, sys
@@ -37,6 +38,28 @@ def main(module, store, out_dir):
         if ext == 1:
             names = [r[0] for r in db.execute("SELECT extension FROM record_extension WHERE record_id = ? ORDER BY ord", (rid,))]
             doc = before(doc, "measuredAt", {"hostExtensions": names})
+        lm, rules = db.execute("SELECT latency_line_ms, rules FROM record WHERE record_id = ?", (rid,)).fetchone()
+        add = {}
+        if lm is not None:
+            add["latencyLineMs"] = float(lm) if float(lm) != int(lm) else int(lm)    # JSON.stringify writes 10, not 10.0
+        if rules is not None:
+            add["rules"] = rules
+        if add:
+            out = {}
+            for k, v in doc.items():
+                out[k] = v
+                if k == "measuredAt":
+                    out.update(add)
+            doc = out
+        lat = [r[0] for r in db.execute("SELECT latency_ms FROM cell WHERE record_id = ? ORDER BY ord", (rid,))]
+        for c, v in zip(doc["measurements"]["grid"], lat):
+            if v is not None:
+                v = float(v) if float(v) != int(v) else int(v)
+                keys = list(c)
+                pos = keys.index("latency") + 1 if "latency" in c else 3
+                c.update({k: c.pop(k) for k in keys[pos:]})      # move what follows to the end,
+                c["latencyMs"] = v                               # put latencyMs where it belongs,
+                c.update({k: c.pop(k) for k in keys[pos:]})      # and the rest after it
         cells = db.execute("SELECT rt_interposer, rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls "
                            "FROM cell WHERE record_id = ? ORDER BY ord", (rid,)).fetchall()
         for c, (interposer, own, oa, ol, osy) in zip(doc["measurements"]["grid"], cells):

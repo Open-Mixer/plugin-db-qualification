@@ -22,7 +22,8 @@ WORDS = {
         "PROBE_REASONS": ["on-request"],
         "PROBE_OUTCOMES": ["probe.ok", "probe.crashed"],
         "PROBE_SIGNALS": ["SIGSEGV", "SIGABRT"]}),
-    "hosting": ("1.0.0", {"HOSTING_CODES": ["hosting.ok", "hosting.refused"]}),
+    # no "hosting": this pass the hosting codes stay in omx-clap-core's data/hosting*.json and there is no hosting domain
+    # (the store's hosting exception); the reader skips them, and its test hosting-skip-ends fails if one is written here
     "qualification": ("1.1.0", {
         "QUALIFICATION_HOST_CLASSES": ["rpi5", "x86-64"],
         "QUALIFICATION_SET_TIERS": ["reference", "provisional", "hardware"],

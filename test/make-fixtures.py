@@ -319,6 +319,16 @@ def main(out):
     build(p("user-v2.sqlite"), 1, USER, version=2)
     build(p("base-v0.sqlite"), 0, BASE, version=0)
     build(p("base-bad-adapter-code.sqlite"), 0, BASE, adapter_code_override="omx-clap-host.signal-SIGBUS")
+    # the hosting exception: the store records the row `hosting` and its word_check columns (BASE does); a hosting word
+    # no package holds is not checked by the reader, a word of any other column is
+    build(p("base-hosting-word.sqlite"), 0, BASE)
+    c = sqlite3.connect(p("base-hosting-word.sqlite"))
+    c.execute("UPDATE verdict SET deciding = 'hosting.held-by-no-package' WHERE record_id = 1 AND ord = 1")
+    c.commit(); c.close()
+    build(p("base-bad-rating.sqlite"), 0, BASE)
+    c = sqlite3.connect(p("base-bad-rating.sqlite"))
+    c.execute("UPDATE verdict SET rating = 'excellent' WHERE record_id = 1 AND ord = 0")
+    c.commit(); c.close()
     build(p("user-filler.sqlite"), 1, USER, filler=True)
     hot_journal(p("user-filler.sqlite"), p("user-hot.sqlite"))
     # the scopes: the system layer, the home's layer and a decoy under an XDG_DATA_HOME

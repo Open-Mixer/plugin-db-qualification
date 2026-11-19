@@ -335,6 +335,8 @@ static int snapshot(const char *dir, ent *e)
     int n = 0;
     while (d && (de = readdir(d))) {
         struct stat st;
+        if (strcmp(de->d_name, "..") == 0)      /* the parent is the shared temporary directory: not this store's */
+            continue;
         char p[600];
         snprintf(p, sizeof p, "%s/%s", dir, de->d_name);
         stat(p, &st);

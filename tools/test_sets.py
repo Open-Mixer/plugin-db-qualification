@@ -32,8 +32,10 @@ spec.loader.exec_module(sets)
 
 PKG = "plugin-qualification-records"
 # the reader's packages beside the records package (this repository's qualification store spec, section 7)
-DEB_NAMES = [PKG, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db"]
-RPM_NAMES = [PKG, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db"]
+DEB_NAMES = [PKG, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db",
+             "plugin-qualification-db-schema", "plugin-qualification-db-write"]
+RPM_NAMES = [PKG, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db",
+             "plugin-qualification-db-schema", "plugin-qualification-db-write"]
 SPEC = os.path.join("packaging", f"{PKG}.spec")
 CELLS = ("fedora44-48000-512", "fedora44-96000-256")
 with open(os.path.join(ROOT, "debian", "changelog"), encoding="utf-8") as _f:
@@ -198,7 +200,7 @@ class Check(Tree):
                 if os.path.exists(self.path("debian", f"{n}.{ext}")):
                     os.remove(self.path("debian", f"{n}.{ext}"))
 
-    def test_the_four_package_layout_passes(self):
+    def test_the_six_package_layout_passes(self):
         self.layout()
         self.assertEqual(sets.problems(self.root), [])
         for n in DEB_NAMES[1:]:
@@ -207,18 +209,18 @@ class Check(Tree):
                     f.write("x\n")
         self.assertEqual(sets.problems(self.root), [])
 
-    def test_a_fifth_binary_package_is_refused(self):
+    def test_a_seventh_binary_package_is_refused(self):
         self.layout(deb=DEB_NAMES[1:] + ["libplugin-qualification-db-extra"])
         self.assertIn("debian/control: the binary packages are exactly", self.problems())
 
     def test_a_missing_binary_package_is_refused(self):
-        self.layout(deb=["libplugin-qualification-db-dev", "plugin-qualification-db"])
+        self.layout(deb=DEB_NAMES[2:4])
         self.assertIn("debian/control: the binary packages are exactly", self.problems())
 
-    def test_a_fifth_rpm_package_or_a_missing_one_is_refused(self):
+    def test_a_seventh_rpm_package_or_a_missing_one_is_refused(self):
         self.layout(rpm=RPM_NAMES[1:] + ["libplugin-qualification-db-extra"])
         self.assertIn("the %package lines are exactly", self.problems())
-        self.layout(rpm=RPM_NAMES[2:])
+        self.layout(rpm=RPM_NAMES[2:5])
         self.assertIn("the %package lines are exactly", self.problems())
 
     def test_a_file_of_no_package_is_refused_for_every_kind(self):

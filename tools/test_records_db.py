@@ -82,9 +82,17 @@ def contract_dir():
         doc = json.loads(git_show(clone, HOSTING_REF if dom == "hosting" else REF, f"contract.d/{dom}/{dom}.json"))
         if dom == "qualification":
             # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
-            # in its line 3; until its domain publishes the item the fixture adds it
+            # in its line 3, and the words of the pin verdicts and the history (QUALIFICATION_PIN_VERDICTS, _HISTORY_MOVES, _HISTORY_REASONS,
+            # from plugin-qualify's pins-file.ts and history-adjust.ts); until its domain publishes the items the fixture adds them
             doc["components"]["schemas"].setdefault("QUALIFICATION_ADAPTER_HOSTS", {
                 "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_PIN_VERDICTS", {
+                "oneOf": [{"const": w} for w in ("in-process", "isolated", "refused")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_MOVES", {
+                "oneOf": [{"const": w} for w in ("demote", "promote", "none")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_REASONS", {
+                "oneOf": [{"const": "history." + w} for w in ("crashed", "xruns-grouped", "crashed-alone", "steady", "no-record",
+                                                              "no-change", "not-liftable")]})
         with open(os.path.join(root, dom, dom + ".json"), "w") as f:
             json.dump(doc, f)
     _contract["dir"] = root

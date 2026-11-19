@@ -10,8 +10,8 @@ Status: SPEC. Nothing here is built. Three changes follow it, in this repository
    its preconditions (section 3.4): the owners publish the words it checks;
 3. the reader: a C library and its command, `plugin-qualification-db`, with red-first tests.
 
-No consumer reads the database during the current release pass. The consumers switch in one change right after the
-console's 0.2.1 release; that change is not specified here.
+The consumers switch to the database in one change in the same release pass as changes 2 and 3, before the console's
+0.2.1 release (section 9, ruling 8); that change is made in the consumers' repositories and is not specified here.
 
 ## 1. Owner, and where this spec lives
 
@@ -720,9 +720,9 @@ lists (section 9, ruling 1).
     exporter alike) passes the round trip and fails this check.
 - **The old package and files.** Nothing is removed in this pass. `plugin-qualification-records` keeps installing
   every `<class>/<set>/` file byte for byte, and adds `qualification.sqlite` beside them. The package's name, its
-  Provides, Replaces and Breaks, and its dependencies stay as they are. This follows the owner's sequencing: no
-  consumer switches until after the console's 0.2.1 release, and the switch is one change. That change, the consumer
-  switch, is the one that stops installing the JSON files: in the same change the consumers read the database and the
+  Provides, Replaces and Breaks, and its dependencies stay as they are. The switch is one change, made in the same
+  release pass as this one, before the console's 0.2.1 release (section 9, ruling 8). That change, the consumer switch,
+  is the one that stops installing the JSON files: in the same change the consumers read the database and the
   package ships only `qualification.sqlite`. `records/` stays in this repository as the source the database is built
   from.
 
@@ -954,16 +954,17 @@ Decided by the owner (2026-11-19):
    precondition 2).
 7. **DECIDED (#17): whole-record shadowing.** A newer user record shadows the whole base record, at every cell, and the
    base is never deleted (section 4).
+8. **DECIDED (2026-11-19 17:10Z): the consumer switch is in this pass.** plugin-qualify-sync, plugin-hostd and any other
+   reader move to the database in one change, in the same release pass as changes 2 and 3, before the console's 0.2.1
+   release. plugin-qualify's release line and plugin-hostd's wait for it and tag once, with it.
 
 The records a device already holds in its `qualification_dir` are not migrated by this work; the consumer switch
 decides whether the device re-measures them or runs the same writer over that directory.
 
 ## 10. Out of scope
 
-- The consumer switch: plugin-qualify-sync, plugin-hostd and any other reader move to the database in one change right
-  after the console's 0.2.1 release. Until then no consumer opens it.
 - Any compatibility mechanism: no dual read of the old files and the database, no fallback from one to the other, no
   alias, no shim, no second format. If the switch seems to need one, it stops and asks the owner.
-- Removing the old files or the old package names: nothing is removed in this pass.
+- Removing the old package names. The JSON files stop being installed with the consumer switch (section 5), not before.
 - An upgrade path for a user layer at another `user_version`.
 - plugin-db's store and its judged and reference layers.

@@ -13,6 +13,7 @@ caller passes.
 import hashlib
 import json
 import os
+import pwd
 import re
 import sqlite3
 import subprocess
@@ -20,7 +21,11 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-SCHEMA_SQL = os.path.join(ROOT, "schema", "qualification.sql")
+# the DDL: beside the module when it is installed (plugin-qualification-db-schema's file is the one copy, the package
+# links nothing else), in schema/ of a checkout
+SCHEMA_SQL = os.path.join(HERE, "qualification.sql")
+if not os.path.exists(SCHEMA_SQL):
+    SCHEMA_SQL = os.path.join(ROOT, "schema", "qualification.sql")
 HEADER = os.path.join(ROOT, "include", "plugin-qualification-db", "pqdb.h")
 RECORD_SCHEMA = "plugin-qualify.qualification-record/1"
 PROVENANCE_SCHEMA = "plugin-qualify.distributed-provenance/1"
@@ -36,11 +41,17 @@ class Refusal(Exception):
         self.message = message
 
 
-def schema_version():
-    with open(HEADER, encoding="utf-8") as f:
-        m = re.search(r"^#define\s+PQDB_SCHEMA_VERSION\s+(\d+)", f.read(), re.M)
+def schema_version(schema=None):
+    """PQDB_SCHEMA_VERSION, as the DDL's header gives it ("The qualification store, user_version N"): the DDL is the one
+    place the writer reads it from, and tools/test_qualification_db_write.py holds it equal to the reader's header."""
+    path = schema or SCHEMA_SQL
+    try:
+        with open(path, encoding="utf-8") as f:
+            m = re.search(r"^-- The qualification store, user_version (\d+)", f.read(), re.M)
+    except OSError as e:
+        raise Refusal("schema-unreadable", f"{path}: {e}") from e
     if not m:
-        raise Refusal("schema-version", f"{HEADER} defines no PQDB_SCHEMA_VERSION")
+        raise Refusal("schema-version", f"{path} names no user_version in its header")
     return int(m.group(1))
 
 
@@ -801,17 +812,8 @@ class Writer:
         if not dot or not recname:
             raise Refusal("file-name", f"{label}: the name is <name>.<offer>.qualification.json")
         rec = _load(os.path.join(d, fname))
-        em = Emitter(self.checker, label)
-        scope = Scope({"record": {}, "plugin": {}})
-        em.obj(RECORD, rec, scope, "")
-        if rec["schema"] != RECORD_SCHEMA:
-            em.refuse("field-unmapped", "schema", f"expected {RECORD_SCHEMA}")
+        em, scope = parse_record(self.checker, label, rec)
         r, p = scope.rows["record"], scope.rows["plugin"]
-        # section 6.2: a CLAP record holds the host extensions the run offered (an empty list is data); an LV2 record none
-        if p["format"] == "clap" and "host_extensions" not in r:
-            em.refuse("field-absent", "hostExtensions", "a CLAP record holds the host extensions its run offered")
-        if p["format"] != "clap" and "host_extensions" in r:
-            em.refuse("field-unmapped", "hostExtensions", f"no column holds this field of a {p['format']} record")
         if not self.checker.ok("record", "offer", offer):
             em.refuse("word-unknown", "(file name)", f"{offer!r} is no word of {self.checker.describe('record', 'offer')}")
         # the probe output the record judged
@@ -827,11 +829,7 @@ class Writer:
             if key not in plugins:
                 plugins[key] = _insert(cur, "plugin", p)
             pid = plugins[key]
-            cols = dict(r)
-            cols.update(plugin_id=pid, set_id=sid, host_class=cls, offer=offer, name=recname)
-            rid = _insert(cur, "record", cols)
-            for kid in scope.kids:
-                _insert_tree(cur, kid, {"record_id": rid}, rid)
+            rid = _insert_record(cur, scope, pid, dict(set_id=sid, host_class=cls, offer=offer, name=recname))
             for cell in (k for k in scope.kids if k.table == "cell"):
                 ck = (pid, offer, cls, cell.cols["rate"], cell.cols["quantum"])
                 if ck in claims:
@@ -842,6 +840,59 @@ class Writer:
                             (rid,) + ck)
         except sqlite3.IntegrityError as e:
             raise Refusal("schema-refused", f"{label}: {e}") from e
+
+
+def _insert_record(cur, scope, pid, extra):
+    """The record row and its tree, from the rows `parse_record` made; `extra` holds set_id, host_class, offer, name."""
+    cols = dict(scope.rows["record"])
+    cols.update(extra, plugin_id=pid)
+    rid = _insert(cur, "record", cols)
+    for kid in scope.kids:
+        _insert_tree(cur, kid, {"record_id": rid}, rid)
+    return rid
+
+
+def parse_record(checker, label, rec):
+    """A record's value to its rows, refusing by name: section 3.5 (words, fields) and section 3.7 (the binary)."""
+    em = Emitter(checker, label)
+    scope = Scope({"record": {}, "plugin": {}})
+    em.obj(RECORD, rec, scope, "")
+    if rec["schema"] != RECORD_SCHEMA:
+        em.refuse("field-unmapped", "schema", f"expected {RECORD_SCHEMA}")
+    r, p = scope.rows["record"], scope.rows["plugin"]
+    # section 6.2: a CLAP record holds the host extensions the run offered (an empty list is data); an LV2 record none
+    if p["format"] == "clap" and "host_extensions" not in r:
+        em.refuse("field-absent", "hostExtensions", "a CLAP record holds the host extensions its run offered")
+    if p["format"] != "clap" and "host_extensions" in r:
+        em.refuse("field-unmapped", "hostExtensions", f"no column holds this field of a {p['format']} record")
+    check_binary(em, rec["binary"])
+    return em, scope
+
+
+def check_binary(em, binary):
+    """Section 3.7: the path relative, the list ordered, unique and not empty, the binary one of its entries, and the key
+    the SHA-256 of that entry. Each refusal names the path; nothing is made relative, sorted or removed."""
+    path = binary["path"]
+    if path.startswith("/"):
+        em.refuse("path-absolute", "binary.path", f"{path!r} is not relative to the item's install root")
+    files = binary["files"]
+    if not files:
+        em.refuse("files-empty", "binary.files", "the list holds no file")
+    seen = set()
+    for i, f in enumerate(files):
+        if f["path"] in seen:
+            em.refuse("files-duplicate", f"binary.files[{i}].path", f"{f['path']!r} is in the list twice")
+        seen.add(f["path"])
+    for i in range(1, len(files)):
+        if os.fsencode(files[i - 1]["path"]) > os.fsencode(files[i]["path"]):
+            em.refuse("files-unordered", f"binary.files[{i}].path",
+                      f"{files[i]['path']!r} comes after {files[i - 1]['path']!r}: the list is ascending by path, as bytes")
+    entry = next((f for f in files if f["path"] == path), None)
+    if entry is None:
+        em.refuse("binary-not-in-files", "binary.path", f"{path!r} is no entry of binary.files")
+    if entry["sha256"] != binary["sha256"]:
+        em.refuse("key-not-the-binary", "binary.sha256",
+                  f"{binary['sha256']} is not the SHA-256 of the entry {path!r} ({entry['sha256']})")
 
 
 def _load(path):
@@ -923,6 +974,180 @@ def build_base(records_dir, out, contract_dir, built_from_file=None, classes=Non
             raise Refusal("qualification-db.domain-too-old", f"the {dom} domain is at {domains.version[dom]}, below the floor {floor}")
     writer = Writer(domains, built_from(records_dir, built_from_file))
     writer.build(sets, out)
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# The layer writer (section 6.1): put and delete into the user or the system layer file
+# ---------------------------------------------------------------------------------------------------------------------
+LAYER_FILE = "qualification.sqlite"
+SYSTEM_LAYER = "/var/lib/omx/qualification/" + LAYER_FILE
+USER_LAYER = ".local/share/omx/qualification/" + LAYER_FILE
+
+
+def layer_path(scope, root=None):
+    """The layer file of a scope (section 2). `root`, for tests, names the directory that holds the file instead."""
+    if scope not in ("user", "system"):
+        raise Refusal("scope-unknown", f"{scope!r} is not a scope: user or system")
+    if root is not None:
+        return os.path.join(root, LAYER_FILE)
+    if scope == "system":
+        return SYSTEM_LAYER
+    return os.path.join(pwd.getpwuid(os.geteuid()).pw_dir, USER_LAYER)
+
+
+def _open_layer(path, version):
+    """An existing layer, opened read-write with foreign keys on, and checked: a store of this version, a user layer."""
+    try:
+        db = sqlite3.connect(path, isolation_level=None)
+        db.execute("PRAGMA foreign_keys = ON")
+        got = db.execute("PRAGMA user_version").fetchone()[0]
+        if got == 0:
+            db.close()
+            raise Refusal("not-a-store", f"{path}: user_version 0: not a qualification store")
+        if got != version:
+            db.close()
+            raise Refusal("schema-other", f"{path}: user_version {got}, this writer writes {version}")
+        layer = db.execute("SELECT user_layer FROM store_info").fetchone()
+    except sqlite3.DatabaseError as e:
+        raise Refusal("not-a-store", f"{path}: {e}") from e
+    if not layer or layer[0] != 1:
+        db.close()
+        raise Refusal("not-a-user-layer", f"{path}: store_info does not say a user layer")
+    return db
+
+
+def _words(cur, domains, checker):
+    """The domains the words were checked against, and the items of each word column (the layer holds the ones of its
+    last write)."""
+    cur.execute("DELETE FROM word_check")
+    cur.execute("DELETE FROM store_domain")
+    for dom in sorted(domains.version):
+        cur.execute("INSERT INTO store_domain (domain, version) VALUES (?, ?)", (dom, domains.version[dom]))
+    for tbl, col, dom, item in checker.rows():
+        cur.execute("INSERT INTO word_check (tbl, col, domain, item) VALUES (?, ?, ?, ?)", (tbl, col, dom, item))
+
+
+def _plugin(cur, p):
+    row = cur.execute("SELECT plugin_id FROM plugin WHERE sha256 = ? AND format = ? AND uri = ?",
+                      (p["sha256"], p["format"], p["uri"])).fetchone()
+    return row[0] if row else None
+
+
+def put(rec, *, scope, offer, host_class, contract_dir, root=None, schema=None):
+    """One record into the scope's layer, in one transaction: the layer's record of the same shadow key (sha256, format,
+    uri, offer, host_class) is replaced whole. `offer` and `host_class` are the key's other words; the name of the record
+    is its probe file's name without `.<offer>.probe.json`. A missing layer is created from the DDL. A refusal writes
+    nothing, not even the file."""
+    path = layer_path(scope, root)
+    schema = schema or SCHEMA_SQL
+    version = schema_version(schema)
+    domains = Domains(contract_dir)
+    checker = Checker(domains)
+    label = "record"
+    em = Emitter(checker, label)
+    for col, word in (("offer", offer), ("host_class", host_class)):
+        if not isinstance(word, str) or not checker.ok("record", col, word):
+            em.refuse("word-unknown", col, f"{word!r} is no word of {checker.describe('record', col)}")
+    if not isinstance(rec, dict):
+        em.refuse("field-type", "", "expected an object")
+    em, rows = parse_record(checker, label, rec)
+    r, p = rows.rows["record"], rows.rows["plugin"]
+    suffix = f".{offer}.probe.json"
+    pf = r["probe_file"]
+    if os.path.basename(pf) != pf or not pf.endswith(suffix) or pf == suffix:
+        em.refuse("file-name", "probe.file", f"{pf!r}: the name is <name>{suffix}")
+    extra = dict(set_id=None, host_class=host_class, offer=offer, name=pf[: -len(suffix)])
+    outdir = os.path.dirname(os.path.abspath(path))
+    if os.path.exists(path):
+        db = _open_layer(path, version)
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                _write(db.cursor(), domains, checker, rows, p, extra, label)
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+        finally:
+            db.close()
+        return
+    made = not os.path.isdir(outdir)
+    os.makedirs(outdir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".qualification-", suffix=".tmp", dir=outdir)
+    os.close(fd)
+    try:
+        os.unlink(tmp)
+        db = sqlite3.connect(tmp, isolation_level=None)
+        try:
+            db.execute("PRAGMA page_size = 4096")
+            db.execute("PRAGMA journal_mode = DELETE")
+            db.execute("PRAGMA foreign_keys = ON")
+            with open(schema, encoding="utf-8") as f:
+                db.executescript(f.read())
+            cur = db.cursor()
+            cur.execute("BEGIN")
+            cur.execute("INSERT INTO store_info (one, user_layer, record_schema, built_from) VALUES (1, 1, ?, NULL)", (RECORD_SCHEMA,))
+            _write(cur, domains, checker, rows, p, extra, label)
+            cur.execute("COMMIT")
+            db.execute(f"PRAGMA user_version = {version}")
+        finally:
+            db.close()
+        os.replace(tmp, path)
+    except BaseException:
+        for t in (tmp, tmp + "-journal"):
+            try:
+                os.unlink(t)
+            except FileNotFoundError:
+                pass
+        if made:
+            try:
+                os.rmdir(outdir)
+            except OSError:
+                pass
+        raise
+
+
+def _write(cur, domains, checker, rows, p, extra, label):
+    try:
+        _words(cur, domains, checker)
+        pid = _plugin(cur, p)
+        if pid is None:
+            pid = _insert(cur, "plugin", p)
+        else:
+            cur.execute("DELETE FROM record WHERE plugin_id = ? AND offer = ? AND host_class = ?",
+                        (pid, extra["offer"], extra["host_class"]))
+        rid = _insert_record(cur, rows, pid, extra)
+        for cell in (k for k in rows.kids if k.table == "cell"):
+            cur.execute("INSERT INTO claim (record_id, plugin_id, offer, host_class, rate, quantum) VALUES (?, ?, ?, ?, ?, ?)",
+                        (rid, pid, extra["offer"], extra["host_class"], cell.cols["rate"], cell.cols["quantum"]))
+    except sqlite3.IntegrityError as e:
+        raise Refusal("schema-refused", f"{label}: {e}") from e
+
+
+def delete(*, scope, sha256, format, uri, offer, host_class, root=None, schema=None):
+    """The layer's record of a shadow key, in one transaction. A key the layer does not hold, and a layer that is not
+    there, are no error and change nothing. Nothing is deleted from the base: it is no layer of a scope."""
+    if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
+        raise Refusal("field-type", f"--sha256: {sha256!r} is not 64 lower-case hex digits")
+    path = layer_path(scope, root)
+    if not os.path.exists(path):
+        return
+    db = _open_layer(path, schema_version(schema or SCHEMA_SQL))
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            cur = db.cursor()
+            pid = _plugin(cur, {"sha256": sha256, "format": format, "uri": uri})
+            if pid is not None:
+                cur.execute("DELETE FROM record WHERE plugin_id = ? AND offer = ? AND host_class = ?", (pid, offer, host_class))
+                if not cur.execute("SELECT 1 FROM record WHERE plugin_id = ? LIMIT 1", (pid,)).fetchone():
+                    cur.execute("DELETE FROM plugin WHERE plugin_id = ?", (pid,))
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------------------------------------------------

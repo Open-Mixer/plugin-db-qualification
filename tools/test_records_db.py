@@ -381,7 +381,10 @@ class Refusals(Base):
         self.refused("word-unknown", f, "plugin.format", "lv2", contract=c)
 
     def test_10_a_short_sha256_and_a_format_outside_the_set_are_refused(self):
-        f = self.one(lambda r: r["binary"].update(sha256=r["binary"]["sha256"][:63]))
+        def short(r):
+            r["binary"].update(sha256=r["binary"]["sha256"][:63])
+            r["binary"]["files"][0]["sha256"] = r["binary"]["sha256"]  # the key stays the binary's entry's (section 3.7)
+        f = self.one(short)
         self.refused("schema-refused", f)
         shutil.rmtree(os.path.join(self.tmp, "records"))
         f = self.one(lambda r: r["plugin"].update(format="vst3"))

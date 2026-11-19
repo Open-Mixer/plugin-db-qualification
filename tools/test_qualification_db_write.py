@@ -67,6 +67,11 @@ class Layer(unittest.TestCase):
         fn(r)
         return r
 
+    def other_offer(self):
+        """The record and the word of the other offer: the probe file's name carries the offer."""
+        other = "custom" if self.offer == "default" else "default"
+        return self.edited(lambda r: r["probe"].update(file=r["probe"]["file"].replace(f".{self.offer}.", f".{other}."))), other
+
     def export(self):
         with contextlib.closing(sqlite3.connect(self.db)) as db:
             return q.Exporter(db).export_record(1)
@@ -119,8 +124,8 @@ class Put(Layer):
 
     def test_another_offer_or_class_is_another_shadow_key(self):
         self.put()
-        other = "custom" if self.offer == "default" else "default"
-        self.put(offer=other)
+        rec, other = self.other_offer()
+        self.put(rec, offer=other)
         self.put(cls="x86-64")
         self.assertEqual(self.rows("SELECT count(*) FROM record"), [(3,)])
         self.assertEqual(self.rows("SELECT count(*) FROM plugin"), [(1,)])
@@ -255,8 +260,8 @@ class Delete(Layer):
 
     def test_delete_keeps_the_other_offer(self):
         self.put()
-        other = "custom" if self.offer == "default" else "default"
-        self.put(offer=other)
+        rec, other = self.other_offer()
+        self.put(rec, offer=other)
         q.delete(scope="user", root=self.root, **self.key())
         self.assertEqual(self.rows("SELECT offer FROM record"), [(other,)])
         self.assertEqual(self.rows("SELECT count(*) FROM plugin"), [(1,)])

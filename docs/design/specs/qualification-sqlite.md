@@ -1173,6 +1173,12 @@ and nothing reads it back from a file.
 | `judged-layer` (`judged-layer`) | `<record.qualification.json>`, a file argument | the record of a shadow key (`--sha256 --format --uri --offer --host-class`, `--layer` optional) through the reader (`query --json --records`); no file argument |
 | the distributed records' documentation (`distributed-records`) | describes the copy of the distributed records into `qualification_dir` | describes the base and the user layer of this section; no copy is described |
 
+**What does not move.** The measuring run's output (`plugin-qualify --out <dir>`) and this repository's `records/`
+stay record documents in a directory: `records/` is the corpus the base is built from (section 5), reviewed and
+versioned as JSON, and `--out` is how a measuring pass adds to it. The store replaces what a DEVICE keeps (the sync's
+layer and its `qualification_dir`), not the corpus; the base is built from `records/` and nothing builds `records/` from
+a store.
+
 **The state.** `SyncPlugin.record` is the shadow key of the record (`sha256`, `format`, `uri`, `offer`,
 `host_class`), not a file path, and `SYNC_STATE_SCHEMA` becomes `plugin-qualify.sync-state/2`. A state of the older
 schema is moved aside as `readSyncState` already moves an unreadable one, and every plugin is qualified again: no

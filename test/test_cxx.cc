@@ -10,12 +10,17 @@ int main()
 {
     pqdb_query q = PQDB_QUERY_ANY;
     const char *const *strings[] = { &q.sha256, &q.format, &q.uri, &q.offer, &q.host_class, &q.pkg_format, &q.pkg_name,
-                                     &q.pkg_version, &q.pkg_release, &q.pkg_distro, &q.pkg_arch };
+                                     &q.pkg_version, &q.pkg_release, &q.pkg_distro, &q.pkg_arch, &q.binary_path, &q.layer };
     int bad = 0;
     for (const char *const *s : strings)
         if (*s != nullptr)
             bad = 1;
     if (q.rate != -1 || q.quantum != -1)
+        bad = 1;
+    // positional, in the field order of section 6
+    pqdb_query p = { "s", "f", "u", "o", "h", 1, 2, "pf", "pn", "pv", "pr", "pd", "pa", "bp", "ly" };
+    if (p.sha256[0] != 's' || p.host_class[0] != 'h' || p.rate != 1 || p.quantum != 2 || p.pkg_arch[1] != 'a' ||
+        p.binary_path[0] != 'b' || p.layer[0] != 'l')
         bad = 1;
     std::printf("%s     PQDB_QUERY_ANY as C++11\n", bad ? "not ok" : "ok");
     return bad;

@@ -22,11 +22,18 @@ WORDS = {
         "PROBE_REASONS": ["on-request"],
         "PROBE_OUTCOMES": ["probe.ok", "probe.crashed"],
         "PROBE_SIGNALS": ["SIGSEGV", "SIGABRT"]}),
-    "hosting": ("1.0.0", {"HOSTING_CODES": ["hosting.ok", "hosting.refused"]}),
     "qualification": ("1.1.0", {
         "QUALIFICATION_HOST_CLASSES": ["rpi5", "x86-64"],
         "QUALIFICATION_SET_TIERS": ["reference", "provisional", "hardware"],
         "QUALIFICATION_HOST_PROFILES": ["omx-clap-host", "openmixer-console"],
+        "QUALIFICATION_ADAPTER_HOSTS": ["omx-clap-host", "mod-host", "jalv"],
+        # plugin-qualify's PIN_VERDICTS (src/pins-file.ts); HISTORY_REASON and the blockers of blockers()
+        # (src/history-adjust.ts), and the moves
+        "QUALIFICATION_PIN_VERDICTS": ["in-process", "isolated", "refused"],
+        "QUALIFICATION_HISTORY_BLOCKERS": ["refused", "unknown", "no-deciding-reason"],
+        "QUALIFICATION_HISTORY_MOVES": ["demote", "promote", "none"],
+        "QUALIFICATION_HISTORY_REASONS": ["history.crashed", "history.xruns-grouped", "history.crashed-alone", "history.steady",
+                                          "history.no-record", "history.no-change", "history.not-liftable"],
         "QUALIFICATION_OFFERS": ["default", "custom"],
         "QUALIFICATION_PACKAGE_FORMATS": ["deb", "rpm"],
         "QUALIFICATION_PACKAGE_DISTROS": ["trixie", "fc44", "fc45"],
@@ -57,6 +64,8 @@ def doc(domain, version, items):
             "components": {"schemas": schemas}}
 
 def write(root, variant):
+    # no hosting domain: this pass the hosting codes stay in omx-clap-core's data/hosting*.json (the store's hosting
+    # exception); the reader skips them, and hosting-skip-ends fails if a hosting domain document is written here
     for domain, (version, items) in WORDS.items():
         items = {k: list(v) for k, v in items.items()}
         if variant == "no-conditional" and domain == "qualification":

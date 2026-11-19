@@ -39,9 +39,9 @@ $(BUILD):
 	mkdir -p $(BUILD)
 
 # only pqdb_* is exported: src/pqdb.map names it and hides the rest
-$(BUILD)/$(SONAME): src/pqdb.c src/pqdb.map include/plugin-qualification-db/pqdb.h | $(BUILD)
+$(BUILD)/$(SONAME): src/pqdb.c src/pqdb_record.c src/pqdb_record.h src/pqdb.map include/plugin-qualification-db/pqdb.h | $(BUILD)
 	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) -fPIC $(INC) $(SQLITE_CFLAGS) $(DOMAIN_CFLAGS) -shared \
-	  -Wl,-soname,$(SONAME) -Wl,--version-script=src/pqdb.map $(LDFLAGS) src/pqdb.c -o $@ $(SQLITE_LIBS) $(DOMAIN_LIBS)
+	  -Wl,-soname,$(SONAME) -Wl,--version-script=src/pqdb.map $(LDFLAGS) src/pqdb.c src/pqdb_record.c -o $@ $(SQLITE_LIBS) $(DOMAIN_LIBS)
 	ln -sf $(SONAME) $(BUILD)/libplugin-qualification-db.so
 
 $(BUILD)/plugin-qualification-db: src/plugin-qualification-db.c $(BUILD)/$(SONAME)
@@ -79,9 +79,10 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	$(BUILD)/test_reader $(BUILD)/fixtures test/fixtures
 	LD_PRELOAD=$(abspath $(BUILD)/shim.so) PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) \
 	  $(BUILD)/test_reader $(BUILD)/fixtures $(abspath test/fixtures) scopes
+	sh tools/hosting-skip-ends.sh --self-test
 	sh test/test_nm.sh $(BUILD)/$(SONAME)
 	sh test/test_cxx.sh $(BUILD)
-	sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures
+	PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures $(abspath $(BUILD)/shim.so)
 	rm -rf $(BUILD)/stage
 	$(MAKE) install DESTDIR=$(abspath $(BUILD)/stage) PREFIX=/usr
 	sh test/test_install.sh $(abspath $(BUILD)/stage) $(LIBDIR)

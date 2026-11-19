@@ -82,6 +82,7 @@ CREATE TABLE record (
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
   host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
+  plugin_name    TEXT,                     -- plugin.name, the name the plugin gives itself; NULL: absent
   measured_at    TEXT NOT NULL,
   latency_line_ms REAL,                    -- latencyLineMs: the line the cells' latency_ms stand against; NULL: absent (a record from before it)
   rules          TEXT CHECK (rules IS NULL OR rules GLOB 'plugin-qualify-rules/[0-9]*.[0-9]*'),   -- the rules the verdicts were judged by, a name; NULL: absent
@@ -306,6 +307,54 @@ CREATE TABLE not_measured (                -- notMeasured[]
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
+CREATE TABLE record_history (              -- history[]: the adjust --history blocks
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  ord       INTEGER NOT NULL,
+  host_class TEXT NOT NULL,                -- hostClass, arch/cores/clock: a name
+  file      TEXT NOT NULL,                 -- the history file as it was named
+  at        TEXT NOT NULL,
+  key_uri   TEXT, key_digest TEXT,         -- key; both NULL: absent
+  found     INTEGER NOT NULL CHECK (found IN (0, 1)),
+  windows_solo INTEGER, windows_grouped INTEGER,             -- windows; both NULL: absent
+  summary_crashed INTEGER CHECK (summary_crashed IS NULL OR summary_crashed IN (0, 1)),
+  summary_raises_xruns INTEGER CHECK (summary_raises_xruns IS NULL OR summary_raises_xruns IN (0, 1)),   -- summary; both NULL: absent
+  unknown_keys INTEGER CHECK (unknown_keys IS NULL OR unknown_keys = 1),   -- 1: unknownKeys present (history_unknown_key, possibly none)
+  PRIMARY KEY (record_id, ord)
+) STRICT;
+
+CREATE TABLE history_unknown_key (         -- history[].unknownKeys.<name>
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  name      TEXT NOT NULL,
+  value     TEXT NOT NULL,                 -- as written in the history file
+  PRIMARY KEY (record_id, history_ord, name),
+  FOREIGN KEY (record_id, history_ord) REFERENCES record_history (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE history_verdict (             -- history[].verdicts[]
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  host      TEXT NOT NULL CHECK ((length(host) > 0 AND instr(host, ' ') = 0 AND instr(host, char(9)) = 0 AND instr(host, char(10)) = 0)),
+  measured  TEXT CHECK (measured IS NULL OR (length(measured) > 0 AND instr(measured, ' ') = 0 AND instr(measured, char(9)) = 0 AND instr(measured, char(10)) = 0)),   -- NULL: null
+  adjusted  TEXT CHECK (adjusted IS NULL OR (length(adjusted) > 0 AND instr(adjusted, ' ') = 0 AND instr(adjusted, char(9)) = 0 AND instr(adjusted, char(10)) = 0)),   -- NULL: null
+  move      TEXT NOT NULL CHECK ((length(move) > 0 AND instr(move, ' ') = 0 AND instr(move, char(9)) = 0 AND instr(move, char(10)) = 0)),
+  reason    TEXT NOT NULL CHECK ((length(reason) > 0 AND instr(reason, ' ') = 0 AND instr(reason, char(9)) = 0 AND instr(reason, char(10)) = 0)),
+  blocked_by INTEGER CHECK (blocked_by IS NULL OR blocked_by = 1),   -- 1: blockedBy present (history_blocked, possibly none)
+  PRIMARY KEY (record_id, history_ord, ord),
+  FOREIGN KEY (record_id, history_ord) REFERENCES record_history (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE history_blocked (             -- history[].verdicts[].blockedBy[]
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  verdict_ord INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  code      TEXT NOT NULL CHECK ((length(code) > 0 AND instr(code, ' ') = 0 AND instr(code, char(9)) = 0 AND instr(code, char(10)) = 0)),
+  PRIMARY KEY (record_id, history_ord, verdict_ord, ord),
+  FOREIGN KEY (record_id, history_ord, verdict_ord) REFERENCES history_verdict (record_id, history_ord, ord) ON DELETE CASCADE
+) STRICT;
+
 CREATE TABLE run_step (                    -- run.steps[]
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
   ord INTEGER NOT NULL,
@@ -314,6 +363,7 @@ CREATE TABLE run_step (                    -- run.steps[]
   code TEXT CHECK (code IS NULL OR (length(code) > 0 AND instr(code, ' ') = 0 AND instr(code, char(9)) = 0 AND instr(code, char(10)) = 0)),
   cpu_percent REAL, latency_frames INTEGER, midi_inputs_linked INTEGER, xruns INTEGER,
   pool_allocations_on INTEGER, pool_locks_on INTEGER, pool_syscalls_on INTEGER, pool_tasks_on_helpers INTEGER,
+  pool_dsp_load_off REAL, pool_dsp_load_on REAL, pool_xruns_off INTEGER, pool_xruns_on INTEGER,   -- the pool step's graph load and xruns, off and on; NULL: absent
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 

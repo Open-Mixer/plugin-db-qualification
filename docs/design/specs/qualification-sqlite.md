@@ -229,6 +229,7 @@ CREATE TABLE record (
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
   host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
+  plugin_name    TEXT,                     -- plugin.name, the name the plugin gives itself; NULL: absent
   measured_at    TEXT NOT NULL,
   latency_line_ms REAL,                    -- latencyLineMs: the line the cells' latency_ms stand against; NULL: absent (a record from before it)
   rules          TEXT CHECK (rules IS NULL OR rules GLOB 'plugin-qualify-rules/[0-9]*.[0-9]*'),   -- the rules the verdicts were judged by, a name; NULL: absent
@@ -453,6 +454,54 @@ CREATE TABLE not_measured (                -- notMeasured[]
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
+CREATE TABLE record_history (              -- history[]: the adjust --history blocks
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  ord       INTEGER NOT NULL,
+  host_class TEXT NOT NULL,                -- hostClass, arch/cores/clock: a name
+  file      TEXT NOT NULL,                 -- the history file as it was named
+  at        TEXT NOT NULL,
+  key_uri   TEXT, key_digest TEXT,         -- key; both NULL: absent
+  found     INTEGER NOT NULL CHECK (found IN (0, 1)),
+  windows_solo INTEGER, windows_grouped INTEGER,             -- windows; both NULL: absent
+  summary_crashed INTEGER CHECK (summary_crashed IS NULL OR summary_crashed IN (0, 1)),
+  summary_raises_xruns INTEGER CHECK (summary_raises_xruns IS NULL OR summary_raises_xruns IN (0, 1)),   -- summary; both NULL: absent
+  unknown_keys INTEGER CHECK (unknown_keys IS NULL OR unknown_keys = 1),   -- 1: unknownKeys present (history_unknown_key, possibly none)
+  PRIMARY KEY (record_id, ord)
+) STRICT;
+
+CREATE TABLE history_unknown_key (         -- history[].unknownKeys.<name>
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  name      TEXT NOT NULL,
+  value     TEXT NOT NULL,                 -- as written in the history file
+  PRIMARY KEY (record_id, history_ord, name),
+  FOREIGN KEY (record_id, history_ord) REFERENCES record_history (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE history_verdict (             -- history[].verdicts[]
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  host      TEXT NOT NULL CHECK (WORD(host)),
+  measured  TEXT CHECK (measured IS NULL OR WORD(measured)),   -- NULL: null
+  adjusted  TEXT CHECK (adjusted IS NULL OR WORD(adjusted)),   -- NULL: null
+  move      TEXT NOT NULL CHECK (WORD(move)),
+  reason    TEXT NOT NULL CHECK (WORD(reason)),
+  blocked_by INTEGER CHECK (blocked_by IS NULL OR blocked_by = 1),   -- 1: blockedBy present (history_blocked, possibly none)
+  PRIMARY KEY (record_id, history_ord, ord),
+  FOREIGN KEY (record_id, history_ord) REFERENCES record_history (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE history_blocked (             -- history[].verdicts[].blockedBy[]
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  verdict_ord INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  code      TEXT NOT NULL CHECK (WORD(code)),
+  PRIMARY KEY (record_id, history_ord, verdict_ord, ord),
+  FOREIGN KEY (record_id, history_ord, verdict_ord) REFERENCES history_verdict (record_id, history_ord, ord) ON DELETE CASCADE
+) STRICT;
+
 CREATE TABLE run_step (                    -- run.steps[]
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
   ord INTEGER NOT NULL,
@@ -461,6 +510,7 @@ CREATE TABLE run_step (                    -- run.steps[]
   code TEXT CHECK (code IS NULL OR WORD(code)),
   cpu_percent REAL, latency_frames INTEGER, midi_inputs_linked INTEGER, xruns INTEGER,
   pool_allocations_on INTEGER, pool_locks_on INTEGER, pool_syscalls_on INTEGER, pool_tasks_on_helpers INTEGER,
+  pool_dsp_load_off REAL, pool_dsp_load_on REAL, pool_xruns_off INTEGER, pool_xruns_on INTEGER,   -- the pool step's graph load and xruns, off and on; NULL: absent
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
@@ -613,6 +663,11 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
 | `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
+| `history_verdict.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` | exists |
+| `history_verdict.measured`, `.adjusted` | plugin-qualify | `qualification` | `QUALIFICATION_PIN_VERDICTS` (the `PIN_VERDICTS` of `pins-file.ts`) | added |
+| `history_verdict.move` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_MOVES` (`demote`, `promote`, `none`) | added |
+| `history_verdict.reason` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_REASONS` (`history.crashed`, `history.steady`, `history.no-record`, ...: `HISTORY_REASON`) | added |
+| `history_blocked.code` | plugin-qualify, omx-clap-core, plugin-hostd | `qualification`, `hosting`, `probe` | `QUALIFICATION_PIN_VERDICTS` (`refused`, `unknown`) and the items of `reason.code` | added |
 
 An adapter code is written `<host>.<kind>` or `<host>.<kind>-<parameter>` and stored as written. Its check splits it:
 `<host>` is a word of `QUALIFICATION_ADAPTER_HOSTS`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
@@ -635,6 +690,8 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | file name `<name>.<offer>.qualification.json` | `record.name`, `record.offer` |
 | `schema` | `record.schema` |
 | `plugin.format`, `plugin.id`, `binary.sha256` | `plugin.format`, `plugin.uri`, `plugin.sha256` (the key) |
+| `plugin.name` | `record.plugin_name` (NULL when absent): a name, per record, since the key does not fix it |
+| `provenance` | not stored: a record's provenance is its set's (`record_set`, `set_package`, `set_setting`), and a record of the user layer has none; the writer refuses it as `field-unmapped`, and the sync writes none |
 | (none) | `record.pkg_format`, `pkg_name`, `pkg_version`, `pkg_release`, `pkg_distro`, `pkg_arch`: NULL (below) |
 | `binary.path` | `record.binary_path`: the path RELATIVE TO THE INSTALL ROOT (section 3.7). An absolute one is refused (`path-absolute`); `records/` is rewritten once, not read in two forms (section 3.7) |
 | `binary.files[].path`, `.sha256` | `record_file.path`, `record_file.sha256`, in the list order of section 3.7 |
@@ -648,6 +705,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `run.steps[].step`, `.result`, `.code` | `run_step.step`, `.result`, `.code` |
 | `run.steps[].figures.cpuPercent`, `.latencyFrames`, `.midiInputsLinked`, `.xruns` | `run_step.cpu_percent`, `.latency_frames`, `.midi_inputs_linked`, `.xruns` |
 | `run.steps[].pool.allocationsOn`, `.locksOn`, `.syscallsOn`, `.tasksOnHelpers` | `run_step.pool_allocations_on`, `.pool_locks_on`, `.pool_syscalls_on`, `.pool_tasks_on_helpers` |
+| `run.steps[].pool.dspLoadOff`, `.dspLoadOn`, `.xrunsOff`, `.xrunsOn` | `run_step.pool_dsp_load_off`, `.pool_dsp_load_on`, `.pool_xruns_off`, `.pool_xruns_on` (NULL when absent) |
 | `tool.runner`, `.child`, `.interposer` | `record.tool_runner`, `.tool_child`, `.tool_interposer` |
 | `probe.file`, `.sha256`, `.bytes` | `record.probe_file`, `.probe_sha256`, `.probe_bytes` |
 | `probe.protocol.name`, `.version` | `record.probe_protocol`, `.probe_protocol_version` |
@@ -679,6 +737,10 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.behaviour.threads.before`, `.afterFirstInstantiate`, `.afterAllFreed` | `record.threads_*` |
 | `measurements.behaviour.features.required[]` | `feature_required.feature` |
 | `notMeasured[].dimension`, `.code` | `not_measured.*` |
+| `history[].hostClass`, `.file`, `.at`, `.key.uri`, `.key.digest`, `.found`, `.windows.solo`, `.windows.grouped`, `.summary.crashed`, `.summary.raisesXruns` | `record_history.*` (NULL when the object is absent) |
+| `history[].unknownKeys.<name>` | `history_unknown_key.name`, `.value`; presence: `record_history.unknown_keys` |
+| `history[].verdicts[].host`, `.measured`, `.adjusted`, `.move`, `.reason` | `history_verdict.*` (`measured`, `adjusted` NULL for a JSON null) |
+| `history[].verdicts[].blockedBy[]` | `history_blocked.code`; presence: `history_verdict.blocked_by` |
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
 | `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
 | `adapter.params.<name>` | `adapter_param.name`, `.number` or `.word`; presence: `record.adapter_params` (NULL with no `adapter` object, 1 when `params` is present, 0 when absent) |
@@ -1104,6 +1166,11 @@ and nothing reads it back from a file.
 | `memoryPass`, `isolatedPass`, `poolPass`, the adapter pass | each reads the record of a state entry by file name and writes it whole | each reads the record of the entry's shadow key (`query --json --records --layer user`) and `put`s it extended |
 | `pruneStale` | `readdirSync(qualification_dir)` for the stems of records and `readdirSync(descriptor_dir)` | the user layer's records as the reader lists them (`query --json --layer user`, deduplicated by shadow key), and the descriptor directory as today. A record is stale when the state before holds its key and the state after does not, or when its `uri` is a kept plugin's and its `sha256` is not one the state after keeps (the other bytes of a kept plugin). A stale record is removed by `delete`; a record another plugin of the state still names, two copies of one binary, is kept. The descriptor half is unchanged: a descriptor `<id>@<version>-<first 12 digits of the key>.json` is dropped by its id and those 12 digits, as `idAndHash` does. It returns the shadow keys removed, and the descriptor files removed, to log |
 | `pluginCounts` | `readdirSync(qualification_dir)`, parses each `*.qualification.json` for `plugin.format`, `plugin.id` and `tiers.offeredOn` | `counts --layer user --json` (system scope: the system layer, the sync's own records). A plugin is offered when any record of it has a `tier_offered` row, as `offeredOn` non-empty is today; the line `pluginCountsLine` prints is unchanged |
+| `adjust` (`adjust-cli`) | `--qualification-dir <dir>`: every `*.qualification.json` there | the records of the scope through the reader (`query --json --records`, the user layer over the base, `--scope user\|system`); `--qualification-dir` is removed with no alias, and no file is read |
+| `judge` (`judge-cli`) | `--qualification-dir <dir>`: where the judged record and the probe copy go | `put` of the judged record through the writer (`--scope user\|system`); `--qualification-dir` is removed with no alias, and no probe copy is written (section 3.7: the store keeps no probe bytes) |
+| `checkStderrKept` (`refused-stderr-kept`) | every `*.qualification.json` of a directory, refused rows only, and the probe copy beside each | the refused records of the scope through the reader (`query --json --records`); what it holds against them is the record's `probe_*` columns and `probe_end` rows, since no probe copy is kept; no directory is read |
+| `judged-layer` (`judged-layer`) | `<record.qualification.json>`, a file argument | the record of a shadow key (`--sha256 --format --uri --offer --host-class`, `--layer` optional) through the reader (`query --json --records`); no file argument |
+| the distributed records' documentation (`distributed-records`) | describes the copy of the distributed records into `qualification_dir` | describes the base and the user layer of this section; no copy is described |
 
 **The state.** `SyncPlugin.record` is the shadow key of the record (`sha256`, `format`, `uri`, `offer`,
 `host_class`), not a file path, and `SYNC_STATE_SCHEMA` becomes `plugin-qualify.sync-state/2`. A state of the older

@@ -102,6 +102,19 @@ static void jreal(buf *b, double v)
     bs(b, out);
 }
 
+/* a number as JSON.stringify writes it (latencyLineMs, latencyMs): the shortest of %.15g, %.16g and %.17g that reads back
+ * the same double, so 2.0 is 2 and 0.1 is 0.1 */
+static void jnum(buf *b, double v)
+{
+    char t[40];
+    for (int p = 15; p <= 17; p++) {
+        snprintf(t, sizeof t, "%.*g", p, v);
+        if (strtod(t, NULL) == v)
+            break;
+    }
+    bs(b, t);
+}
+
 /* a key of the object or array being written: a comma unless it is the first */
 static void key(buf *b, const char *k)
 {
@@ -144,7 +157,7 @@ static int null_of(sqlite3_stmt *st, const char *col, buf *b)
     return i < 0 || sqlite3_column_type(st, i) == SQLITE_NULL;
 }
 #define ANCHOR(st, col, b) (null_of(st, col, b) ? -1 : 1)
-/* kinds: T text, I integer, R real, B boolean (the columns of section 3.3 by the Python description's kinds) */
+/* kinds: T text, I integer, R real (as Python writes a float), N number (as JSON.stringify writes it), B boolean (the columns of section 3.3 by the Python description's kinds) */
 static void leaf(buf *b, sqlite3_stmt *st, const char *jk, const char *col, char kind)
 {
     int i = ci(st, col, b);
@@ -154,6 +167,7 @@ static void leaf(buf *b, sqlite3_stmt *st, const char *jk, const char *col, char
     switch (kind) {
     case 'I': jint(b, sqlite3_column_int64(st, i)); break;
     case 'R': jreal(b, sqlite3_column_double(st, i)); break;
+    case 'N': jnum(b, sqlite3_column_double(st, i)); break;
     case 'B': bs(b, sqlite3_column_int64(st, i) ? "true" : "false"); break;
     default: jstr(b, (const char *)sqlite3_column_text(st, i));
     }
@@ -218,6 +232,7 @@ static void cell(buf *b, ctx *c, sqlite3_stmt *st)
     LEAVES(b, st, { "rate", "rate", 'I' }, { "quantum", "quantum", 'I' }, { "outcome", "outcome", 'T' });
     OBJ(b, "latency", 0, LEAVES(b, st, { "declaredFrames", "latency_declared_frames", 'I' }, { "measuredFrames", "latency_measured_frames", 'I' },
                                  { "code", "latency_code", 'T' }, { "unmeasuredReason", "latency_unmeasured_reason", 'T' }));
+    leaf(b, st, "latencyMs", "latency_ms", 'N');
     OBJ(b, "cost", 0, {
         leaf(b, st, "median", "cost_median", 'R');
         OBJ(b, "percentile", 0, LEAVES(b, st, { "p", "cost_percentile_p", 'I' }, { "value", "cost_percentile_value", 'R' }));
@@ -277,6 +292,8 @@ static void record(buf *b, ctx *c, sqlite3_stmt *r)
     if (!null_of(r, "host_extensions", b))
         strings(b, c, "hostExtensions", 1, "SELECT extension FROM record_extension WHERE record_id = ?1 ORDER BY ord", 1, rid, 0);
     leaf(b, r, "measuredAt", "measured_at", 'T');
+    leaf(b, r, "latencyLineMs", "latency_line_ms", 'N');
+    leaf(b, r, "rules", "rules", 'T');
     OBJ(b, "run", 0, {
         leaf(b, r, "id", "run_id", 'T');
         ARR(b, "steps", 1, {

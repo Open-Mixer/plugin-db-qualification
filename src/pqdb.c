@@ -274,7 +274,7 @@ static int adapter_code_ok(const item_set *s, const char *word)
     if (!dot || (size_t)(dot - word) >= sizeof host || !has_item(s, "ADAPTER_CODE_KINDS"))
         return 0;
     snprintf(host, sizeof host, "%.*s", (int)(dot - word), word);
-    if (!in_items(s, host, "HOST_PROFILES"))
+    if (!in_items(s, host, "ADAPTER_HOSTS"))
         return 0;
     for (int i = 0; i < s->n; i++) {
         size_t l = strlen(s->it[i].item);

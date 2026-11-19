@@ -13,7 +13,7 @@ VERSION = 1
 def sha(c):
     return c * 64
 
-P1, P1X, P2, P3 = sha("a"), sha("b"), sha("c"), sha("d")
+P1, P1X, P2, P3, P4, P5 = sha("a"), sha("b"), sha("c"), sha("d"), sha("7"), sha("8")
 SYS_SHA, HOME_SHA, XDG_SHA = sha("1"), sha("2"), sha("3")
 
 # (table, column, domain, item): the word columns the fixtures fill, as section 3.4 names them
@@ -55,23 +55,34 @@ def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok
     """cost: (median, p, p value); lat: (declared, measured); mem: (first kb, per instance kb)."""
     return dict(rate=rate, quantum=quantum, cost=cost, lat=lat, mem=mem, outcome=outcome)
 
-def rec(key, offer, cls, cells, set=None, pkg=None, adapter_code=None, cell_code=None, verdict_rating="qualified"):
+def rec(key, offer, cls, cells, set=None, pkg=None, adapter_code=None, cell_code=None, verdict_rating="qualified",
+        bpath=None, files=None, layout=None, unpinnable=None, tested=None):
+    """bpath: the binary's path below its install root (default: the file's own name); files: the per-file list as
+    (path, sha256) in byte order of the path, which holds bpath at the key's SHA-256 (default: that one entry);
+    layout: (scheme, sha256); unpinnable: 1 for a record that holds it; tested: testedVersion."""
+    bpath = bpath or key[2].split(":")[-1] + (".clap" if key[1] == "clap" else ".so")
     return dict(key=key, offer=offer, cls=cls, cells=cells, set=set, pkg=pkg, adapter_code=adapter_code,
-                cell_code=cell_code, verdict_rating=verdict_rating)
+                cell_code=cell_code, verdict_rating=verdict_rating, bpath=bpath, files=files or [(bpath, key[0])],
+                layout=layout or (None, None), unpinnable=unpinnable, tested=tested)
 
 BASE = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", adapter_code="omx-clap-host.signal-SIGSEGV",
-        cell_code="omx-clap-host.resp-3", verdict_rating="conditional",
+        cell_code="omx-clap-host.resp-3", verdict_rating="conditional", layout=("elf-sections", sha("f")), tested="1.2.3",
         cells=[cell(48000, 256, (100.5, 95, 150.25), (64, 128), (2048, 512)),
                cell(96000, 256, (200.0, 95, 300.0), (256, None), (4096, 1024))]),
     rec((P1, "clap", "urn:p1"), "custom", "x86-64", set="fedora44-48000-256",
         cells=[cell(48000, 256, (101.0, 95, 151.0), (64, 130), (2000, 500))]),
     rec((P1, "clap", "urn:p1"), "default", "rpi5", set="zynthian-vangelis",
         cells=[cell(48000, 256, (300.0, 95, 450.0), (None, 200), None)]),
-    rec((P2, "clap", "urn:p2"), "default", "x86-64", set="fedora44-48000-256",
+    rec((P2, "clap", "urn:p2"), "default", "x86-64", set="fedora44-48000-256", unpinnable=1,
         cells=[cell(48000, 256, (80.0, None, None), (None, None), (1024, None))]),
-    rec((P3, "lv2", "urn:p3"), "default", "x86-64", set="fedora44-48000-256",
+    # an LV2 bundle: the list in byte order (a capital before a lower-case letter), the key the binary's entry
+    rec((P3, "lv2", "urn:p3"), "default", "x86-64", set="fedora44-48000-256", bpath="p3.so",
+        files=[("Z-extra.ttl", sha("5")), ("manifest.ttl", sha("6")), ("p3.so", P3), ("p3.ttl", sha("7"))],
         cells=[cell(48000, 256, (10.0, 95, 12.0), (32, 40), (512, 64), outcome="probe.crashed")]),
+    # the same file name below another directory, for the exact filter of binary_path
+    rec((P4, "clap", "urn:p4"), "default", "x86-64", set="fedora44-48000-256", bpath="Sub/p1.clap",
+        cells=[cell(48000, 256, (20.0, 95, 21.0), (1, 2), (3, 4))]),
 ]
 USER = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", pkg=("rpm", "clap-dexed", "1.1.0", "4.fc44", "fc44", "x86_64"),
@@ -79,11 +90,9 @@ USER = [
     rec((P1X, "clap", "urn:p1"), "default", "x86-64", cells=[cell(48000, 256, (5.0, 95, 6.0), (1, 2), (3, 4))]),
     rec((P2, "clap", "urn:p2"), "custom", "x86-64", cells=[cell(48000, 256, (7.0, 95, 8.0), (1, 2), (3, 4))]),
     rec((P2, "clap", "urn:p2"), "default", "rpi5", cells=[cell(48000, 256, (9.0, 95, 10.0), (1, 2), (3, 4))]),
+    # the same name in another case: a different path
+    rec((P5, "clap", "urn:p5"), "default", "x86-64", bpath="P1.clap", cells=[cell(48000, 256, (30.0, 95, 31.0), (1, 2), (3, 4))]),
 ]
-
-def binary_path(r):
-    """The main binary's path below its install root (section 3.7): the file's own name, whatever directory it is in."""
-    return r["key"][2].split(":")[-1] + (".clap" if r["key"][1] == "clap" else ".so")
 
 def word_checks(c):
     c.executemany("INSERT INTO store_domain VALUES (?, ?)", sorted(DOMAINS.items()))
@@ -127,11 +136,14 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
             '2026-11-19T00:00:00Z', 'run', 'runner', 'child', 'p.probe.json', ?, 10, 'probe', 1,
             'on-request', 'probe.ok', 1, 1, 0.5, 4, 'x86_64', 'zen4', 'cores-4', 'ghz-3', 0, 0,
             ?, ?, ?, ?, ?)""",
-                  (rid, pid, set_id, r["cls"], r["offer"], "rec%d" % rid, *pkg, binary_path(r), "e" * 64,
+                  (rid, pid, set_id, r["cls"], r["offer"], "rec%d" % rid, *pkg, r["bpath"], "e" * 64,
                    1 if code else None, "omx-clap-host" if code else None, 1 if code else None, code,
                    0 if code else None))
         # section 3.7: the list holds the binary's entry, and the key is that entry's SHA-256
-        c.execute("INSERT INTO record_file VALUES (?, 0, ?, ?)", (rid, binary_path(r), r["key"][0]))
+        for o, (path, digest) in enumerate(r["files"]):
+            c.execute("INSERT INTO record_file VALUES (?, ?, ?, ?)", (rid, o, path, digest))
+        c.execute("UPDATE record SET layout_scheme = ?, layout_sha256 = ?, unpinnable = ?, tested_version = ? WHERE record_id = ?",
+                  (*r["layout"], r["unpinnable"], r["tested"], rid))
         c.execute("INSERT INTO verdict VALUES (?, 0, 'omx-clap-host', 1, ?, 1, 'isolated', 'run', NULL)",
                   (rid, r["verdict_rating"]))
         c.execute("INSERT INTO verdict VALUES (?, 1, 'openmixer-console', 1, 'qualified', 1, 'in-process', "
@@ -216,6 +228,7 @@ def main(out):
     build(p("scope-xdg.sqlite"), 1, [rec((XDG_SHA, "clap", "urn:xdg"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))])])
     write_expect(p("expect-base.tsv"), reference([("base", BASE)]))
     write_expect(p("expect-merged.tsv"), reference([("user", USER), ("base", BASE)]))
+    write_expect(p("expect-user.tsv"), reference([("user", USER)]))
 
 if __name__ == "__main__":
     main(sys.argv[1])

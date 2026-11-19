@@ -118,6 +118,8 @@ static void mkdirs(const char *path)
 typedef struct {
     char layer[8], sha[65], format[8], uri[64], offer[16], cls[16], set[64], outcome[32];
     char pkg[6][32];
+    char bpath[64], layout_scheme[32], layout_sha[65], tested[32];
+    int unpinnable;
     int rate, quantum, cost_p, has_cost, has_latency, has_memory;
     double median, p_ns;
     long latency, mem_first, mem_per;
@@ -133,6 +135,11 @@ static int collect(const pqdb_result *x, void *ctx)
     cp(r->layer, 8, x->layer); cp(r->sha, 65, x->sha256); cp(r->format, 8, x->format); cp(r->uri, 64, x->uri);
     cp(r->offer, 16, x->offer); cp(r->cls, 16, x->host_class); cp(r->set, 64, x->set); cp(r->outcome, 32, x->outcome);
     for (int i = 0; i < 6; i++) { if (*pk[i]) cp(r->pkg[i], 32, *pk[i]); else strcpy(r->pkg[i], "(null)"); }
+    cp(r->bpath, 64, x->binary_path);
+    if (x->layout_scheme) cp(r->layout_scheme, 32, x->layout_scheme); else strcpy(r->layout_scheme, "(null)");
+    if (x->layout_sha256) cp(r->layout_sha, 65, x->layout_sha256); else strcpy(r->layout_sha, "(null)");
+    if (x->tested_version) cp(r->tested, 32, x->tested_version); else strcpy(r->tested, "(null)");
+    r->unpinnable = x->unpinnable;
     r->rate = x->rate; r->quantum = x->quantum; r->cost_p = x->cost_p; r->has_cost = x->has_cost;
     r->has_latency = x->has_latency; r->has_memory = x->has_memory; r->median = x->cost_median_ns; r->p_ns = x->cost_p_ns;
     r->latency = x->latency_frames; r->mem_first = x->mem_first_kb; r->mem_per = x->mem_per_instance_kb;
@@ -434,7 +441,12 @@ static void t20_query_any_fields(void)
 {
     pqdb_query q = PQDB_QUERY_ANY;
     const char *s[] = { q.sha256, q.format, q.uri, q.offer, q.host_class, q.pkg_format, q.pkg_name, q.pkg_version,
-                        q.pkg_release, q.pkg_distro, q.pkg_arch };
+                        q.pkg_release, q.pkg_distro, q.pkg_arch, q.binary_path, q.layer };
+    /* positional, in the field order of section 6: each position lands in its field (a struct's order is its contract) */
+    pqdb_query p = { "s", "f", "u", "o", "h", 1, 2, "pf", "pn", "pv", "pr", "pd", "pa", "bp", "ly" };
+    CHECK(strcmp(p.sha256, "s") == 0 && strcmp(p.host_class, "h") == 0 && p.rate == 1 && p.quantum == 2 &&
+          strcmp(p.pkg_arch, "pa") == 0 && strcmp(p.binary_path, "bp") == 0 && strcmp(p.layer, "ly") == 0,
+          "the positional order of pqdb_query is not the spec's");
     for (size_t i = 0; i < sizeof s / sizeof *s; i++)
         CHECK(s[i] == NULL, "string field %zu of PQDB_QUERY_ANY is not NULL", i);
     CHECK(q.rate == -1 && q.quantum == -1, "rate %d quantum %d", q.rate, q.quantum);
@@ -465,6 +477,166 @@ static void t18_verdict(void)
     CHECK(strcmp(v.rating, "conditional") == 0 && v.measured == 1 && v.qualified == 1 && v.deciding == NULL, "verdict fields");
     CHECK(pqdb_verdict_of(db, &r, "openmixer-console", &v) == 0 && strcmp(v.deciding, "probe.crashed") == 0, "deciding");
     CHECK(pqdb_verdict_of(db, &r, "no-such-host", &v) != 0, "unknown host");
+    pqdb_close(db);
+}
+
+/* ---- change 3, the cases 17 to 19 of section 8: identity, per-file lists, the filters ---- */
+static const char *txt(sqlite3_stmt *st, int i)
+{
+    return sqlite3_column_type(st, i) == SQLITE_NULL ? "(null)" : (const char *)sqlite3_column_text(st, i);
+}
+static sqlite3 *raw(const char *path)
+{
+    sqlite3 *h = NULL;
+    if (sqlite3_open_v2(path, &h, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) { fprintf(stderr, "cannot open %s\n", path); exit(2); }
+    return h;
+}
+static void spec17_identity(void)
+{
+    pqdb *db;
+    rows o;
+    pqdb_query q = any();
+    sqlite3 *h[2] = { raw(fx("user.sqlite")), raw(fx("base.sqlite")) };
+    int seen_layout = 0, seen_unpinnable = 0, seen_tested = 0;
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(walk(db, &q, &o) == 0 && o.n > 0, "walk");
+    for (int i = 0; i < o.n; i++) {
+        const row *r = &o.r[i];
+        sqlite3_stmt *st;
+        sqlite3 *l = strcmp(r->layer, "user") == 0 ? h[0] : h[1];
+        CHECK(sqlite3_prepare_v2(l, "SELECT r.binary_path, r.layout_scheme, r.layout_sha256, r.tested_version, "
+              "COALESCE(r.unpinnable, 0) FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id WHERE p.sha256 = ?1 AND "
+              "p.format = ?2 AND p.uri = ?3 AND r.offer = ?4 AND r.host_class = ?5", -1, &st, NULL) == SQLITE_OK, "prepare");
+        sqlite3_bind_text(st, 1, r->sha, -1, SQLITE_STATIC); sqlite3_bind_text(st, 2, r->format, -1, SQLITE_STATIC);
+        sqlite3_bind_text(st, 3, r->uri, -1, SQLITE_STATIC); sqlite3_bind_text(st, 4, r->offer, -1, SQLITE_STATIC);
+        sqlite3_bind_text(st, 5, r->cls, -1, SQLITE_STATIC);
+        CHECK(sqlite3_step(st) == SQLITE_ROW, "no record for result %d", i);
+        CHECK(strcmp(r->bpath, txt(st, 0)) == 0, "binary_path %s, the record's %s", r->bpath, txt(st, 0));
+        CHECK(strcmp(r->layout_scheme, txt(st, 1)) == 0, "layout_scheme %s, the record's %s", r->layout_scheme, txt(st, 1));
+        CHECK(strcmp(r->layout_sha, txt(st, 2)) == 0, "layout_sha256 %s, the record's %s", r->layout_sha, txt(st, 2));
+        CHECK(strcmp(r->tested, txt(st, 3)) == 0, "tested_version %s, the record's %s", r->tested, txt(st, 3));
+        CHECK(r->unpinnable == sqlite3_column_int(st, 4), "unpinnable %d, the record's %d", r->unpinnable, sqlite3_column_int(st, 4));
+        seen_layout += strcmp(r->layout_scheme, "(null)") != 0; seen_unpinnable += r->unpinnable; seen_tested += strcmp(r->tested, "(null)") != 0;
+        if (strcmp(r->layout_scheme, "(null)") == 0) CHECK(strcmp(r->layout_sha, "(null)") == 0, "a record with no layout gives NULL for both");
+        sqlite3_finalize(st);
+    }
+    CHECK(seen_layout > 0 && seen_unpinnable > 0 && seen_tested > 0, "the fixtures hold no layout, no unpinnable record or no tested version to read");
+    pqdb_close(db);
+    sqlite3_close(h[0]); sqlite3_close(h[1]);
+}
+
+typedef struct { char path[8][64], sha[8][65]; int n, stop_at; } flist;
+static int collect_file(const char *path, const char *sha, void *ctx)
+{
+    flist *f = ctx;
+    if (f->n < 8) { snprintf(f->path[f->n], 64, "%s", path); snprintf(f->sha[f->n], 65, "%s", sha); }
+    f->n++;
+    return f->stop_at && f->n == f->stop_at ? 7 : 0;
+}
+typedef struct { pqdb *db; sqlite3 *h[2]; int results, lists, bad; flist first_of_record; char last_key[200]; } fwalk;
+static int check_files(const pqdb_result *x, void *ctx)
+{
+    fwalk *w = ctx;
+    flist f;
+    char key[200];
+    sqlite3_stmt *st;
+    int i = 0;
+    memset(&f, 0, sizeof f);
+    w->results++;
+    if (pqdb_files(w->db, x, collect_file, &f) != 0) { w->bad++; printf("  pqdb_files refused %s %s\n", x->uri, x->offer); return 0; }
+    sqlite3_prepare_v2(w->h[strcmp(x->layer, "user") == 0 ? 0 : 1],
+        "SELECT f.path, f.sha256 FROM record_file f JOIN record r ON r.record_id = f.record_id JOIN plugin p ON p.plugin_id = r.plugin_id "
+        "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND r.offer = ?4 AND r.host_class = ?5 ORDER BY f.ord", -1, &st, NULL);
+    sqlite3_bind_text(st, 1, x->sha256, -1, SQLITE_STATIC); sqlite3_bind_text(st, 2, x->format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, x->uri, -1, SQLITE_STATIC); sqlite3_bind_text(st, 4, x->offer, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 5, x->host_class, -1, SQLITE_STATIC);
+    while (sqlite3_step(st) == SQLITE_ROW) {
+        if (i >= f.n || i >= 8 || strcmp(f.path[i], (const char *)sqlite3_column_text(st, 0)) || strcmp(f.sha[i], (const char *)sqlite3_column_text(st, 1))) {
+            w->bad++; printf("  list of %s %s differs at %d: got %s\n", x->uri, x->offer, i, i < f.n && i < 8 ? f.path[i] : "(none)");
+        }
+        i++;
+    }
+    sqlite3_finalize(st);
+    if (i != f.n) { w->bad++; printf("  list of %s %s has %d entries, the record %d\n", x->uri, x->offer, f.n, i); }
+    if (i == 0) { w->bad++; printf("  list of %s is empty\n", x->uri); }
+    w->lists++;
+    /* the cells of one record give one list */
+    snprintf(key, sizeof key, "%s/%s/%s/%s/%s", x->layer, x->sha256, x->uri, x->offer, x->host_class);
+    if (strcmp(key, w->last_key) == 0) {
+        if (f.n != w->first_of_record.n || (f.n > 0 && strcmp(f.path[0], w->first_of_record.path[0]))) { w->bad++; printf("  the cells of %s give other lists\n", key); }
+    } else {
+        w->first_of_record = f;
+        snprintf(w->last_key, sizeof w->last_key, "%s", key);
+    }
+    return 0;
+}
+static void spec18_files(void)
+{
+    pqdb *db;
+    pqdb_query q = any();
+    fwalk w;
+    flist f;
+    pqdb_result lv2 = { 0 };
+    memset(&w, 0, sizeof w);
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    w.db = db; w.h[0] = raw(fx("user.sqlite")); w.h[1] = raw(fx("base.sqlite"));
+    CHECK(pqdb_each(db, &q, check_files, &w) == 0, "walk");
+    CHECK(w.results > 0 && w.lists == w.results && w.bad == 0, "%d results, %d lists, %d wrong", w.results, w.lists, w.bad);
+    /* the LV2 bundle: byte order puts a capital before a lower-case letter, which no case-folding order does */
+    q.format = "lv2";
+    memset(&f, 0, sizeof f);
+    {
+        rows o;
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1, "the lv2 result");
+        if (o.n == 1) {
+            lv2.layer = o.r[0].layer; lv2.sha256 = o.r[0].sha; lv2.format = o.r[0].format; lv2.uri = o.r[0].uri;
+            lv2.offer = o.r[0].offer; lv2.host_class = o.r[0].cls; lv2.rate = o.r[0].rate; lv2.quantum = o.r[0].quantum;
+            CHECK(pqdb_files(db, &lv2, collect_file, &f) == 0 && f.n == 4, "%d entries", f.n);
+            CHECK(f.n == 4 && strcmp(f.path[0], "Z-extra.ttl") == 0 && strcmp(f.path[1], "manifest.ttl") == 0 &&
+                  strcmp(f.path[2], "p3.so") == 0 && strcmp(f.path[3], "p3.ttl") == 0, "the list is not in the record's order");
+            memset(&f, 0, sizeof f); f.stop_at = 2;
+            CHECK(pqdb_files(db, &lv2, collect_file, &f) == 7 && f.n == 2, "a non-zero return does not stop the walk and come back: %d", f.n);
+        }
+    }
+    pqdb_close(db);
+    sqlite3_close(w.h[0]); sqlite3_close(w.h[1]);
+}
+
+static void spec19_filters(void)
+{
+    pqdb *db;
+    rows o;
+    pqdb_query q = any();
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    q.binary_path = "p1.clap";
+    CHECK(walk(db, &q, &o) == 0 && o.n > 0, "p1.clap finds nothing");
+    for (int i = 0; i < o.n; i++) CHECK(strcmp(o.r[i].bpath, "p1.clap") == 0, "binary_path %s is not p1.clap", o.r[i].bpath);
+    q.binary_path = "Sub/p1.clap";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].uri, "urn:p4") == 0, "Sub/p1.clap: %d results", o.n);
+    q.binary_path = "P1.clap";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].uri, "urn:p5") == 0, "P1.clap: %d results", o.n);
+    q.binary_path = "p1.CLAP";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "another case matched: %d", o.n);
+    q.binary_path = "1.clap";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "a suffix matched: %d", o.n);
+
+    q = any(); q.layer = "user";
+    CHECK(walk(db, &q, &o) == 0 && matches_expect(&o, fx("expect-user.tsv")), "layer user is not every user record, unshadowed");
+    q = any(); q.layer = "base";
+    CHECK(walk(db, &q, &o) == 0 && matches_expect(&o, fx("expect-base.tsv")), "layer base is not the whole base, shadowed or not");
+    q = any(); q.layer = "user"; q.uri = "urn:p1"; q.offer = "default"; q.host_class = "x86-64";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 2, "the user records that shadow the base: %d", o.n);
+    q.layer = "base";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 2 && strcmp(o.r[0].layer, "base") == 0, "the base record the user one shadows: %d", o.n);
+    q = any(); q.layer = NULL;
+    CHECK(walk(db, &q, &o) == 0 && matches_expect(&o, fx("expect-merged.tsv")), "NULL is not the merged answer");
+    q.layer = "system";
+    CHECK(pqdb_each(db, &q, collect, &o) != 0, "an unknown layer name was accepted");
+    pqdb_close(db);
+    /* no user layer: layer user is empty, base is the base */
+    if (open_ok(fx("base.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open"); return; }
+    q = any(); q.layer = "user";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "an absent user layer gave %d results", o.n);
     pqdb_close(db);
 }
 
@@ -558,7 +730,9 @@ static const test TESTS[] = {
     { "08 another key is not shadowed", t08_other_key_not_shadowed, 0 }, { "09 package lookup", t09_package_lookup, 0 },
     { "10 read only", t10_read_only, 0 }, { "12 busy", t12_busy, 0 }, { "13 figures agree with qualcost", t13_figures, 0 },
     { "16 hot journal", t16_hot_journal, 0 }, { "17 adapter code in parts", t17_adapter_code, 0 },
-    { "18 verdict of a result", t18_verdict, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "18 verdict of a result", t18_verdict, 0 },
+    { "spec 17 the identity fields", spec17_identity, 0 }, { "spec 18 pqdb_files", spec18_files, 0 },
+    { "spec 19 binary_path and layer filters", spec19_filters, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

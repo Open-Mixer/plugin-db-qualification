@@ -17,6 +17,7 @@ LIBDIR   ?= $(PREFIX)/lib
 BINDIR   ?= $(PREFIX)/bin
 INCLUDEDIR ?= $(PREFIX)/include
 DATADIR  ?= $(PREFIX)/share
+MANDIR   ?= $(DATADIR)/man
 DESTDIR  ?=
 SQLITE_CFLAGS ?= $(shell pkg-config --cflags sqlite3)
 SQLITE_LIBS   ?= $(shell pkg-config --libs sqlite3)
@@ -51,11 +52,12 @@ $(BUILD)/plugin-qualification-db: src/plugin-qualification-db.c $(BUILD)/$(SONAM
 # built earlier (a staged test install) can carry another prefix
 # the DDL is installed beside the header (-dev): writers and test fixtures read it from there, with no checkout
 install: all
-	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(BINDIR) $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db \
+	install -d $(DESTDIR)$(MANDIR)/man1 $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(BINDIR) $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db \
 	  $(DESTDIR)$(DATADIR)/plugin-qualification-db
 	install -m 0755 $(BUILD)/$(SONAME) $(DESTDIR)$(LIBDIR)/
 	ln -sf $(SONAME) $(DESTDIR)$(LIBDIR)/libplugin-qualification-db.so
 	install -m 0755 $(BUILD)/plugin-qualification-db $(DESTDIR)$(BINDIR)/
+	install -m 0644 man/plugin-qualification-db.1 $(DESTDIR)$(MANDIR)/man1/
 	install -m 0644 include/plugin-qualification-db/pqdb.h $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db/
 	install -m 0644 schema/qualification.sql $(DESTDIR)$(DATADIR)/plugin-qualification-db/
 	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \

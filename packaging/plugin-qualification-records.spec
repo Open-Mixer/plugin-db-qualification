@@ -162,5 +162,6 @@ done
 %files -n plugin-qualification-db
 %license LICENSE
 %{_bindir}/plugin-qualification-db
+%{_mandir}/man1/plugin-qualification-db.1*
 
 %changelog

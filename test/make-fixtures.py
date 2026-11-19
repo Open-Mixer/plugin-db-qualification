@@ -41,20 +41,28 @@ WORD_CHECK = [
     ("verdict", "hosting", "qualification", "QUALIFICATION_VERDICT_HOSTINGS"),
     ("verdict", "arm", "qualification", "QUALIFICATION_VERDICT_ARMS"),
     ("verdict", "deciding", "probe", "PROBE_OUTCOMES"),
-    ("verdict", "deciding", "hosting", "HOSTING_CODES"),
+    ("verdict", "deciding", "hosting", "HOSTING_COST_CODES"),
+    ("verdict", "deciding", "hosting", "HOSTING_MEMORY_CODES"),
+    ("verdict", "deciding", "hosting", "HOSTING_LATENCY_CODES"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
     # the hosting columns (section 3.4): mixed with probe words, or hosting words only
     ("tier", "deciding", "probe", "PROBE_OUTCOMES"),
-    ("tier", "deciding", "hosting", "HOSTING_CODES"),
-    ("reason", "code", "hosting", "HOSTING_CODES"),
-    ("not_measured", "code", "hosting", "HOSTING_CODES"),
+    ("tier", "deciding", "hosting", "HOSTING_COST_CODES"),
+    ("tier", "deciding", "hosting", "HOSTING_MEMORY_CODES"),
+    ("tier", "deciding", "hosting", "HOSTING_LATENCY_CODES"),
+    ("reason", "code", "hosting", "HOSTING_COST_CODES"),
+    ("reason", "code", "hosting", "HOSTING_MEMORY_CODES"),
+    ("reason", "code", "hosting", "HOSTING_LATENCY_CODES"),
+    ("not_measured", "code", "hosting", "HOSTING_COST_CODES"),
+    ("not_measured", "code", "hosting", "HOSTING_MEMORY_CODES"),
+    ("not_measured", "code", "hosting", "HOSTING_LATENCY_CODES"),
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("adapter_cell", "code", "probe", "PROBE_SIGNALS"),
 ]
-DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "1.0.0", "plugin-db": "1.0.0"}
+DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.33.1", "plugin-db": "1.0.0"}
 
 def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok"):
     """cost: (median, p, p value); lat: (declared, measured); mem: (first kb, per instance kb)."""
@@ -244,14 +252,14 @@ def build_records(path):
     c.executemany("INSERT INTO probe_end VALUES (1, ?, ?, ?, ?, ?)", [(0, "process", "probe.ok", 0, None), (1, "exit", "probe.crashed", None, "SIGSEGV")])
     c.executemany("INSERT INTO cost_entry VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
     c.executemany("INSERT INTO reason (reason_id, record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (?, 1, ?, ?, ?, ?, ?, ?)",
-                  [(1, 0, None, 0, "cost", "conditional", "hosting.cost.high"), (2, 0, None, 1, "memory", "qualified", "hosting.memory.ok"),
-                   (3, None, 0, 0, "cost", "conditional", "hosting.cost.high")])
+                  [(1, 0, None, 0, "cost", "conditional", "hosting.cost.above-ceiling"), (2, 0, None, 1, "memory", "qualified", "hosting.memory.within-ceiling"),
+                   (3, None, 0, 0, "cost", "conditional", "hosting.cost.above-ceiling")])
     c.executemany("INSERT INTO reason_param VALUES (?, ?, ?, ?)", [(1, "coreFractionP95", 0.37, None), (1, "blocks", 40, None), (1, "basis", None, "median"), (3, "blocks", 40, None)])
     c.executemany("INSERT INTO tier VALUES (1, ?, 'omx-clap-host', 1, 1, 'qualified', ?, ?)", [("inProcess", None, None), ("isolated", "probe.crashed", 1)])
     c.executemany("INSERT INTO tier_offered VALUES (1, ?, ?)", [(0, "isolated"), (1, "inProcess")])
     c.execute("INSERT INTO unmeasured VALUES (1, 0, 'memory', 'limit-exceeded', 96000, 256)")
     c.executemany("INSERT INTO feature_required VALUES (1, ?, ?)", [(0, "state"), (1, "params")])
-    c.executemany("INSERT INTO not_measured VALUES (1, ?, ?, ?)", [(0, "latency", "hosting.not-taken")])
+    c.executemany("INSERT INTO not_measured VALUES (1, ?, ?, ?)", [(0, "latency", "hosting.latency.unmeasured")])
     c.executemany("INSERT INTO memory_run_cell VALUES (1, ?, ?, ?, ?)", [(0, 48000, 256, "probe.ok")])
     c.executemany("INSERT INTO rejudged_owe VALUES (1, ?, ?, ?)", [(0, "figures-unreadable", "cost")])
     c.commit()
@@ -330,24 +338,14 @@ def main(out):
     build(p("user-v2.sqlite"), 1, USER, version=2)
     build(p("base-v0.sqlite"), 0, BASE, version=0)
     build(p("base-bad-adapter-code.sqlite"), 0, BASE, adapter_code_override="omx-clap-host.signal-SIGBUS")
-    # the hosting exception: the store records the row `hosting` and its word_check columns (BASE does); a hosting word
-    # no package holds is not checked by the reader, a word of any other column is
-    build(p("base-hosting-word.sqlite"), 0, BASE)
-    c = sqlite3.connect(p("base-hosting-word.sqlite"))
-    c.execute("UPDATE verdict SET deciding = 'hosting.held-by-no-package' WHERE record_id = 1 AND ord = 1")
-    c.commit(); c.close()
-    # a column that also holds hosting words keeps its other items: a word of them that no item holds is refused
-    build(p("base-bad-deciding.sqlite"), 0, BASE)
-    c = sqlite3.connect(p("base-bad-deciding.sqlite"))
-    c.execute("UPDATE verdict SET deciding = 'probe.no-such-word' WHERE record_id = 1 AND ord = 1")
-    c.commit(); c.close()
-    # the three mixed columns and a hosting-only one: a word beginning `hosting.` that no package holds opens; any other
-    # word that no non-hosting item holds is refused
-    extra = {"not-measured": "INSERT INTO not_measured VALUES (1, 0, 'latency', '%s')",
+    # the hosting columns are checked like any other (section 3.4): in each of the three mixed columns and the hosting-only
+    # one, a hosting word of the package opens, a hosting word no package holds is refused, and so is any other unknown word
+    extra = {"verdict": "UPDATE verdict SET deciding = '%s' WHERE record_id = 1 AND ord = 1",
+             "not-measured": "INSERT INTO not_measured VALUES (1, 0, 'latency', '%s')",
              "tier": "INSERT INTO tier VALUES (1, 'inProcess', 'omx-clap-host', 1, 1, 'qualified', '%s', NULL)",
              "reason": "INSERT INTO reason (record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (1, 0, NULL, 0, 'cost', 'conditional', '%s')"}
     for kind, sql in extra.items():
-        for word, tag in (("probe.no-such-word", "bad"), ("hosting.held-by-no-package", "hosting")):
+        for word, tag in (("probe.no-such-word", "bad"), ("hosting.held-by-no-package", "unknown"), ("hosting.cost.above-ceiling", "ok")):
             build(p("base-%s-%s.sqlite" % (tag, kind)), 0, BASE)
             c = sqlite3.connect(p("base-%s-%s.sqlite" % (tag, kind)))
             c.execute(sql % word)

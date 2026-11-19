@@ -791,53 +791,33 @@ static void spec24_read_only(void)
         CHECK(strcmp(a[i].name, b[i].name) == 0 && a[i].size == b[i].size && a[i].mtime == b[i].mtime, "%s changed", a[i].name);
 }
 
-/* ---- the hosting exception (section 3.4): the reader does not open `hosting` and skips its columns ---- */
-static void hosting_open(void)
+/* ---- the hosting columns are checked like any other (section 3.4) ---- */
+static void hosting_columns(void)
 {
     pqdb *db;
     pqdb_error e;
-    rows o;
-    pqdb_query q = any();
-    /* (a) the store names `hosting` in store_domain and word_check, and the contract directory holds no such domain */
+    const struct { const char *kind, *column; } cols[] = { { "verdict", "verdict.deciding" }, { "not-measured", "not_measured.code" },
+                                                            { "tier", "tier.deciding" }, { "reason", "reason.code" } };
+    /* the store names `hosting` in store_domain, and the contract directory holds the domain: it opens */
     CHECK(open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db) == 0, "a store with a hosting row is refused");
     if (db) pqdb_close(db);
-    /* a hosting word that no package holds: not checked here, the writer checked it */
-    if (open_ok(fx("base-hosting-word.sqlite"), NULL, GOOD, &db) == 0) {
-        CHECK(walk(db, &q, &o) == 0 && o.n > 0, "walk");
-        pqdb_close(db);
-    } else CHECK(0, "a hosting word was checked by the reader");
-    /* a column that holds hosting, probe and qualification words: only the hosting words are skipped */
-    expect_refusal(fx("base-bad-deciding.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
-    CHECK(strstr(e.message, "verdict.deciding") && strstr(e.message, "probe.no-such-word"), "%s", e.message);
-    /* the other mixed columns and a hosting-only one: a `hosting.` word no package holds opens, any other unknown word is
-     * refused, naming the column and the word */
-    {
-        const struct { const char *kind, *column; } cols[] = { { "not-measured", "not_measured.code" }, { "tier", "tier.deciding" },
-                                                                { "reason", "reason.code" } };
-        for (size_t i = 0; i < sizeof cols / sizeof *cols; i++) {
-            char f[80];
-            snprintf(f, sizeof f, "base-bad-%s.sqlite", cols[i].kind);
-            expect_refusal(fx(f), NULL, GOOD, "qualification-db.word-unknown", &e);
-            CHECK(strstr(e.message, cols[i].column) && strstr(e.message, "probe.no-such-word"), "%s", e.message);
-            snprintf(f, sizeof f, "base-hosting-%s.sqlite", cols[i].kind);
-            CHECK(open_ok(fx(f), NULL, GOOD, &db) == 0, "a hosting word of %s was refused", cols[i].column);
-            if (db) pqdb_close(db);
-        }
+    for (size_t i = 0; i < sizeof cols / sizeof *cols; i++) {
+        char f[80];
+        /* a hosting word of the package opens */
+        snprintf(f, sizeof f, "base-ok-%s.sqlite", cols[i].kind);
+        CHECK(open_ok(fx(f), NULL, GOOD, &db) == 0, "a hosting word of the package was refused in %s", cols[i].column);
+        if (db) pqdb_close(db);
+        /* a hosting word no package holds is refused, naming the column and the word */
+        snprintf(f, sizeof f, "base-unknown-%s.sqlite", cols[i].kind);
+        expect_refusal(fx(f), NULL, GOOD, "qualification-db.word-unknown", &e);
+        CHECK(strstr(e.message, cols[i].column) && strstr(e.message, "hosting.held-by-no-package"), "%s", e.message);
+        /* so is any other word no item holds */
+        snprintf(f, sizeof f, "base-bad-%s.sqlite", cols[i].kind);
+        expect_refusal(fx(f), NULL, GOOD, "qualification-db.word-unknown", &e);
+        CHECK(strstr(e.message, cols[i].column) && strstr(e.message, "probe.no-such-word"), "%s", e.message);
     }
-    /* (b) nothing else narrowed: a word of another column is still refused, naming the column and the word */
     expect_refusal(fx("base-bad-rating.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
     CHECK(strstr(e.message, "verdict.rating") && strstr(e.message, "excellent"), "%s", e.message);
-}
-/* (c) hosting-skip-ends: while the reader skips the hosting columns, no contract directory the tests read may hold a
- * hosting domain document: once one exists the skip is to be removed (section 3.4). */
-static void hosting_skip_ends(void)
-{
-    const char *dirs[] = { "contract-good", "contract-no-conditional", "contract-old" };
-    for (size_t i = 0; i < sizeof dirs / sizeof *dirs; i++) {
-        char path[1100];
-        snprintf(path, sizeof path, "%s/hosting/hosting.json", contract(dirs[i]));
-        CHECK(access(path, F_OK) != 0, "%s exists: a hosting domain is there while the reader still skips the hosting columns; remove the skip", path);
-    }
 }
 
 /* ---- under test/shim.so ---- */
@@ -935,7 +915,7 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
-    { "hosting exception: opens, and nothing else narrowed", hosting_open, 0 }, { "hosting-skip-ends", hosting_skip_ends, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "hosting columns checked like any other", hosting_columns, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

@@ -22,8 +22,6 @@ WORDS = {
         "PROBE_REASONS": ["on-request"],
         "PROBE_OUTCOMES": ["probe.ok", "probe.crashed"],
         "PROBE_SIGNALS": ["SIGSEGV", "SIGABRT"]}),
-    # no "hosting": this pass the hosting codes stay in omx-clap-core's data/hosting*.json and there is no hosting domain
-    # (the store's hosting exception); the reader skips them, and its test hosting-skip-ends fails if one is written here
     "qualification": ("1.1.0", {
         "QUALIFICATION_HOST_CLASSES": ["rpi5", "x86-64"],
         "QUALIFICATION_SET_TIERS": ["reference", "provisional", "hardware"],
@@ -58,7 +56,12 @@ def doc(domain, version, items):
                      "x-stability": "experimental"},
             "components": {"schemas": schemas}}
 
-def write(root, variant):
+def write(root, variant, hosting):
+    # the hosting domain is omx-clap-core's own document (contract.d/hosting/hosting.json), copied as it is
+    d = os.path.join(root, "contract-" + variant, "hosting")
+    os.makedirs(d, exist_ok=True)
+    with open(hosting, "rb") as src, open(os.path.join(d, "hosting.json"), "wb") as f:
+        f.write(src.read())
     for domain, (version, items) in WORDS.items():
         items = {k: list(v) for k, v in items.items()}
         if variant == "no-conditional" and domain == "qualification":
@@ -72,6 +75,8 @@ def write(root, variant):
             f.write("\n")
 
 if __name__ == "__main__":
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "fixtures")
+    # usage: gen-contract-fixtures.py <omx-clap-core's contract.d/hosting/hosting.json> [<out dir>]
+    hosting = sys.argv[1]
+    out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(os.path.dirname(__file__), "fixtures")
     for v in ("good", "no-conditional", "old"):
-        write(out, v)
+        write(out, v, hosting)

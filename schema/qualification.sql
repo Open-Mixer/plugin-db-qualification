@@ -80,7 +80,7 @@ CREATE TABLE record (
   layout_scheme  TEXT,
   layout_sha256  TEXT,
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
-  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: a CLAP record's hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record has none
+  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
   measured_at    TEXT NOT NULL,
   run_id         TEXT NOT NULL,

@@ -227,7 +227,7 @@ CREATE TABLE record (
   layout_scheme  TEXT,
   layout_sha256  TEXT,
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
-  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: a CLAP record's hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record has none
+  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
   measured_at    TEXT NOT NULL,
   run_id         TEXT NOT NULL,
@@ -528,7 +528,7 @@ A present empty array or map is told from an absent one by one rule, which every
   records), `measurements.grid`, `measurements.grid[].rtSafety.events` (present with `rtSafety`, empty in 9,015
   cells), `measurements.behaviour.features.required` (present with `behaviour`, empty in 3,077 records),
   `notMeasured`, `run.steps`, `memoryRun.cells`;
-- A CLAP record's `hostExtensions` is always present (empty when the run offered none) and an LV2 record has none: `record.host_extensions` is 1 for the first and NULL for the second.
+- A CLAP record's `hostExtensions` is present (empty when the run offered none) when its probe reached the offer, and absent when the probe ended before it (a crash or a timeout: 254 of today's CLAP records); an LV2 record has none. `record.host_extensions` is 1 when the list is present and NULL otherwise. Such a CLAP record owes `figures-unreadable` when judged again (section 6.2); nothing guesses an empty list for it.
 - PRESENT ONLY WITH ROWS: `adapter.cells`, `probe.ends`, `measurements.unmeasured`, `rejudged.owes`.
 
 `binary.files` is in neither list: it is always present and never empty (section 3.7; every record of today holds at
@@ -717,8 +717,9 @@ lists (section 9, ruling 1).
 
 `PRAGMA user_version = 1` for this schema, set by the writer as the last statement of a build. The rule:
 
-- There is ONE version, `PQDB_SCHEMA_VERSION` (1), held once in `schema/qualification.sql` and compiled into the
-  reader and the writer from it. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
+- There is ONE version, `PQDB_SCHEMA_VERSION` (1). It is written in two places, the header line of
+  `schema/qualification.sql` (`user_version 1`), which the writer reads, and `pqdb.h`, which the reader compiles; a
+  test holds the two equal. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
   and 3 release with the consumer switch, section 9, ruling 8), so the DDL of section 3.7's amendment is version 1, and
   no store of an earlier shape exists to refuse. This holds only if no release of this repository ships a store before
   the code of this amendment lands (section 9, ruling 10; section 10): that code must land before this pass's
@@ -998,6 +999,7 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     file's (a user file opened as the base);
   - `qualification-db.schema-mismatch`: the base and the user layer are at different `user_version`s;
   - `qualification-db.schema-other`: a file's `user_version` is not the reader's `PQDB_SCHEMA_VERSION`;
+  - `qualification-db.layer-unknown`: a query's `layer` is not `user` or `base`;
   - `qualification-db.domain-too-old`: an installed domain's `info.version` is below the `store_domain.version` the
     file was checked against;
   - `qualification-db.word-unknown`: a word of a `word_check` column is in none of its items of the installed
@@ -1059,8 +1061,10 @@ through this repository's writer module (`tools/qualification_db.py`, the module
 installed with a command, `plugin-qualification-db-write` (section 7), which it runs the way it runs plugin-db's and
 the reader's commands:
 
-- `put --scope user|system`: one record, the JSON document of `plugin-qualify.qualification-record/1` on standard
-  input, in one transaction. It creates the layer from the installed DDL when the file is absent (section 2), checks
+- `put --scope user|system --offer .. --host-class ..`: one record, the JSON document of
+  `plugin-qualify.qualification-record/1` on standard input, in one transaction. The offer and the host class are
+  arguments, as `delete` takes them, because the record document carries neither; its `probe.file` must be
+  `<name>.<offer>.probe.json` for that offer, or it is refused as `file-name`. It creates the layer from the installed DDL when the file is absent (section 2), checks
   every word against the installed domains, applies section 3.7 (`path-absolute`, `binary-not-in-files`, `key-not-the-binary`,
   `files-unordered`, `files-duplicate`, `files-empty`) and replaces, whole, the layer's record of the same shadow key
   (section 4). A refusal names the code, the path and the word, and writes nothing;
@@ -1104,7 +1108,7 @@ function that does; a field the table says nothing decides is carried into the j
 | `plugin.format`, `plugin.id` | the judge's uri and branch, `rejudgeProfiles`, `runsOwed` | `plugin.format`, `plugin.uri` |
 | `plugin.version` | the pin's `integrity` only; no reason | `record.tested_version` |
 | `offer.id` | `rejudgeProfiles` (a CLAP host joins only its own offer) | `record.offer` |
-| `offer.clapExtensions` | `rtSafetyDocument` (a profile is judged only against the extensions it offers; any other list reads `unknown`, `hosting.clap.extensions-not-covered`), as `hostExtensions` | NEW: `record_extension` rows, in order, and `record.host_extensions` = 1 for a CLAP record (an empty list is data); absent from an LV2 record. Not stored before this amendment |
+| `offer.clapExtensions` | `rtSafetyDocument` (a profile is judged only against the extensions it offers; any other list reads `unknown`, `hosting.clap.extensions-not-covered`), as `hostExtensions` | NEW: `record_extension` rows, in order, and `record.host_extensions` = 1 for a CLAP record whose probe reached the offer (an empty list is data); NULL for an LV2 record and for a CLAP probe that ended before the offer, which owes `figures-unreadable`. Not stored before this amendment |
 | `grid[]` (its points, in order) | every function below; `blockFrames` is the first rt point's quantum | `cell` rows in `ord`, every cell of the record (the probe's points are a subset in the same order in every record of `records/`; the cells a memory-only pass added carry a footprint and no other figure) |
 | `grid[].rate`, `.quantum`, `.outcome` | `okPoints`, `cellOf`, `costOf`, `failedOutcome`, `isOutOfMemory` | `cell.rate`, `.quantum`, `.outcome` |
 | `grid[].latency.declaredFrames`, `.measuredFrames` | the CLAP line's `latency`; no reason | `cell.latency_declared_frames`, `.latency_measured_frames` |
@@ -1227,7 +1231,8 @@ makes it fail.
 24. **The columns of the row judge.** A fixture CLAP record round-trips with `hostExtensions` `["clap.log", "clap.params"]`, one
     with `[]`, and an LV2 record with none; a cell with `ownThreads: 2` and `otherThreads` of three counts reads back
     exactly, one with `otherThreads` of one count only is refused by the schema, and a CLAP record without
-    `hostExtensions` is refused by name. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
+    `hostExtensions` (a probe that ended before the offer) is stored with `host_extensions` NULL and owes
+    `figures-unreadable` when judged again. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
     dropped.
 
 ### Change 3: the reader

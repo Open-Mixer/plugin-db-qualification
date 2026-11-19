@@ -58,8 +58,11 @@ ABSENT = object()
 
 
 class Leaf:
-    def __init__(self, table, col, kind="text", req=False):
-        self.table, self.col, self.kind, self.req = table, col, kind, req
+    """`nullable`: a JSON null is a value (stored as NULL, exported as null), as the measured and adjusted verdicts of a
+    history block are; any other leaf is absent when NULL."""
+
+    def __init__(self, table, col, kind="text", req=False, nullable=False):
+        self.table, self.col, self.kind, self.req, self.nullable = table, col, kind, req, nullable
 
 
 class Present:
@@ -204,7 +207,7 @@ def _record():
     r = "record"
     return Obj({
         "schema": L(r, "schema"),
-        "plugin": Obj({"format": L("plugin", "format"), "id": L("plugin", "uri")}, req=True),
+        "plugin": Obj({"format": L("plugin", "format"), "id": L("plugin", "uri"), "name": O(r, "plugin_name")}, req=True),
         "binary": Obj({
             "path": L(r, "binary_path"),
             "sha256": L("plugin", "sha256"),
@@ -218,6 +221,28 @@ def _record():
         "measuredAt": L(r, "measured_at"),
         "latencyLineMs": O(r, "latency_line_ms", "real"),
         "rules": O(r, "rules"),
+        "history": Arr("record_history", Obj({
+            "hostClass": L("record_history", "host_class"),
+            "file": L("record_history", "file"),
+            "at": L("record_history", "at"),
+            "key": Obj({"uri": L("record_history", "key_uri"), "digest": L("record_history", "key_digest")}),
+            "found": L("record_history", "found", "bool"),
+            "windows": Obj({"solo": L("record_history", "windows_solo", "int"), "grouped": L("record_history", "windows_grouped", "int")}),
+            "summary": Obj({"crashed": L("record_history", "summary_crashed", "bool"),
+                            "raisesXruns": L("record_history", "summary_raises_xruns", "bool")}),
+            "unknownKeys": Map("history_unknown_key", by=(("record_id", "record_id"), ("history_ord", "ord")),
+                               flag=("record_history", "unknown_keys"), kind="text", cols=("name", "value")),
+            "verdicts": Arr("history_verdict", Obj({
+                "host": L("history_verdict", "host"),
+                "measured": Leaf("history_verdict", "measured", "text", True, True),
+                "adjusted": Leaf("history_verdict", "adjusted", "text", True, True),
+                "move": L("history_verdict", "move"),
+                "reason": L("history_verdict", "reason"),
+                "blockedBy": Arr("history_blocked", Leaf("history_blocked", "code", "text", True),
+                                 by=(("record_id", "record_id"), ("history_ord", "history_ord"), ("verdict_ord", "ord")),
+                                 flag=("history_verdict", "blocked_by")),
+            }), by=(("record_id", "record_id"), ("history_ord", "ord")), always=True),
+        })),
         "run": Obj({
             "id": L(r, "run_id"),
             "steps": Arr("run_step", Obj({
@@ -236,6 +261,10 @@ def _record():
                     "locksOn": O("run_step", "pool_locks_on", "int"),
                     "syscallsOn": O("run_step", "pool_syscalls_on", "int"),
                     "tasksOnHelpers": O("run_step", "pool_tasks_on_helpers", "int"),
+                    "dspLoadOff": O("run_step", "pool_dsp_load_off", "real"),
+                    "dspLoadOn": O("run_step", "pool_dsp_load_on", "real"),
+                    "xrunsOff": O("run_step", "pool_xruns_off", "int"),
+                    "xrunsOn": O("run_step", "pool_xruns_on", "int"),
                 }),
             }), always=True),
         }, req=True),
@@ -396,6 +425,11 @@ WORDS = {
     ("cost_entry", "host"): _PROFILE,
     ("tier", "host"): _PROFILE,
     ("record", "adapter_host"): [_q("ADAPTER_HOSTS")],
+    ("history_verdict", "host"): _PROFILE,
+    ("history_verdict", "measured"): [_q("PIN_VERDICTS")],
+    ("history_verdict", "adjusted"): [_q("PIN_VERDICTS")],
+    ("history_verdict", "move"): [_q("HISTORY_MOVES")],
+    ("history_verdict", "reason"): [_q("HISTORY_REASONS")],
     ("set_setting", "key"): [_q("SYNC_SETTINGS")],
     ("record", "offer"): [_q("OFFERS")],
     ("record", "pkg_format"): [_q("PACKAGE_FORMATS")],
@@ -423,6 +457,7 @@ WORDS = {
     ("verdict", "deciding"): [_HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
     ("tier", "deciding"): [_HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
     ("reason", "code"): [_HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
+    ("history_blocked", "code"): [_q("PIN_VERDICTS"), _HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
     ("not_measured", "code"): [_HOSTING],
     ("unmeasured", "code"): [_HOSTING],
     ("cell", "latency_code"): [_HOSTING],
@@ -576,6 +611,9 @@ class Emitter:
                 self.refuse("field-type", path, "expected non-empty text")
             scope.rows[node.table][node.col] = 1
             return
+        if v is None and node.nullable:
+            scope.rows[node.table][node.col] = None
+            return
         if not _type_ok(node.kind, v):
             self.refuse("field-type", path, f"expected {node.kind}, got {json.dumps(v)}")
         if (node.table, node.col) in WORDS and not self.checker.ok(node.table, node.col, v):
@@ -687,6 +725,8 @@ def _insert_tree(cur, row, parent, record_id):
     rowid = _insert(cur, row.table, cols)
     me = dict(parent)
     me["ord"] = cols.get("ord")
+    if row.table == "record_history":
+        me["history_ord"] = me["ord"]
     if row.table == "reason":
         me["reason_id"] = rowid
     for kid in row.kids:
@@ -967,7 +1007,7 @@ class Exporter:
         if isinstance(node, Leaf):
             val = scope[node.table][node.col]
             if val is None:
-                return ABSENT
+                return None if node.nullable else ABSENT
             if node.kind == "bool":
                 return bool(val)
             if node.kind == "real":

@@ -11,7 +11,10 @@ Status: SPEC. Nothing here is built. Three changes follow it, in this repository
 3. the reader: a C library and its command, `plugin-qualification-db`, with red-first tests.
 
 The consumers switch to the database in one change in the same release pass as changes 2 and 3, before the console's
-0.2.1 release (section 9, ruling 8); that change is made in the consumers' repositories and is not specified here.
+0.2.1 release (section 9, ruling 8); that change is made in the consumers' repositories. What this spec fixes of it is
+what the store must carry and answer for `plugin-qualify-sync`, which the store REPLACES the distributed JSON layer
+for (section 9, ruling 9): the binary identity and the pin (section 3.7), the sync's writing and its readers
+(section 6.1), and the reader's widening (section 6). The sync's own code is not specified here.
 
 ## 1. Owner, and where this spec lives
 
@@ -53,6 +56,24 @@ The spec is this repository's first design spec; each is named by its date and t
 | package fields (format, distro, arch words) | the measuring run (none today) | plugin-qualify's record format | `qualification`, the `package` object precondition 1 adds |
 | the database layout, `user_version`, the reader | this repository | this repository | plugin-db-qualification |
 
+### Ownership of the store, the writer and the readers
+
+Producer, changer and owner domain, for what the consumer switch adds (ruling (a), section 9):
+
+- **The store DDL, the reader, the writer and the packages `plugin-qualification-db-write` and
+  `plugin-qualification-db-schema`:** this repository produces them, changes them and owns them.
+- **The record content** (the figures, verdicts, tiers and cost of a record, the key and the binary path of
+  section 3.7): plugin-qualify (the judge and the sync) produces it, and this repository stores it. The layout of the
+  store and the rule that the key is the binary entry's SHA-256 are this repository's; what a record says is
+  plugin-qualify's.
+- **The per-file list** (the files a pin holds, section 3.7): plugin-hostd produces it (`--pin-files`), and this
+  repository stores it as given.
+- **The words:** the `plugin-db`, `machine`, `probe`, `hosting` and `qualification` domains, each its owner's, as the
+  table above says; the store checks against them and defines none.
+- **The readers:** plugin-qualify (the match, `qualify-rejudge`, `pruneStale` and `pluginCounts`), plugin-hostd's
+  `qualcost`, and omx-panel later. Each reads through `pqdb.h` or the command and is its own repository's; the answer
+  is this repository's.
+
 The database stores words and checks every word column against its owner's domain item; it never defines a word,
 and its DDL holds no list of words.
 
@@ -61,13 +82,14 @@ and its DDL holds no list of words.
 | file | path | shipped or written by | opened |
 | --- | --- | --- | --- |
 | base database | `/usr/share/omx/qualification/qualification.sqlite` | the package `plugin-qualification-records`, one per architecture, built at package build from `records/` | read only, immutable |
-| user layer, user scope | `<home>/.local/share/omx/qualification/qualification.sqlite`: the XDG data directory's default, `<home>` from `getpwuid(geteuid())`; `XDG_DATA_HOME` is not read | plugin-qualify-sync of that user, after the consumer switch; nobody before it | read only by readers; read-write by the writer only |
-| user layer, system scope | `/var/lib/omx/qualification/qualification.sqlite` (the system sync's `qualification_dir`) | `plugin-qualify-sync --system`, after the consumer switch | the same |
-| the DDL | `schema/qualification.sql` in this repository; installed as `<datadir>/plugin-qualification-db/qualification.sql` by `libplugin-qualification-db-dev`, named by the `schema` variable of `plugin-qualification-db.pc` (`pkg-config --variable=schema plugin-qualification-db`) | read by the writer at build and when it creates a user layer, and by test fixtures, from the installed file, with no checkout | |
+| user layer, user scope | `<home>/.local/share/omx/qualification/qualification.sqlite`: the XDG data directory's default, `<home>` from `getpwuid(geteuid())`; `XDG_DATA_HOME` is not read | plugin-qualify-sync of that user, the only writer of its records (section 6.1); nobody before the consumer switch | read only by readers; read-write by the writer only |
+| user layer, system scope | `/var/lib/omx/qualification/qualification.sqlite` (the place of today's system `qualification_dir`, whose files nothing reads after the switch) | `plugin-qualify-sync --system`, the only writer of its records (section 6.1) | the same |
+| the DDL | `schema/qualification.sql` in this repository; installed as `<datadir>/plugin-qualification-db/qualification.sql` by `plugin-qualification-db-schema` (section 7), named by the `schema` variable of `plugin-qualification-db.pc` (`pkg-config --variable=schema plugin-qualification-db`) | read by the writer at build and when it creates a user layer, and by test fixtures, from the installed file, with no checkout | |
 
-The base database sits beside today's `<host class>/<set>/` directories, which stay as they are (section 5). A
-database file in that directory is no `<host class>` directory, so `plugin-qualify-sync`'s distributed reader, which
-reads `<dir>/<host class>/` by name, does not see it.
+The base database sits beside today's `<host class>/<set>/` directories, which stay as they are until the consumer
+switch stops installing them (section 5). After the switch nothing reads them: `plugin-qualify-sync`'s distributed
+reader (`readDistributedLayer`, `matchDistributed`, `applyDistributed` of its `src/distributed-records.ts`) is
+removed, and the sync reads the base through the reader of section 6.
 
 **Scopes.** `PQDB_SCOPE_USER` reads the base and the home's user layer only; `PQDB_SCOPE_SYSTEM` reads the base and
 `/var/lib/omx/qualification/qualification.sqlite` only. Neither reads the other's layer. plugin-hostd takes
@@ -107,8 +129,11 @@ readable, and they are never part of the key.
   the table `word_check` names the owner domain item (or items) that hold its words: every word column has at least
   one row, filled at build from the domains (section 3.4). The writer refuses a word not in its items; the reader
   checks every distinct word at open (section 6). `WORD()` is only a shape check; no column is checked by shape alone.
-- A NAME is an identifier written by a program: an id, a path, a hash, a version, a time, a symbol. It is stored as
-  written and is not checked against a domain.
+- A NAME is an identifier written by a program: an id, a hash, a version, a time, a symbol. It is stored as written and
+  is not checked against a domain.
+- A RELATIVE PATH is a path below an install root (section 3.7): a name whose shape is checked.
+  `RELPATH(c)` below is `length(c) > 0 AND c NOT GLOB '/*' AND substr(c, -1) <> '/' AND instr(c, '//') = 0 AND instr('/' || c || '/', '/./') = 0 AND instr('/' || c || '/', '/../') = 0`:
+  not empty, not absolute, no empty, `.` or `..` segment. Its separator is `/`.
 - A NUMBER is stored as INTEGER (counts, rates, quanta, frames, kilobytes, bytes) or REAL (figures that may be
   fractional). A param's number (`reason_param.number`, `adapter_param.number`, `adapter_cell_param.number`) is column type `ANY` checked to be `integer` or `real`, so the round trip keeps an integer an integer and a fraction a fraction as the JSON had it. Every table is `STRICT`, so a value of the wrong type is refused at insert.
 - A SENTENCE, prose written for a person, is not stored. Section 3.5 lists every field of today's records and
@@ -120,7 +145,7 @@ readable, and they are never part of the key.
 
 ### 3.3 DDL
 
-`schema/qualification.sql` holds exactly this, with `WORD(c)` written out. Foreign keys are declared
+`schema/qualification.sql` holds exactly this, with `WORD(c)` and `RELPATH(c)` written out. Foreign keys are declared
 `ON DELETE CASCADE`; the writer runs with `PRAGMA foreign_keys = ON`.
 
 ```sql
@@ -197,13 +222,17 @@ CREATE TABLE record (
   pkg_release TEXT,
   pkg_distro  TEXT CHECK (pkg_distro IS NULL OR WORD(pkg_distro)),   -- e.g. trixie, fc45
   pkg_arch    TEXT CHECK (pkg_arch IS NULL OR WORD(pkg_arch)),       -- the package's own arch word: arm64, x86_64, all, noarch
-  -- binary
-  binary_path    TEXT NOT NULL,
+  -- binary: the main binary's path relative to its install root, and the identity rule of section 3.7
+  binary_path    TEXT NOT NULL CHECK (RELPATH(binary_path)),
   layout_scheme  TEXT,
   layout_sha256  TEXT,
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
+  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
+  plugin_name    TEXT,                     -- plugin.name, the name the plugin gives itself; NULL: absent
   measured_at    TEXT NOT NULL,
+  latency_line_ms REAL,                    -- latencyLineMs: the line the cells' latency_ms stand against; NULL: absent (a record from before it)
+  rules          TEXT CHECK (rules IS NULL OR rules GLOB 'plugin-qualify-rules/[0-9]*.[0-9]*'),   -- the rules the verdicts were judged by, a name; NULL: absent
   run_id         TEXT NOT NULL,
   tool_runner    TEXT NOT NULL,
   tool_child     TEXT NOT NULL,
@@ -249,13 +278,24 @@ CREATE TABLE record (
 ) STRICT;
 CREATE INDEX record_plugin  ON record (plugin_id, offer, host_class);
 CREATE INDEX record_package ON record (pkg_format, pkg_name, pkg_version, pkg_release, pkg_distro, pkg_arch);
+CREATE INDEX record_binary  ON record (binary_path);
 
-CREATE TABLE record_file (                 -- binary.files[]
+CREATE TABLE record_file (                 -- binary.files[]: the per-file list the pin matches on (section 3.7)
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  ord       INTEGER NOT NULL,              -- the list's order: ascending by path, bytewise (section 3.7)
+  path      TEXT NOT NULL CHECK (RELPATH(path)),   -- relative to the item's root, as the pin names it (section 3.7)
+  sha256    TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+  PRIMARY KEY (record_id, ord),
+  UNIQUE (record_id, path)
+) STRICT;
+CREATE INDEX record_file_sha256 ON record_file (sha256);
+
+CREATE TABLE record_extension (            -- hostExtensions[]: the CLAP host extensions the run offered the plugin (section 6.2)
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
   ord       INTEGER NOT NULL,
-  path      TEXT NOT NULL,
-  sha256    TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
-  PRIMARY KEY (record_id, ord)
+  extension TEXT NOT NULL CHECK (length(extension) > 0),   -- a name as the prober wrote it, e.g. clap.log
+  PRIMARY KEY (record_id, ord),
+  UNIQUE (record_id, extension)
 ) STRICT;
 
 CREATE TABLE record_version (              -- adapter.versions, rejudged.figures.adapter.versions
@@ -340,6 +380,7 @@ CREATE TABLE cell (                        -- measurements.grid[]
   quantum   INTEGER NOT NULL,
   outcome   TEXT NOT NULL CHECK (WORD(outcome)),
   latency_declared_frames INTEGER, latency_measured_frames INTEGER,
+  latency_ms REAL,                          -- latencyMs: the measured latency in ms at the cell's rate, as written; NULL: absent
   latency_code TEXT CHECK (latency_code IS NULL OR WORD(latency_code)),
   latency_unmeasured_reason TEXT CHECK (latency_unmeasured_reason IS NULL OR WORD(latency_unmeasured_reason)),
   cost_median REAL, cost_percentile_p INTEGER, cost_percentile_value REAL,
@@ -357,9 +398,12 @@ CREATE TABLE cell (                        -- measurements.grid[]
   rt_sweep_applicable INTEGER CHECK (rt_sweep_applicable IN (0, 1)),
   rt_blocks INTEGER, rt_allocations INTEGER, rt_locks INTEGER, rt_syscalls INTEGER,
   rt_thread_violations INTEGER, rt_process_errors INTEGER,
+  rt_own_threads INTEGER,                  -- threads the plugin started itself (judged under hosting.rt-safety.own-threads); NULL: not taken
+  rt_other_allocations INTEGER, rt_other_locks INTEGER, rt_other_syscalls INTEGER,   -- what threads other than the audio thread did; all three or none
   note_sweep_applicable INTEGER CHECK (note_sweep_applicable IN (0, 1)),
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR WORD(note_sweep_dialect)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
+  CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;
@@ -410,6 +454,54 @@ CREATE TABLE not_measured (                -- notMeasured[]
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
+CREATE TABLE record_history (              -- history[]: the adjust --history blocks
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  ord       INTEGER NOT NULL,
+  host_class TEXT NOT NULL,                -- hostClass, arch/cores/clock: a name
+  file      TEXT NOT NULL,                 -- the history file as it was named
+  at        TEXT NOT NULL,
+  key_uri   TEXT, key_digest TEXT,         -- key; both NULL: absent
+  found     INTEGER NOT NULL CHECK (found IN (0, 1)),
+  windows_solo INTEGER, windows_grouped INTEGER,             -- windows; both NULL: absent
+  summary_crashed INTEGER CHECK (summary_crashed IS NULL OR summary_crashed IN (0, 1)),
+  summary_raises_xruns INTEGER CHECK (summary_raises_xruns IS NULL OR summary_raises_xruns IN (0, 1)),   -- summary; both NULL: absent
+  unknown_keys INTEGER CHECK (unknown_keys IS NULL OR unknown_keys = 1),   -- 1: unknownKeys present (history_unknown_key, possibly none)
+  PRIMARY KEY (record_id, ord)
+) STRICT;
+
+CREATE TABLE history_unknown_key (         -- history[].unknownKeys.<name>
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  name      TEXT NOT NULL,
+  value     TEXT NOT NULL,                 -- as written in the history file
+  PRIMARY KEY (record_id, history_ord, name),
+  FOREIGN KEY (record_id, history_ord) REFERENCES record_history (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE history_verdict (             -- history[].verdicts[]
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  host      TEXT NOT NULL CHECK (WORD(host)),
+  measured  TEXT CHECK (measured IS NULL OR WORD(measured)),   -- NULL: null
+  adjusted  TEXT CHECK (adjusted IS NULL OR WORD(adjusted)),   -- NULL: null
+  move      TEXT NOT NULL CHECK (WORD(move)),
+  reason    TEXT NOT NULL CHECK (WORD(reason)),
+  blocked_by INTEGER CHECK (blocked_by IS NULL OR blocked_by = 1),   -- 1: blockedBy present (history_blocked, possibly none)
+  PRIMARY KEY (record_id, history_ord, ord),
+  FOREIGN KEY (record_id, history_ord) REFERENCES record_history (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE history_blocked (             -- history[].verdicts[].blockedBy[]
+  record_id INTEGER NOT NULL,
+  history_ord INTEGER NOT NULL,
+  verdict_ord INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  code      TEXT NOT NULL CHECK (WORD(code)),
+  PRIMARY KEY (record_id, history_ord, verdict_ord, ord),
+  FOREIGN KEY (record_id, history_ord, verdict_ord) REFERENCES history_verdict (record_id, history_ord, ord) ON DELETE CASCADE
+) STRICT;
+
 CREATE TABLE run_step (                    -- run.steps[]
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
   ord INTEGER NOT NULL,
@@ -418,6 +510,7 @@ CREATE TABLE run_step (                    -- run.steps[]
   code TEXT CHECK (code IS NULL OR WORD(code)),
   cpu_percent REAL, latency_frames INTEGER, midi_inputs_linked INTEGER, xruns INTEGER,
   pool_allocations_on INTEGER, pool_locks_on INTEGER, pool_syscalls_on INTEGER, pool_tasks_on_helpers INTEGER,
+  pool_dsp_load_off REAL, pool_dsp_load_on REAL, pool_xruns_off INTEGER, pool_xruns_on INTEGER,   -- the pool step's graph load and xruns, off and on; NULL: absent
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
@@ -483,15 +576,17 @@ CREATE TABLE rejudged_owe (                -- rejudged.owes[]
 
 A present empty array or map is told from an absent one by one rule, which every current record follows:
 
-- ALWAYS PRESENT with its parent, empty when it has no rows: `binary.files`, `verdicts`, `verdicts[].reasons`,
+- ALWAYS PRESENT with its parent, empty when it has no rows: `verdicts`, `verdicts[].reasons`,
   `cost`, `cost[].reasons`, `reasons[].params` (empty in 516 reasons today), `tiers.offeredOn` (empty in 4,856
   records), `measurements.grid`, `measurements.grid[].rtSafety.events` (present with `rtSafety`, empty in 9,015
   cells), `measurements.behaviour.features.required` (present with `behaviour`, empty in 3,077 records),
   `notMeasured`, `run.steps`, `memoryRun.cells`;
+- A CLAP record's `hostExtensions` is present (empty when the run offered none) when its probe reached the offer, and absent when the probe ended before it (a crash or a timeout: 254 of today's CLAP records); an LV2 record has none. `record.host_extensions` is 1 when the list is present and NULL otherwise. The row judge reads such a CLAP record's NULL as an empty list, exactly as the probe judge reads the absent `offer.clapExtensions` today (`hostExtensions: output.offer.clapExtensions ?? []`), so a storage move changes no verdict (section 6.2; ruling 11).
 - PRESENT ONLY WITH ROWS: `adapter.cells`, `probe.ends`, `measurements.unmeasured`, `rejudged.owes`.
 
-The writer refuses a record that breaks the rule (an absent array of the first list, a present empty array of the
-second), naming the file and the path.
+`binary.files` is in neither list: it is always present and never empty (section 3.7; every record of today holds at
+least one file). The writer refuses a record that breaks the rule (an absent array of the first list, a present empty
+array of the second, an absent or empty `binary.files`), naming the file and the path.
 
 The user-layer rule for `set_id` (NULL exactly when `store_info.user_layer` is 1) needs a subquery, which a `CHECK`
 cannot hold, so the DDL states it as a trigger:
@@ -517,7 +612,9 @@ their owners before change 2 merges:
 3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain (the CPU families the probe writes).
 4. **plugin-hostd: a `probe` domain** with the probe's reasons, outcomes, steps and signals, which the probe reads.
 5. **omx-clap-core: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
-   one source.
+   one source, in this pass: omx-contract 3.21.0 renders a domain's code strings, sentences and TypeScript module,
+   so the move keeps omx-clap-core's rendered headers and module byte-identical (owner ruling, 2026-11-19, which
+   replaces the earlier one-pass exception: the reader checks the hosting columns like every other column).
 
 Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
 item names below are proposed; each owner's change names them.
@@ -532,7 +629,8 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `plugin.format` | plugin-db | `plugin-db` | `PLUGIN_DB_ADDRESS_FORMATS` (`clap`, `lv2`) | published by the plugin-db precondition; today only in `data/db.json` |
 | `record_set.host_class`, `record.host_class` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_CLASSES` (`rpi5`, `x86-64`) | added; the existing `QUALIFICATION_MACHINE_CLASSES` holds `desk`, `raspberry-pi-4`, `raspberry-pi-5`, words no record holds |
 | `record_set.tier` | plugin-qualify | `qualification` | `QUALIFICATION_SET_TIERS` (`reference`, `provisional`, `hardware`) | added |
-| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host`, `record.adapter_host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
+| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
+| `record.adapter_host` | plugin-qualify | `qualification` | `QUALIFICATION_ADAPTER_HOSTS`: the hosts an adapter runs a plugin under (`omx-clap-host`, `mod-host`, `jalv`), not the judge's profiles; plugin-qualify names its words | added |
 | `set_setting.key` | plugin-qualify | `qualification` | `QUALIFICATION_SYNC_SETTINGS` (plugin-qualify-sync's setting keys) | added |
 | `record.offer` | plugin-qualify | `qualification` | `QUALIFICATION_OFFERS` (`default`, `custom`) | added |
 | `record.pkg_format` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_FORMATS` (`deb`, `rpm`) | added (the `package` object) |
@@ -546,7 +644,7 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd, plugin-qualify | `probe`, `qualification` | `PROBE_OUTCOMES` (the probe's: `probe.ok`, `probe.crashed`, `probe.memory-limit`, ...) and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (`probe.oom`, which plugin-qualify writes when its own RLIMIT_DATA bound ends a run) | added (preconditions 4 and 1) |
 | `probe_end.step` | plugin-hostd | `probe` | `PROBE_STEPS` | added (precondition 4) |
 | `probe_end.signal` | plugin-hostd | `probe` | `PROBE_SIGNALS` (`SIGSEGV`, `SIGABRT`, ...) | added (precondition 4) |
-| `record.adapter_code`, `adapter_cell.code` | plugin-qualify | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_HOST_PROFILES`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
+| `record.adapter_code`, `adapter_cell.code` | plugin-qualify | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_ADAPTER_HOSTS`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
 | `verdict.rating`, `tier.rating`, `reason.rating` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
 | `verdict.hosting`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`, `in-process`: the hosting paths, as `verdict.hosting` and `tiers.offeredOn[]` write them) | added |
 | `verdict.arm` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
@@ -565,9 +663,14 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
 | `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
+| `history_verdict.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` | exists |
+| `history_verdict.measured`, `.adjusted` | plugin-qualify | `qualification` | `QUALIFICATION_PIN_VERDICTS` (the `PIN_VERDICTS` of `pins-file.ts`: `in-process`, `isolated`, `refused`) | added |
+| `history_verdict.move` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_MOVES` (`demote`, `promote`, `none`) | added |
+| `history_verdict.reason` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_REASONS` (`history.crashed`, `history.steady`, `history.no-record`, ...: `HISTORY_REASON`) | added |
+| `history_blocked.code` | plugin-qualify, omx-clap-core, plugin-hostd | `qualification`, `hosting`, `probe` | `QUALIFICATION_HISTORY_BLOCKERS` (the words `blockers()` of `history-adjust.ts` writes that are no reason code: `refused`, `unknown`, `no-deciding-reason`; plugin-qualify names them) and the items of `reason.code` | added |
 
 An adapter code is written `<host>.<kind>` or `<host>.<kind>-<parameter>` and stored as written. Its check splits it:
-`<host>` is a word of `QUALIFICATION_HOST_PROFILES`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
+`<host>` is a word of `QUALIFICATION_ADAPTER_HOSTS`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
 parameter is what the kind takes: a decimal integer for `resp` and `exit`, a word of `PROBE_SIGNALS` for `signal`,
 none for the others. A code that does not split this way is refused like any other word, naming the part.
 
@@ -587,17 +690,22 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | file name `<name>.<offer>.qualification.json` | `record.name`, `record.offer` |
 | `schema` | `record.schema` |
 | `plugin.format`, `plugin.id`, `binary.sha256` | `plugin.format`, `plugin.uri`, `plugin.sha256` (the key) |
+| `plugin.name` | `record.plugin_name` (NULL when absent): a name, per record, since the key does not fix it |
+| `provenance` | not stored: a record's provenance is its set's (`record_set`, `set_package`, `set_setting`), and a record of the user layer has none; the writer refuses it as `field-unmapped`, and the sync writes none |
 | (none) | `record.pkg_format`, `pkg_name`, `pkg_version`, `pkg_release`, `pkg_distro`, `pkg_arch`: NULL (below) |
-| `binary.path` | `record.binary_path` |
-| `binary.files[].path`, `.sha256` | `record_file.path`, `record_file.sha256` |
+| `binary.path` | `record.binary_path`: the path RELATIVE TO THE INSTALL ROOT (section 3.7). An absolute one is refused (`path-absolute`); `records/` is rewritten once, not read in two forms (section 3.7) |
+| `binary.files[].path`, `.sha256` | `record_file.path`, `record_file.sha256`, in the list order of section 3.7 |
 | `binary.layout.scheme`, `.sha256` | `record.layout_scheme`, `record.layout_sha256` |
 | `binary.unpinnable` | `record.unpinnable` = 1 (its sentence: see below) |
 | `testedVersion` | `record.tested_version` |
 | `measuredAt` | `record.measured_at` |
+| `latencyLineMs` | `record.latency_line_ms` (NULL when absent) |
+| `rules` | `record.rules` (NULL when absent); a name, `plugin-qualify-rules/<major>.<minor>`, not a word |
 | `run.id` | `record.run_id` |
 | `run.steps[].step`, `.result`, `.code` | `run_step.step`, `.result`, `.code` |
 | `run.steps[].figures.cpuPercent`, `.latencyFrames`, `.midiInputsLinked`, `.xruns` | `run_step.cpu_percent`, `.latency_frames`, `.midi_inputs_linked`, `.xruns` |
 | `run.steps[].pool.allocationsOn`, `.locksOn`, `.syscallsOn`, `.tasksOnHelpers` | `run_step.pool_allocations_on`, `.pool_locks_on`, `.pool_syscalls_on`, `.pool_tasks_on_helpers` |
+| `run.steps[].pool.dspLoadOff`, `.dspLoadOn`, `.xrunsOff`, `.xrunsOn` | `run_step.pool_dsp_load_off`, `.pool_dsp_load_on`, `.pool_xruns_off`, `.pool_xruns_on` (NULL when absent) |
 | `tool.runner`, `.child`, `.interposer` | `record.tool_runner`, `.tool_child`, `.tool_interposer` |
 | `probe.file`, `.sha256`, `.bytes` | `record.probe_file`, `.probe_sha256`, `.probe_bytes` |
 | `probe.protocol.name`, `.version` | `record.probe_protocol`, `.probe_protocol_version` |
@@ -614,11 +722,14 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `tiers.offeredOn[]` | `tier_offered.tier` |
 | `measurements.grid[].rate`, `.quantum`, `.outcome` | `cell.rate`, `.quantum`, `.outcome`; and one `claim` row |
 | `measurements.grid[].latency.declaredFrames`, `.measuredFrames`, `.code`, `.unmeasuredReason` | `cell.latency_declared_frames`, `.latency_measured_frames`, `.latency_code`, `.latency_unmeasured_reason` |
+| `measurements.grid[].latencyMs` | `cell.latency_ms` (NULL when absent): stored as written, never recomputed from the frames, and read back as the shortest decimal that gives the same double (as `JSON.stringify` writes it) |
 | `measurements.grid[].cost.median`, `.percentile.p`, `.percentile.value`, `.blocks`, `.warmupBlocks` | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value`, `.cost_blocks`, `.cost_warmup_blocks` |
 | `measurements.grid[].cost.voices.basis`, `.capacity`, `.held` | `cell.voices_basis`, `.voices_capacity`, `.voices_held` |
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |
 | `measurements.grid[].memoryLimit.bytes`, `.mechanism` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
-| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors` | `cell.rt_*` of the same names |
+| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`) |
+| `measurements.grid[].rtSafety.otherThreads.allocationsInRun`, `.locksInRun`, `.syscallsInRun` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` |
+| `hostExtensions[]` (a CLAP record's; the probe output's `offer.clapExtensions`, section 6.2) | `record_extension.extension`; presence: `record.host_extensions` |
 | `measurements.grid[].rtSafety.events[]` | `cell_event.event` |
 | `measurements.grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `cell.note_sweep_*` |
 | `measurements.unmeasured[].dimension`, `.code`, `.rate`, `.quantum` | `unmeasured.*` |
@@ -626,6 +737,10 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.behaviour.threads.before`, `.afterFirstInstantiate`, `.afterAllFreed` | `record.threads_*` |
 | `measurements.behaviour.features.required[]` | `feature_required.feature` |
 | `notMeasured[].dimension`, `.code` | `not_measured.*` |
+| `history[].hostClass`, `.file`, `.at`, `.key.uri`, `.key.digest`, `.found`, `.windows.solo`, `.windows.grouped`, `.summary.crashed`, `.summary.raisesXruns` | `record_history.*` (NULL when the object is absent) |
+| `history[].unknownKeys.<name>` | `history_unknown_key.name`, `.value`; presence: `record_history.unknown_keys` |
+| `history[].verdicts[].host`, `.measured`, `.adjusted`, `.move`, `.reason` | `history_verdict.*` (`measured`, `adjusted` NULL for a JSON null) |
+| `history[].verdicts[].blockedBy[]` | `history_blocked.code`; presence: `history_verdict.blocked_by` |
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
 | `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
 | `adapter.params.<name>` | `adapter_param.name`, `.number` or `.word`; presence: `record.adapter_params` (NULL with no `adapter` object, 1 when `params` is present, 0 when absent) |
@@ -673,8 +788,13 @@ lists (section 9, ruling 1).
 
 `PRAGMA user_version = 1` for this schema, set by the writer as the last statement of a build. The rule:
 
-- There is ONE version, `PQDB_SCHEMA_VERSION` (1), held once in `schema/qualification.sql` and compiled into the
-  reader and the writer from it. Any change of the DDL is +1. A reader reads exactly its version; there is no range
+- There is ONE version, `PQDB_SCHEMA_VERSION` (1). It is written in two places, the header line of
+  `schema/qualification.sql` (`user_version 1`), which the writer reads, and `pqdb.h`, which the reader compiles; a
+  test holds the two equal. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
+  and 3 release with the consumer switch, section 9, ruling 8), so the DDL of section 3.7's amendment is version 1, and
+  no store of an earlier shape exists to refuse. This holds only if no release of this repository ships a store before
+  the code of this amendment lands (section 9, ruling 10; section 10): that code must land before this pass's
+  release of this repository, or the DDL is version 2. A reader reads exactly its version; there is no range
   and no reader of an older version.
 - The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` (`schema-other`, naming the
   file, its version and the reader's); a base and a user layer at different versions (`schema-mismatch`, naming both
@@ -683,6 +803,102 @@ lists (section 9, ruling 1).
   new version depends on the reader at the floor that reads it.
 - The user layer is not upgraded in place in this pass: there is one version. A later version states its own rule,
   with the owner (section 10).
+
+### 3.7 Binary identity, the key's SHA-256 and the pin
+
+This section is what `plugin-qualify-sync` matches a binary on. The store carries it, so the sync needs no other source:
+neither the distributed JSON files nor a probe output (section 9, ruling 9).
+
+**The item and its root.** An ITEM is what plugin-qualify-sync qualifies as a unit (`SyncItem` of its
+`src/qualify-sync.ts`): one `.clap` file, or one LV2 plugin. Its INSTALL ROOT (`SyncItem.root`) is the directory the
+item's files are named relative to: for a `.clap`, the directory that holds the `.clap` file; for an LV2 plugin, its
+bundle. The install root is not stored and is not a search-path entry: the same record matches the same bytes under
+`/usr/lib/clap`, `/usr/lib64/clap`, `/usr/local/lib/clap` and `<home>/.clap`, and under a bundle directory of any
+name, so a system install and a user install find the same record.
+
+**The per-file list** (`record_file`, `binary.files[]` of the record):
+
+- one entry for every file the pin of the item holds, as plugin-hostd names them (`plugin-hostd --pin-files`, which
+  the sync already asks: `hostdPinFiles`, `withHostdFiles`). For a `.clap`: the `.clap` file alone (9,262 of today's
+  CLAP records hold exactly one). For an LV2 plugin: what plugin-hostd's pin holds, which today is the bundle's
+  `manifest.ttl`, the plugin's `.ttl` files and its binary (2 to 5 files in today's records). The store keeps the list
+  as it is given and holds no rule of its own about which files belong in it; the producer's is plugin-hostd's;
+- the PATH of an entry is relative to the install root, as the pin writes it: `/` as the separator, no leading `/`, no
+  `.` or `..` segment (`RELPATH`, section 3.2), and an LV2 name stays in the IRI form the pin keeps
+  (`libSurge%20XT.so`); the store compares paths as written and never decodes them (the sync decodes a name only to
+  open the file, as `digestFiles` does);
+- the SHA-256 of an entry is the 64 lower-case hex digits of the file's bytes, the digest `pin.h` takes;
+- the ORDER is ascending by path, compared as UTF-8 bytes, with no locale. `ord` is the place in that order. Every
+  record of today is in it, and `integrityOfProbeOutput` already sorts a pin's files so. The writer refuses a list out
+  of order (`files-unordered`), with a path twice (`files-duplicate`) or empty (`files-empty`), naming the file and the
+  path.
+
+**The binary path** (`record.binary_path`) is the main binary's path relative to the install root, in the same form.
+It is always the path of one entry of the list (the writer refuses one that is not: `binary-not-in-files`). For a
+`.clap` it is the file's own name (`Surge.clap`), whatever directory the file is in. For an LV2 plugin it is the
+bundle's binary as the bundle names it (`AutoFilter.so`); a binary lilv takes from outside the bundle (a complement's,
+`SyncItem.binary`) is named by the bundle's link to it, the entry `discoverSyncItems` adds to the list for it.
+
+**The key's SHA-256** (`plugin.sha256`) is the SHA-256 of the list's entry whose path is `binary_path`: the main
+binary's. Fixed, so it can be recomputed from the list alone:
+
+1. take the list in the order above;
+2. take the entry whose path equals `binary_path`; there is exactly one (paths are unique);
+3. the key's SHA-256 is that entry's SHA-256.
+
+A list of one file therefore reduces to that file's own SHA-256 (every CLAP key of today), and an LV2 bundle reduces to
+its binary's, as `binary.sha256` is today (all 3,691 LV2 records hold it among their entries). The other entries do not
+change the key: they are the pin's match (below). The writer refuses a record whose key is not that value
+(`key-not-the-binary`), and `plugin-qualification-db check` verifies it for every record of both layers
+(section 6). No hash over the whole list is the key, because that would give each of today's 2,278 plugins a new key,
+and with it every record file name, descriptor name and stem that carries the key's first 12 digits; the whole list is
+matched instead, by the pin.
+
+**The pin** is the key plus a per-file hash match, and no probe bytes:
+
+- an installed item MATCHES a stored record when (1) the formats are the same and the plugin is: for LV2 the same uri
+  (`plugin.uri`), for a `.clap` the same `binary_path` and the same plugin id (`plugin.uri` is the CLAP id); (2) the
+  item's files are exactly the record's list, the same paths and, hashed on this machine (`digestFiles`, which skips
+  rereading a file whose size, modification time and inode are unchanged), the same SHA-256 for every one, none
+  missing and none beside them. Then the key is the installed binary's, by the rule above. The match is decided on
+  the hashes alone: the record's name, its set, its host class and the path it was measured at never decide it. This
+  is today's rule of `matchDistributed` ("every file the record names hashes, here, as it did where it was
+  measured"), with two changes: the lookup is by `binary_path` and not by the absolute path the measuring machine had,
+  so a record measured under `/usr/lib64/clap` was never found for the same file under `/usr/lib/clap`; and a file the item holds that
+  the list lacks is a binary that differs (today only the listed files are checked);
+- the PIN a match gives plugin-hostd is built from the record: hostd's uri for the item as it is installed here
+  (`clapPinUri` of the local path and the id, or the LV2 uri), the list (replaced by plugin-hostd's own list when it
+  names one, as `withHostdFiles` does), the layout (`layout_scheme`, `layout_sha256`) and the version
+  (`tested_version`), when the record holds them. A record with `unpinnable` set or no layout gives no whole pin: the
+  plugin is pinned on its first add, and the log says why, as today;
+- the pin REPLACES `probe.sha256` for what the sync does with it. Today `probe.sha256` is the hash of the probe
+  output's bytes, and three things read those bytes: `applyDistributed` (it copies the probe output beside the record
+  and checks the bytes against `probe.sha256`), `rejudgeRecord` (it refuses a probe output whose bytes differ), and the
+  pin itself (`integrityOfProbeOutput(output)` takes the files and the layout from the probe output). After the switch
+  nothing matches on, checks against or builds a pin from `probe.sha256` or the probe output. The columns
+  `probe_file`, `probe_sha256` and `probe_bytes` stay as evidence of which output the figures came from (section 9,
+  ruling 1), and no consumer reads them to decide anything;
+- the pin set's OWNER is plugin-hostd. The match is exact set equality on the list plugin-hostd's `--pin-files` names,
+  so if plugin-hostd changes which files a pin holds (a preset file, another `.ttl`), the list of every stored LV2
+  record differs from what its bundle's pin now holds, no record matches, and every LV2 plugin is qualified again:
+  that change is a requalification of everything, and plugin-hostd's change says so. A list with one file more or one
+  file fewer than the installed pin does not match, whatever else agrees;
+- the pin has no probe bytes: the store holds none (section 9, ruling 1), the sync copies none beside the store, and
+  the reader (section 6) hands the list, the layout and the version, which are all the pin takes.
+
+**Records of today: one rewrite, no conversion.** 9,262 CLAP record files of `records/` hold an absolute `binary.path`
+(`/usr/lib64/clap/...` 8,100, `/usr/lib/clap/...` 1,160, `/usr/local/lib/...` 2); the 3,691 LV2 files hold the relative
+form already. `records/` is REWRITTEN ONCE, in the change that lands this amendment's code: a commit of its own that
+sets each CLAP file's `binary.path` to the file's own name (its single list entry's path) and adds the fields of
+section 6.2 that the probe outputs beside the records hold (`hostExtensions`), and nothing else. No file name changes
+and no key changes. After that commit:
+
+- the builder (`tools/records-db.py`) and the writer (`put`) REFUSE an absolute `binary.path` by name,
+  `path-absolute`, naming the file and the path, and write nothing. Neither makes a path relative, on any run, for any
+  caller: the sync writes relative paths itself, and a record of the old form is a refused record;
+- `tools/check-records.py`, the repository's gate on the text, refuses the same, so no record of the old form can be
+  added to `records/` again;
+- the list of every record is in the order above.
 
 ## 4. Merge semantics
 
@@ -710,7 +926,9 @@ lists (section 9, ruling 1).
 - **Input.** `records/<class>/<set>/*.qualification.json` and `records/<class>/<set>/provenance.json`, as section 3.5
   maps them, for the classes of one architecture (`packaging/arch-classes`, the same selection as
   `tools/sets.py install`). The probe outputs are read only to check that each record's `probe.sha256` and
-  `probe.bytes` match its file; a mismatch is refused by name.
+  `probe.bytes` match its file; a mismatch is refused by name. The writer also applies section 3.7 to every record:
+  `binary_path` relative (an absolute one is refused, `path-absolute`; `records/` is rewritten once, section 3.7), the
+  list in order, the key's SHA-256 the binary's entry; a record that breaks it is refused by the name given there.
 - **Tool and place.** Python 3, standard library `sqlite3` and `json`, plus `jsonschema` for the domain document:
   `tools/qualification_db.py` (the record-to-rows writer and the rows-to-record exporter, one module) and
   `tools/records-db.py` (its command). The module is the one writer: the user layer's writer, after the switch, is the
@@ -747,8 +965,8 @@ lists (section 9, ruling 1).
   this pass, stops installing them. The package's name, its
   Provides, Replaces and Breaks, and its dependencies stay as they are. The switch is one change, made in the same
   release pass as this one, before the console's 0.2.1 release (section 9, ruling 8). That change, the consumer switch,
-  is the one that stops installing the JSON files: in the same change the consumers read the database and the
-  package ships only `qualification.sqlite`. `records/` stays in this repository as the source the database is built
+  is the one that stops installing the JSON files: in the same change the consumers read the database, the sync's
+  distributed JSON reader is removed with no fallback to it, and the package ships only `qualification.sqlite`. `records/` stays in this repository as the source the database is built
   from.
 
 ## 6. Reader API (change 3)
@@ -757,9 +975,11 @@ lists (section 9, ruling 1).
 
 - plugin-hostd (C): `src/qualcost.c` reads the cost, latency and memory figures of `qualification_dir`'s records for
   its planner and its estimate verb. It is a daemon; it must not start a process to read a figure.
-- plugin-qualify-sync (TypeScript, Node.js): `src/distributed-records.ts` reads the shipped records of its class and
-  cell. It already runs plugin-db's command for plugin-db's store (`src/plugin-db-cli.ts`). It reads the
-  database the same way, through `plugin-qualification-db query --json`, in one call per run: Node.js 18, the
+- plugin-qualify-sync (TypeScript, Node.js): today `src/distributed-records.ts` reads the shipped records of its class
+  and cell, and its own records live as JSON files in `qualification_dir`. The store replaces both (section 9, ruling
+  9): it reads the database the way it already runs plugin-db's command for plugin-db's store (`src/plugin-db-cli.ts`),
+  through `plugin-qualification-db` (`query --json`, `query --json --records`, `counts --json`), a few calls per
+  run (section 6.1), and it WRITES its records through this repository's writer module (section 6.1). Node.js 18, the
   package's floor, and Debian trixie's Node.js have no built-in SQLite (section 9, ruling 4).
 - The console does not read records; it reads what plugin-hostd and plugin-db answer.
 
@@ -782,17 +1002,23 @@ void pqdb_close(pqdb *db);
 const char *pqdb_code(int status);                 /* "qualification-db.absent" ... */
 
 /* every field optional: a string of NULL, and a rate or quantum of -1, is "any"; 0 is not. Start from PQDB_QUERY_ANY. */
-#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL }
+#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
 typedef struct {
     const char *sha256, *format, *uri, *offer, *host_class;
     int rate, quantum;
     const char *pkg_format, *pkg_name, *pkg_version, *pkg_release, *pkg_distro, *pkg_arch;
+    const char *binary_path;                        /* section 3.7: the main binary's path below its install root, as stored */
+    const char *layer;                              /* "user": the scope's user layer only, no shadowing; "base": the base only; NULL: both, merged (section 4) */
 } pqdb_query;
 
 typedef struct {
     const char *layer;                              /* "user" or "base" */
     const char *sha256, *format, *uri, *offer, *host_class, *set;   /* set: NULL in the user layer */
     const char *pkg_format, *pkg_name, *pkg_version, *pkg_release, *pkg_distro, *pkg_arch;  /* NULL: not known */
+    const char *binary_path;                        /* the record's, section 3.7 */
+    const char *layout_scheme, *layout_sha256;      /* NULL: the record holds no layout */
+    const char *tested_version;                     /* NULL: not known */
+    int unpinnable;                                 /* 1 when the record's binary is unpinnable, else 0 */
     int rate, quantum;
     const char *outcome;                            /* the cell's outcome word */
     double cost_median_ns, cost_p_ns;  int cost_p; int has_cost;
@@ -804,6 +1030,22 @@ typedef struct {
    no record of its shadow key (section 4), in key order. A non-zero return of each stops the walk and is returned. */
 int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result *, void *), void *ctx);
 
+/* The per-file list of a result's record (section 3.7), in its order, as each(path, sha256, ctx); the strings are valid
+   until each returns. The reader hashes nothing: the caller compares the list with what it hashed. A non-zero return
+   of each stops the walk and is returned. 0, or a refusal status. */
+int  pqdb_files(const pqdb *db, const pqdb_result *r, int (*each)(const char *path, const char *sha256, void *), void *ctx);
+
+/* The record of a result as one JSON document of `plugin-qualify.qualification-record/1`, as section 5's exporter writes it
+   (the sentences of section 3.5 absent), in memory the caller frees with free(). */
+int  pqdb_record_json(const pqdb *db, const pqdb_result *r, char **json, pqdb_error *err);
+
+/* What a layer holds per plugin (a plugin: a format and a uri), by format: each(format, plugins, offered, not_offered, ctx).
+   `layer` is "user", "base" or NULL (both, merged as section 4). A plugin is offered when any of its records has a
+   `tier_offered` row. The strings are valid until each returns; a non-zero return stops the walk and is returned. */
+int  pqdb_counts(const pqdb *db, const char *layer, int (*each)(const char *format, long plugins, long offered, long not_offered, void *), void *ctx);
+const char *pqdb_message(const pqdb *db);     /* the last refusal of pqdb_each: layer, record, column; NULL if none */
+int  pqdb_number(double value, char *out, size_t n);   /* a number as JSON.stringify writes it, C locale; -1: not finite or too long */
+
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none). */
 typedef struct { const char *rating, *deciding; int measured, qualified; } pqdb_verdict;
 int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_verdict *out);
@@ -814,19 +1056,35 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
 - **From an installed package to its results:** `pqdb_each` with the `pkg_*` fields of the query set (format, name,
   version, release, distro, arch, as the package manager states them). Only stored values match: a record whose
   package fields are NULL, every migrated record today, is never returned for a package query.
+- **From an installed binary to its record** (section 3.7): `pqdb_each` with `format` and `uri` (LV2), or `format`,
+  `binary_path` and `uri` (a `.clap`: the CLAP id), then `pqdb_files` of each result, compared with the files the caller
+  hashed. The merged answer shadows whole records (section 4), so the caller compares the records it gets; a result
+  whose list does not equal what is installed is not the installed binary's.
+- **Numbers and non-finite values.** Every reader path (`pqdb_each`, `pqdb_record_json`, the command's `query --json`)
+  writes a REAL through `pqdb_number`: the layout of `JSON.stringify`, under the C locale whatever the program's. A
+  non-finite REAL is refused as `qualification-db.not-a-store` by every path; `pqdb_message` names the layer, the
+  record and the column of `pqdb_each`'s last refusal, and the command prints the code and message and exits 1.
+- **Every cell of a record** is one result; `pqdb_files` and `pqdb_record_json` give the same answer for each of a
+  record's results. `pqdb_record_json` is the exporter of section 5 in C: its output equals the Python exporter's, byte
+  for byte after JSON normalisation, for every record of the fixtures (section 8, change 3).
 - **Pointers** in a result are valid until the callback returns; a caller copies what it keeps.
 - **Refused, by name** (`pqdb_code` gives the string; each refusal names the file):
   - `qualification-db.absent`: the base file does not exist. An absent USER layer is not an error: it is an empty
     layer;
   - `qualification-db.unreadable`: it exists and SQLite cannot open or read it;
   - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `user_layer` that is not the
-    file's (a user file opened as the base);
+    file's (a user file opened as the base), or a REAL column of a record holding a value that is not finite (no
+    JSON number writes it; the message names the layer, the record and the column);
   - `qualification-db.schema-mismatch`: the base and the user layer are at different `user_version`s;
   - `qualification-db.schema-other`: a file's `user_version` is not the reader's `PQDB_SCHEMA_VERSION`;
+  - `qualification-db.layer-unknown`: a query's `layer` is not `user` or `base`;
   - `qualification-db.domain-too-old`: an installed domain's `info.version` is below the `store_domain.version` the
     file was checked against;
   - `qualification-db.word-unknown`: a word of a `word_check` column is in none of its items of the installed
     domains; the message names the table, the column and the word;
+  - `qualification-db.key-mismatch` (the command's `check` only; `pqdb_open` does not scan every record): a record whose
+    `plugin.sha256` is not the SHA-256 of its list's entry at its `binary_path` (section 3.7); the message names the
+    key and the path;
   - `qualification-db.hot-journal`: the user layer has a hot journal (its writer stopped inside a transaction). A
     read-only reader cannot roll it back (SQLite answers `SQLITE_READONLY_ROLLBACK`), so it refuses, names the file
     and the journal, and changes nothing; the next write by the writer rolls it back;
@@ -847,10 +1105,132 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
   them, as `qualcost` does today.
 - **The command** `plugin-qualification-db`:
   - `query [--sha256 ..] [--format ..] [--uri ..] [--offer ..] [--host-class ..] [--rate ..] [--quantum ..]
-    [--pkg-format .. --pkg-name .. --pkg-version .. --pkg-release .. --pkg-distro .. --pkg-arch ..] --json`: one JSON
-    object per line per result, the fields of `pqdb_result` and every verdict of its record, words and numbers only;
-  - `check`: opens both layers and prints `ok`, or the code and message; exit 0, or 1 with the code;
-  - `--base`, `--user`, `--contract-dir` and their variables, as section 2 says; exit 2 on a usage error.
+    [--pkg-format .. --pkg-name .. --pkg-version .. --pkg-release .. --pkg-distro .. --pkg-arch ..]
+    [--binary-path ..] [--layer user|base] --json`: one JSON object per line per result, words and numbers only. Its
+    keys, in this order: `layer`, `sha256`, `format`, `uri`, `offer`, `host_class`, `set`, `pkg_format`, `pkg_name`,
+    `pkg_version`, `pkg_release`, `pkg_distro`, `pkg_arch`, `binary_path` (string), `layout_scheme`, `layout_sha256`,
+    `tested_version` (string or `null`), `unpinnable` (0 or 1), `files`, `rate`, `quantum`, `outcome`, the cost,
+    latency and memory keys of `pqdb_result` as today, and `verdicts`: an array, in the record's order, of
+    `{"host": ..., "rating": ..., "measured": 0|1, "qualified": 0|1, "deciding": ...}`, the fields of `pqdb_verdict`
+    (`deciding` a string or `null`). `files` is the record's list in its order: an
+    array of `{"path": "...", "sha256": "..."}`, never empty. No other key; an absent figure is `null`, as today;
+  - `query ... --json --records`: one JSON object per line per RECORD (the results of one record are one line):
+    `{"layer": ..., "sha256": ..., "format": ..., "uri": ..., "offer": ..., "host_class": ..., "record": <the record of
+    pqdb_record_json>}`. The same filters apply; `--rate` and `--quantum` are refused with `--records` (a usage error,
+    exit 2), because a record is not a cell;
+  - `counts [--layer user|base] --json`: one JSON object per line per format, in format order:
+    `{"format": "clap", "plugins": 248, "offered": 224, "not_offered": 24}`;
+  - `check`: opens both layers, verifies section 3.7's key rule for every record of both, and prints `ok`, or the code and message; exit 0, or 1 with the code;
+  - `--base`, `--user`, `--contract-dir` and their variables, as section 2 says; and `--scope user|system` (default
+    `user`), which opens the production places of that scope (`pqdb_open`) when neither `--base` nor `--user` is given.
+    `--scope` with either of them is a usage error. Exit 2 on a usage error.
+
+### 6.1 plugin-qualify-sync on the store (the consumer switch)
+
+The store REPLACES the distributed JSON layer and the JSON files of `qualification_dir`. The switch is whole
+(section 9, ruling 9): after it the sync reads no `<dir>/<host class>/<set>/` file and no `*.qualification.json`,
+`*.probe.json` or `*.unmeasured.json` of a `qualification_dir`; no function falls back to them, and none reads the
+store and a directory together (section 10).
+
+**Scope.** `plugin-qualify-sync --system` uses `PQDB_SCOPE_SYSTEM` (`--scope system` of the command, the writer's
+`--scope system`); without it, the user scope (section 2). The settings `qualification_dir` and `distributed_dir` are
+removed with no alias: the places are section 2's.
+
+**The writer.** The sync is the WRITER of its own records, and the only writer of the scope's user layer. It writes
+through this repository's writer module (`tools/qualification_db.py`, the module that builds the base, section 5),
+installed with a command, `plugin-qualification-db-write` (section 7), which it runs the way it runs plugin-db's and
+the reader's commands:
+
+- `put --scope user|system --offer .. --host-class ..`: one record, the JSON document of
+  `plugin-qualify.qualification-record/1` on standard input, in one transaction. The offer and the host class are
+  arguments, as `delete` takes them, because the record document carries neither; its `probe.file` must be
+  `<name>.<offer>.probe.json` for that offer, or it is refused as `file-name`. It creates the layer from the installed DDL when the file is absent (section 2), checks
+  every word against the installed domains, applies section 3.7 (`path-absolute`, `binary-not-in-files`, `key-not-the-binary`,
+  `files-unordered`, `files-duplicate`, `files-empty`) and replaces, whole, the layer's record of the same shadow key
+  (section 4). A refusal names the code, the path and the word, and writes nothing;
+- `delete --scope user|system --sha256 .. --format .. --uri .. --offer .. --host-class ..`: the layer's record of that
+  shadow key, in one transaction; a key the layer does not hold is not an error. Nothing deletes from the base.
+
+The record document is the interchange between the sync's judge and the writer; it is not a layer, nothing keeps it,
+and nothing reads it back from a file.
+
+**What each function reads and writes.** Names are those of plugin-qualify's `src` today (`qualify-sync.ts`,
+`qualify-rejudge.ts`, `distributed-records.ts`, `qualification-record.ts`):
+
+| function | reads today | reads and writes after |
+| --- | --- | --- |
+| `readDistributedLayer`, `matchDistributed` | `<dir>/<host class>/<set>/*.qualification.json` by `resolve(binary.path)` (CLAP) or the LV2 uri | removed. The match is `pqdb_each` / `query --json` with the item's `format`, `uri` (and `binary_path` for a `.clap`) and `host_class`, then the per-file comparison of section 3.7 on each result's `files`, then the cells and the host's verdict of the results as `matchDistributed` takes them (`syncCells`, `verdicts`) |
+| `applyDistributed`, `takeDistributed` | copies the record and its probe output into `qualification_dir`, after `rejudgeRecord` of the probe bytes | the base record is read whole (`query --json --records`), judged again under today's rules, and written by `put` into the scope's layer: no copy of a probe output and no `provenance` block (the user layer has no set, section 3.3) |
+| `writeQualification`, `judgedPlugins` | writes `<stem>.<offer>.qualification.json` and the probe copy into `qualification_dir` | `put` of the record the run judged, its `binary_path` and list as section 3.7 gives them; the probe output is not kept |
+| `writeUnmeasuredRecord` | writes `<stem>.unmeasured.json` | removed: it has no table, it holds no figure, and the plugin's outcome, code and detail are in the sync state (`SyncPlugin`) |
+| `rejudgeState` (`qualify-rejudge`) | `readdirSync(qualification_dir)` for `*.qualification.json` and, per record, its probe output (`rejudgeRecord`, which refuses bytes whose SHA-256 differs from `probe.sha256`) | every record of the scope's USER layer, by `query --json --records --layer user`, one line a record; no directory and no probe output. It judges again from the record's rows alone, by the table of section 6.2 (every field `judgeProbeOutput`, `rejudgeProfiles` and `runsOwed` read, and its column), and `put`s each record that changed. A record whose rows lack a figure the judge needs owes `figures-unreadable`, as a record whose probe output does not read does today. The changed-bytes test (`changedStems`) compares the state's entry with the record's key and list. Base records are not re-judged in place: the base is read only |
+| `memoryPass`, `isolatedPass`, `poolPass`, the adapter pass | each reads the record of a state entry by file name and writes it whole | each reads the record of the entry's shadow key (`query --json --records --layer user`) and `put`s it extended |
+| `pruneStale` | `readdirSync(qualification_dir)` for the stems of records and `readdirSync(descriptor_dir)` | the user layer's records as the reader lists them (`query --json --layer user`, deduplicated by shadow key), and the descriptor directory as today. A record is stale when the state before holds its key and the state after does not, or when its `uri` is a kept plugin's and its `sha256` is not one the state after keeps (the other bytes of a kept plugin). A stale record is removed by `delete`; a record another plugin of the state still names, two copies of one binary, is kept. The descriptor half is unchanged: a descriptor `<id>@<version>-<first 12 digits of the key>.json` is dropped by its id and those 12 digits, as `idAndHash` does. It returns the shadow keys removed, and the descriptor files removed, to log |
+| `pluginCounts` | `readdirSync(qualification_dir)`, parses each `*.qualification.json` for `plugin.format`, `plugin.id` and `tiers.offeredOn` | `counts --layer user --json` (system scope: the system layer, the sync's own records). A plugin is offered when any record of it has a `tier_offered` row, as `offeredOn` non-empty is today; the line `pluginCountsLine` prints is unchanged |
+| `adjust` (`adjust-cli`) | `--qualification-dir <dir>`: every `*.qualification.json` there | the records of the scope through the reader (`query --json --records`, the user layer over the base, `--scope user\|system`); `--qualification-dir` is removed with no alias, and no file is read. History is keyed by the main binary's absolute path: adjust joins the INSTALL ROOT of the installed item that holds the record's key (`SyncItem.root`, from plugin-db's list, as the sync finds it; section 3.7) with `binary_path`. The root is never stored and never an argument; a record whose key no installed item holds is not adjusted, under a code plugin-qualify names |
+| `judge` (`judge-cli`) | `--qualification-dir <dir>`: where the judged record and the probe copy go | `put` of the judged record through the writer (`--scope user\|system`); `--qualification-dir` is removed with no alias, and no probe copy is written (section 3.7: the store keeps no probe bytes) |
+| `checkStderrKept` (`refused-stderr-kept`) | every `*.qualification.json` of a directory, refused rows only, the probe copy's `logs[]` byte counts and SHA-256, and the children's stderr copies | removed: it checked the probe copy and the stderr copies, and after the switch neither exists (the store keeps no probe bytes, section 9 ruling 1, and the sync writes no copy). Nothing replaces it; a refused record keeps its outcome, reason and `probe_end` rows |
+| `judged-layer` (`judged-layer`) | `<record.qualification.json>`, a file argument | the record of a shadow key (`--sha256 --format --uri --offer --host-class`, `--layer` optional) through the reader (`query --json --records`); no file argument |
+| the distributed records' documentation (`distributed-records`) | describes the copy of the distributed records into `qualification_dir` | describes the base and the user layer of this section; no copy is described |
+
+**What does not move.** The measuring run's output (`plugin-qualify --out <dir>`) and this repository's `records/`
+stay record documents in a directory: `records/` is the corpus the base is built from (section 5), reviewed and
+versioned as JSON, and `--out` is how a measuring pass adds to it. The store replaces what a DEVICE keeps (the sync's
+layer and its `qualification_dir`), not the corpus; the base is built from `records/` and nothing builds `records/` from
+a store.
+
+**The state.** `SyncPlugin.record` is the shadow key of the record (`sha256`, `format`, `uri`, `offer`,
+`host_class`), not a file path, and `SYNC_STATE_SCHEMA` becomes `plugin-qualify.sync-state/2`. A state of the older
+schema is moved aside as `readSyncState` already moves an unreadable one, and every plugin is qualified again: no
+conversion. The records of an older `qualification_dir` are not read, imported or removed by the sync (section 9).
+
+### 6.2 Rejudge from rows: what the judge reads, and where the store holds it
+
+`qualify-rejudge` judges from the store's rows alone. Probe bytes are never kept beside the store (section 9, ruling 11),
+so every field the judge reads has a column, and a field with none is added. Today `rejudgeRecord` of plugin-qualify's
+`src/qualify-rejudge.ts` hands the whole probe output to `judgeProbeOutput` (`src/probe-judge.ts`), to `rejudgeProfiles`
+and to `runsOwed`. This table lists EVERY probe-output field those three, and what they call, read. "Reads" names the
+function that does; a field the table says nothing decides is carried into the judge's documents and read by no reason.
+
+| probe-output field | read by | store column or rows |
+| --- | --- | --- |
+| `run.outcome` | `failedOutcome` (judge, `runsOwed`) | `record.probe_outcome` |
+| `run.id` | `rejudgeRecord` (`figures.runId`) | `record.run_id` |
+| `plugin.format`, `plugin.id` | the judge's uri and branch, `rejudgeProfiles`, `runsOwed` | `plugin.format`, `plugin.uri` |
+| `plugin.version` | the pin's `integrity` only; no reason | `record.tested_version` |
+| `offer.id` | `rejudgeProfiles` (a CLAP host joins only its own offer) | `record.offer` |
+| `offer.clapExtensions` | `rtSafetyDocument` (a profile is judged only against the extensions it offers; any other list reads `unknown`, `hosting.clap.extensions-not-covered`), as `hostExtensions` | NEW: `record_extension` rows, in order, and `record.host_extensions` = 1 for a CLAP record whose probe reached the offer (an empty list is data); NULL for an LV2 record and for a CLAP probe that ended before the offer, which the row judge reads as `[]`, as the probe judge reads the absent `offer.clapExtensions` today. Not stored before this amendment |
+| `grid[]` (its points, in order) | every function below; `blockFrames` is the first rt point's quantum | `cell` rows in `ord`, every cell of the record (the probe's points are a subset in the same order in every record of `records/`; the cells a memory-only pass added carry a footprint and no other figure) |
+| `grid[].rate`, `.quantum`, `.outcome` | `okPoints`, `cellOf`, `costOf`, `failedOutcome`, `isOutOfMemory` | `cell.rate`, `.quantum`, `.outcome` |
+| `grid[].latency.declaredFrames`, `.measuredFrames` | the CLAP line's `latency`; no reason | `cell.latency_declared_frames`, `.latency_measured_frames` |
+| `grid[].cost.median`, `.percentile.p`, `.percentile.value` | `gridCostReadings`, `hostingCostReasons` (only `p` = 95 counts; the core fraction is computed from `value` and `rate`) | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value` |
+| `grid[].cost.voices.held`, `.basis`, `.capacity` | `costOf` (kept beside the cost) | `cell.voices_held`, `.voices_basis`, `.voices_capacity` |
+| `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` not stored, and not read |
+| `grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls` | `rtSafetyOfProbeOutput`, `rtSafetyReasons`, `processCalls` | `cell.rt_interposer`, `.rt_swept`, `.rt_sweep_applicable`, `.rt_blocks`, `.rt_allocations`, `.rt_locks`, `.rt_syscalls` |
+| `grid[].rtSafety.threadViolations`, `.processErrors` | `clapRtReasons` | `cell.rt_thread_violations`, `.rt_process_errors` |
+| `grid[].rtSafety.ownThreads`, `.otherThreads.allocationsInRun`, `.locksInRun`, `.syscallsInRun` | not read on plugin-qualify's `main`; read by the judge once plugin-qualify#119 merges (`hosting.rt-safety.own-threads` is conditional, and the other-thread counts are a figure, never the verdict) | NEW: `cell.rt_own_threads`, `.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (NULL where not taken; the three counts all or none). Records of today hold none |
+| `grid[].rtSafety.events[]` | carried into the document; no reason | `cell_event` rows |
+| `grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `noteSweepOfProbeOutput`, `noteSweepReasons` | `cell.note_sweep_applicable`, `.note_sweep_dialect`, `.note_sweep_allocations`, `.note_sweep_locks`, `.note_sweep_syscalls` |
+| `grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.notesHeldKb`, `.unmeasuredReason` | `gridMemoryReadings`, `hostingMemoryReasons` (`firstInstanceKb` and `perInstanceKb` are computed from these by `memory-budget.ts`) | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_notes_held_kb`, `.mem_unmeasured_reason` |
+| `grid[].memory.basis`, `.notesHeld`, `.unmeasuredDetail` | nothing | `cell.mem_basis`; `notesHeld` and the sentence `unmeasuredDetail` not stored, and not read |
+| `grid[].memoryLimit.bytes`, `.mechanism` | `costOf`, `memoryParams` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
+| `steps[]` (`instantiate`, `probe.non-finite-output`) | the CLAP line's `headlessOk` and `nonFinite`; no reason of the judge reads either (`clapFeatureReasons` is the descriptor path's) | not stored, and not read by a verdict |
+| `binary.path`, `.sha256`, `.files`, `.layout`, `.unpinnable` | the line's `binary` and `integrity`; no reason | `record.binary_path`, `plugin.sha256`, `record_file`, `record.layout_*`, `record.unpinnable` |
+| `machine.*`, `behaviour`, `tool`, `measuredAt` | nothing | stored as section 3.5 says |
+
+What `rejudgeRecord` reads of the RECORD itself is already rows: the verdicts and their `host`, `arm`, reasons and params
+(`rejudgeProfiles`, `admissionsOf`, `runsOwed`: `verdict`, `reason`, `reason_param`), the adapter pass
+(`record.adapter_*`, `adapter_param`), the memory pass (`memory_run_*`, whose footprints are already in the `cell` rows),
+and the tool, `measuredAt` and `rejudged_*` columns. `withMemoryRun`'s merge is therefore a no-op on rows.
+
+A record whose rows lack a figure the judge needs (a NULL where the judge reads a figure) owes `figures-unreadable`
+and is not judged again. Nothing is guessed from a missing field, with one exception that is today's behaviour, not a
+guess: a CLAP record's NULL `host_extensions` reads as `[]`, as the probe judge reads an absent `offer.clapExtensions`
+(`?? []`). A storage move must not change a verdict.
+
+The grid of the judge is the record's `cell` rows in `ord` order, so `blockFrames` and the order of the interposer's
+counts are the probe's. The store's proof is section 8, change 3, case 25, which compares the row judge with today's
+probe judge over every record of `records/`.
 
 ## 7. Packaging
 
@@ -858,8 +1238,10 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
 | --- | --- | --- | --- |
 | `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same three contract floors. Run time: none |
 | `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
-| `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc`, and the DDL at `<datadir>/plugin-qualification-db/qualification.sql` (the `.pc`'s `schema` variable) | | `libplugin-qualification-db0 (= ${binary:Version})` |
+| `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` (its `schema` variable names the DDL of `plugin-qualification-db-schema`) | | `libplugin-qualification-db0 (= ${binary:Version})`, `plugin-qualification-db-schema (= ${source:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
+| `plugin-qualification-db-schema` (change 3, with the writer) | the DDL, at `<datadir>/plugin-qualification-db/qualification.sql`, one copy; architecture independent | | none; `libplugin-qualification-db-dev` and `plugin-qualification-db-write` depend on it, and the `.pc`'s `schema` variable names its file |
+| `plugin-qualification-db-write` (change 3, with the writer) | `tools/qualification_db.py` and the command `plugin-qualification-db-write` (`put`, `delete`, section 6.1), the module that builds the base | | `python3`, `python3-jsonschema`, `libsqlite3-0 (>= 3.37.0)`, the three contract floors, `plugin-qualification-db-schema (= ${source:Version})`; RPM: the same names |
 
 **Generated, not committed.** Today's records are text (JSON, 248 MB unpacked), reviewed as text and never rewritten.
 A committed database would be a second copy of them that a diff cannot show and that can drift from `records/`.
@@ -921,6 +1303,30 @@ makes it fail.
     is written into a `CHECK`.
 18. **Fractional reason param.** A fixture reason with `params.coreFractionP95: 0.37` and another with `params.blocks: 40` read back as 0.37 and 40, the second an integer (`typeof` `integer`, `real` for the first). Fails when `reason_param.number` is `INTEGER` (the fraction is refused or rounded) or when the exporter writes 40 as 40.0.
 19. **Adapter params round trip.** A fixture record with `adapter.params: {}`, one with `adapter.params: {"resp": 3, "step": "add"}`, one without `params`, and an adapter cell with `params: {"peak": 0.5}` and one with `params: {}` read back exactly, `{}` staying `{}` and absence staying absent. Fails when presence is not stored (`record.adapter_params`, `adapter_cell.params`) or a param is dropped.
+20. **Binary path relative, and no conversion.** After the one-time rewrite, every CLAP record of `records/` has a relative
+    `binary.path` (the file's own name) and the builder reads it as written. A fixture CLAP record whose `binary.path` is
+    `/usr/lib/clap/X.clap/Contents/x86_64-linux/X.clap` is refused as `path-absolute` by the builder, by `put` and by
+    `tools/check-records.py`, each naming the file and the path, and no file is written; a `binary_path` that is
+    absolute, empty or holds `..` is refused by the schema. A test that diffs `records/` before and after the rewrite
+    commit sees only `binary.path` and the section 6.2 fields change. Fails when any of them makes the path relative
+    itself (sabotage: strip the directory in the builder), or when the `CHECK` is dropped.
+21. **The key is the binary's entry.** For every record of `records/`, the test's own SQL finds
+    `record_file.sha256` at `binary_path` and it equals `plugin.sha256`. A fixture LV2 record whose key is the
+    SHA-256 of its first entry (`manifest.ttl`) is refused as `key-not-the-binary`; one whose `binary_path` is no
+    entry is refused as `binary-not-in-files`. Fails when the writer takes the first entry or none (sabotage).
+22. **The list is ordered, unique and non-empty.** A fixture list out of byte order (`b.ttl` before `a.ttl`; `Z.so`
+    before `a.so`), with a path twice, empty, with an absolute path or with a `..` segment is refused by name
+    (`files-unordered`, `files-duplicate`, `files-empty`, and the schema's `RELPATH`), each naming the file and the
+    path, and no file is written. Fails when the writer sorts or dedupes instead of refusing (sabotage), or compares
+    by locale.
+23. **Order read back.** A fixture LV2 list with an IRI-form name (`libSurge%20XT.so`) reads back as written, in `ord`
+    order, byte for byte. Fails when the exporter decodes a name or orders by anything but `ord`.
+24. **The columns of the row judge.** A fixture CLAP record round-trips with `hostExtensions` `["clap.log", "clap.params"]`, one
+    with `[]`, and an LV2 record with none; a cell with `ownThreads: 2` and `otherThreads` of three counts reads back
+    exactly, one with `otherThreads` of one count only is refused by the schema, and a CLAP record without
+    `hostExtensions` (a probe that ended before the offer) is stored with `host_extensions` NULL, which the row judge
+    reads as `[]`; C6b holds byte-equal on all 254 such records of `records/`. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
+    dropped.
 
 ### Change 3: the reader
 
@@ -963,6 +1369,82 @@ makes it fail.
 16. **Hot journal.** A user layer with a hot journal (a writer killed inside a transaction) → `hot-journal`, naming
     the file; the layer and its journal are unchanged afterwards. Fails when the reader opens it read-write to roll
     back, or reads it as if no journal were there.
+17. **The identity fields.** For each result of a fixture set, `binary_path`, `layout_scheme`, `layout_sha256`,
+    `tested_version` and `unpinnable` equal the test's own SQL read of the record, a record with no layout giving NULL
+    for both layout fields and `unpinnable` 0 (1 for a record that holds it). Fails when two columns are swapped
+    (sabotage: `layout_scheme` and `layout_sha256`).
+18. **`pqdb_files`.** The list of a result is the record's `record_file` rows in `ord` order, paths and hashes equal to
+    the test's own read; every cell of one record gives the same list; the strings are valid in the callback only. A
+    non-zero return stops the walk and is returned. Fails when the order is the rowid's or the path's by a locale
+    (sabotage: `ORDER BY path COLLATE NOCASE`).
+19. **`binary_path` and `layer` filters.** `binary_path` returns only records of that path and is exact (`X.clap` finds no
+    `Y/X.clap`, none of another case). `layer` `user` returns every user record of the filters, including one that
+    shadows a base record, and none of the base; `layer` `base` returns the base record the user one shadows; NULL
+    is the merged answer of section 4, unchanged. Fails when `user` applies shadowing, when `base` is empty for a
+    shadowed key, or when a filter is ignored.
+20. **`pqdb_counts`.** A fixture user layer of three plugins (two `clap`, one `lv2`), the first with a `default` record
+    that has a `tier_offered` row and a `custom` one that has none, the second with no row, the third with one: the
+    counts are clap 2 plugins, 1 offered, 1 not offered; lv2 1, 1, 0. Two records of one plugin count once, offered
+    when either is. `layer` `base` and NULL count their own sets. Fails when records are counted, or a plugin with
+    only an unoffered record counts as offered.
+21. **`pqdb_record_json`.** For every record of a fixture set the document equals the Python exporter's, as JSON
+    values, and holds none of the sentence paths of section 3.5; the caller's `free` releases it; an error gives
+    `pqdb_error`. Fails when a column is missing or a number changes type (sabotage: a fraction read as an integer).
+22. **The command's widened shape.** `query --json` prints exactly the keys of section 6 in that order (a test checks
+    the key list), `files` a non-empty array of `path` and `sha256`, `unpinnable` 0 or 1, absent figures `null`.
+    `query --json --records` prints one line per record, with the record document; with `--rate` it exits 2.
+    `counts --json` prints one line per format. `--scope` with `--base` or `--user` exits 2; `--scope system` reads the
+    system place and never the home's (the test's `open` trace, as 15). Fails when a key is added, dropped or
+    reordered, or `--records` prints one line per cell.
+23. **`check` verifies the key.** A store whose `plugin.sha256` is not the SHA-256 at its `binary_path` makes `check`
+    print `qualification-db.key-mismatch`, naming the key, and exit 1; a store that holds the rule prints `ok`.
+    Fails when `check` skips the comparison.
+24. **Read only still.** `pqdb_files`, `pqdb_record_json`, `pqdb_counts` and `--records` leave both layers' size,
+    mtime and directory listing unchanged (test 10's check). Fails when any opens a layer read-write.
+25. **The row judge, from the reader.** The case C6b, run over the reader: a base built from `records/` is read through
+    `pqdb_record_json` and judged; every record's verdicts, tiers and cost equal the probe judge's. Fails with the same
+    sabotages as C6b, and when `pqdb_record_json` drops a cell, a column of section 6.2 or the cells' order.
+
+### The consumer switch (red-first tests of plugin-qualify's repository)
+
+The sync's tests belong to the sync's repository; the contract they hold is this spec's, and each fails first:
+
+C1. **Install root does not decide.** One record, the same bytes installed under `/usr/lib/clap`, under `/usr/lib64/clap`
+    and under a home's `.clap`: the sync takes the record for each. Fails when the lookup uses an absolute path.
+C2. **One file differs.** An LV2 bundle with the binary of the record and a changed `.ttl`; a bundle whose pin holds one
+    file MORE than the record's list; and a bundle whose pin holds one file FEWER (the list names a file the installed
+    pin lacks): each is measured, not taken. Fails when only the binary is compared, or when the match is a subset
+    either way.
+C3. **`probe.sha256` decides nothing.** The record's `probe_sha256` altered in the store, and no probe output anywhere:
+    the record is still taken, and a pin is built from the list, the layout and `tested_version`. Fails when the pin or
+    the match reads the probe columns or a probe file.
+C4. **The sync writes the store.** After a run in a fixture home, the user layer holds the run's records
+    (`binary_path` relative, list in order, key rule held) and no `*.qualification.json`, `*.probe.json` or
+    `*.unmeasured.json` exists under any directory the sync used. Fails when any file is written.
+C5. **No directory is read.** With a directory of valid old `*.qualification.json` and `*.probe.json` files present, and
+    with the store absent, the sync refuses by `qualification-db.absent` and takes nothing from the files; with the
+    store present, `qualify-rejudge`, `pruneStale` and `pluginCounts` give the store's answers and the open trace shows
+    no read of that directory. Fails when any function falls back, or reads both.
+C6. **`qualify-rejudge` on the store.** It judges the user layer's records again with no probe output on disk, `put`s only
+    the records that changed, leaves the base unchanged, and owes `figures-unreadable` for a record whose rows lack a
+    figure (a CLAP record without `host_extensions`; a NULL `cell.rt_syscalls` under an interposer). Fails when it reads
+    `probe_file`.
+C6b. **The row judge equals the probe judge, over the corpus.** For every record of `records/` (both classes), the
+    verdicts, the tiers and the cost that `rejudgeRecord` gives from the store's rows (`query --json --records` of a base
+    built from `records/`) are byte-equal, as the JSON text the record writes, to the ones it gives from the probe
+    output beside the record (the probe outputs stay in `records/` as this test's oracle; the store holds none). The
+    test names the record and the first field that differs. Sabotage, one case for each mapped column of section 6.2
+    (the builder leaves one out): dropping `cell.rt_syscalls`, `cell.note_sweep_allocations`, `cell.cost_percentile_value`,
+    `cell.mem_second_instance_kb`, `cell.mem_limit_bytes`, `cell.voices_held` or `record_extension` makes the test red on
+    a record that reads it. Fails when any mapped column is missing from the build or the export.
+C7. **`pruneStale` on the store.** A plugin gone from the state, and a kept plugin with other bytes, each lose their user
+    record by `delete`; a record named by another plugin of the state, and every base record, stay; the descriptor files
+    go as today. Fails when a base record is touched, or a kept key is dropped.
+C8. **`pluginCounts` on the store.** The line equals the one the fixture's records give by hand, for the system layer
+    under `--system` and the user layer otherwise. Fails when it counts the base's records or reads a directory.
+C9. **The old settings and state are gone.** `qualification_dir` and `distributed_dir` are refused as unknown settings; a
+    state of `plugin-qualify.sync-state/1` is moved aside and every plugin is qualified again. Fails when either is
+    accepted or converted.
 
 ## 9. Owner rulings
 
@@ -989,13 +1471,33 @@ Decided by the owner (2026-11-19):
    reader move to the database in one change, in the same release pass as changes 2 and 3, before the console's 0.2.1
    release. plugin-qualify's release line and plugin-hostd's wait for it and tag once, with it.
 
-The records a device already holds in its `qualification_dir` are not migrated by this work; the consumer switch
-decides whether the device re-measures them or runs the same writer over that directory.
+9. **DECIDED (ruling (a), 2026-11-19): the store replaces the distributed JSON layer.** `plugin-qualify-sync` switches
+   fully in this pass. The store carries what the sync matches on: the binary path and the per-file SHA-256 list, the key
+   being the SHA-256 of the list's entry at the binary path (section 3.7). The pin is the key plus a per-file match and
+   replaces `probe.sha256` (section 3.7). The sync is the writer of its own records into the user or system layer;
+   `qualify-rejudge`, `pruneStale` and `pluginCounts` read the store and not `qualification_dir`; the reader answers
+   them (section 6, section 6.1). There is no dual read and no fallback.
+10. **DECIDED (%7, ruling (a)): the key is the binary entry's own SHA-256.** The key's SHA-256 is the SHA-256 of the list's
+    entry at `binary_path`, as the key is today. No re-key: no file name, descriptor name or stem changes (section 3.7).
+    Order: `user_version` stays 1 only if no release of this repository ships a store before the code of this amendment
+    lands, so that code lands before this pass's release of this repository.
+11. **DECIDED (%7, ruling (a)): rejudge works from rows only.** Probe bytes are never kept beside the store. Any field
+    the judge needs gets a column, including `ownThreads` and `otherThreads` (section 6.2).
+
+The records a device already holds in its `qualification_dir` are not migrated, imported or read by the switch: the
+sync measures a plugin that the base does not hold, and the old files stay on the device unread. No program converts
+them (section 10).
 
 ## 10. Out of scope
 
 - Any compatibility mechanism: no dual read of the old files and the database, no fallback from one to the other, no
-  alias, no shim, no second format. If the switch seems to need one, it stops and asks the owner.
+  alias, no shim, no second format. If the switch seems to need one, it stops and asks the owner. In particular no
+  consumer (`readDistributedLayer`, `matchDistributed`, `applyDistributed`, `qualify-rejudge`, `pruneStale`,
+  `pluginCounts`, the passes of the sync) reads the distributed JSON or a `qualification_dir` once the switch is made,
+  and no importer turns the files of a device's `qualification_dir` into rows.
+- A release of this repository that ships a store before the code of this amendment lands: it would fix `user_version`
+  1 on a shape this amendment changes (section 3.6, section 9, ruling 10).
+- A hash over the whole list as the key's SHA-256, a store of probe outputs, and a probe-bytes pin (section 3.7).
 - Removing the old package names. The JSON files stop being installed with the consumer switch (section 5), not before.
 - An upgrade path for a user layer at another `user_version`.
 - plugin-db's store and its judged and reference layers.

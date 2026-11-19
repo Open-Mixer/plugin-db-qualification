@@ -524,14 +524,14 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `probe_end.signal` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_SIGNALS`, `x-from` plugin-hostd (`SIGSEGV`, `SIGABRT`) | added |
 | `record.adapter_code`, `adapter_cell.code` | omx-clap-core | `qualification` | `QUALIFICATION_ADAPTER_CODES`, `x-from` omx-clap-core's `omx-clap-host.*` codes | added |
 | `verdict.rating`, `tier.rating`, `reason.rating` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
-| `verdict.hosting` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`) | added |
+| `verdict.hosting`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`, `in-process`: the hosting paths, as `verdict.hosting` and `tiers.offeredOn[]` write them) | added |
 | `verdict.arm` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
 | `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd | `qualification` | `QUALIFICATION_HOSTING_CODES` (`x-from` omx-clap-core's hosting tables), `QUALIFICATION_PROBE_OUTCOMES`, `QUALIFICATION_ADAPTER_CODES`: today's values come from all three | added |
 | `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `qualification` | `QUALIFICATION_HOSTING_CODES` | added |
-| `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory` and `hostAdmission` |
+| `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
 | `reason_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...) | added |
 | `reason_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
-| `tier.tier`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`) | added |
+| `tier.tier` | plugin-qualify | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
 | `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
 | `cell.voices_basis`, `cell.mem_basis` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
 | `cell.mem_limit_mechanism` | plugin-qualify | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |

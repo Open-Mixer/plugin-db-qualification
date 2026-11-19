@@ -108,12 +108,13 @@ static void jreal(buf *b, double v)
 /* a number as JSON.stringify writes it (ECMAScript Number::toString): the shortest digits that read back the same double,
  * then laid out as the standard has it: plain from 1e-6 up to (not including) 1e21, else d[.ddd]e(+|-)x with no padding;
  * 2.0 is 2, -0 is 0 */
-static void jnum(buf *b, double v)
+/* `out` holds 64 bytes */
+static void js_number(double v, char *out)
 {
-    char t[40], digits[24], out[64];
+    char t[40], digits[24];
     int p, nd = 0, e10, n, o = 0;
     char *e;
-    if (v == 0) { bs(b, "0"); return; }
+    if (v == 0) { strcpy(out, "0"); return; }
     if (v < 0) { out[o++] = '-'; v = -v; }
     for (p = 1; p <= 17; p++) {                     /* the first that reads back equal is the shortest */
         snprintf(t, sizeof t, "%.*e", p - 1, v);
@@ -128,20 +129,26 @@ static void jnum(buf *b, double v)
     digits[nd] = 0;
     n = e10 + 1;                                    /* the value is 0.digits x 10^n */
     if (nd <= n && n <= 21) {
-        o += snprintf(out + o, sizeof out - (size_t)o, "%s", digits);
+        o += snprintf(out + o, 64 - (size_t)o, "%s", digits);
         for (int i = 0; i < n - nd; i++) out[o++] = '0';
     } else if (0 < n && n <= 21) {
-        o += snprintf(out + o, sizeof out - (size_t)o, "%.*s.%s", n, digits, digits + n);
+        o += snprintf(out + o, 64 - (size_t)o, "%.*s.%s", n, digits, digits + n);
     } else if (-6 < n && n <= 0) {
-        o += snprintf(out + o, sizeof out - (size_t)o, "0.");
+        o += snprintf(out + o, 64 - (size_t)o, "0.");
         for (int i = 0; i < -n; i++) out[o++] = '0';
-        o += snprintf(out + o, sizeof out - (size_t)o, "%s", digits);
+        o += snprintf(out + o, 64 - (size_t)o, "%s", digits);
     } else {
-        o += snprintf(out + o, sizeof out - (size_t)o, "%c", digits[0]);
-        if (nd > 1) o += snprintf(out + o, sizeof out - (size_t)o, ".%s", digits + 1);
-        o += snprintf(out + o, sizeof out - (size_t)o, "e%c%d", n - 1 < 0 ? '-' : '+', n - 1 < 0 ? 1 - n : n - 1);
+        o += snprintf(out + o, 64 - (size_t)o, "%c", digits[0]);
+        if (nd > 1) o += snprintf(out + o, 64 - (size_t)o, ".%s", digits + 1);
+        o += snprintf(out + o, 64 - (size_t)o, "e%c%d", n - 1 < 0 ? '-' : '+', n - 1 < 0 ? 1 - n : n - 1);
     }
     out[o] = 0;
+}
+
+static void jnum(buf *b, double v)
+{
+    char out[64];
+    js_number(v, out);
     bs(b, out);
 }
 
@@ -588,5 +595,25 @@ static int document(sqlite3 *h, long long record_id, char **json, char *why, siz
         return -2;
     }
     *json = b.p;
+    return 0;
+}
+
+/* A number as JSON.stringify writes it, under the C locale whatever the program's (the command's figures and the
+ * document's use this one writer). 0, or -1 for a value that is not finite or does not fit in `n` bytes. */
+int pqdb_number(double v, char *out, size_t n)
+{
+    char t[64];
+    locale_t old;
+    if (!isfinite(v) || !out || n == 0)
+        return -1;
+    pthread_once(&c_locale_once, make_c_locale);
+    if (!c_locale)
+        return -1;
+    old = uselocale(c_locale);
+    js_number(v, t);
+    uselocale(old);
+    if (strlen(t) + 1 > n)
+        return -1;
+    memcpy(out, t, strlen(t) + 1);
     return 0;
 }

@@ -76,6 +76,14 @@ int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_resul
    and is returned. 0, or a refusal status. */
 int  pqdb_files(const pqdb *db, const pqdb_result *r, int (*each)(const char *path, const char *sha256, void *), void *ctx);
 
+/* What the last refusal of pqdb_each said (the layer, the record, the column), or NULL; valid until the next call on the
+   handle. pqdb_each refuses a figure that is not finite (a REAL of Infinity) as qualification-db.not-a-store. */
+const char *pqdb_message(const pqdb *db);
+
+/* A number as JSON.stringify writes it (2 for 2.0, 1e-7, 0.1, 0 for -0), under the C locale whatever the program's, as
+   pqdb_record_json writes its numbers. 0, or -1 for a value that is not finite or does not fit in `n` bytes. */
+int  pqdb_number(double value, char *out, size_t n);
+
 /* The record of a result as one JSON document of `plugin-qualify.qualification-record/1`, as this repository's
    qualification store spec (section 5) has its exporter write it: the same bytes as the Python exporter's, the sentences
    of section 3.5 absent. `*json` is memory the caller frees with free(). 0, or a refusal status with `err` filled; on a

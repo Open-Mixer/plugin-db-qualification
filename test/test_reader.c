@@ -10,6 +10,7 @@
 
 #include <dirent.h>
 #include <locale.h>
+#include <math.h>
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -913,10 +914,10 @@ static void non_finite(void)
         pqdb_error e;
         char *json = (char *)1;
         if (open_ok(fx(stores[i].file), NULL, GOOD, &db)) { CHECK(0, "open"); continue; }
-        CHECK(walk(db, &q, &o) == 0 && o.n == 1, "walk");
+        (void)q; (void)o;     /* the result by hand: pqdb_each itself refuses an infinite cost figure */
         memset(&r, 0, sizeof r);
-        r.layer = o.r[0].layer; r.sha256 = o.r[0].sha; r.format = o.r[0].format; r.uri = o.r[0].uri; r.offer = o.r[0].offer;
-        r.host_class = o.r[0].cls; r.rate = o.r[0].rate; r.quantum = o.r[0].quantum;
+        r.layer = "base"; r.sha256 = SHA('a'); r.format = "clap"; r.uri = "urn:p1"; r.offer = "default"; r.host_class = "x86-64";
+        r.rate = 48000; r.quantum = 256;
         memset(&e, 0, sizeof e);
         CHECK(pqdb_record_json(db, &r, &json, &e) != 0 && json == NULL, "%s: a document was written", stores[i].file);
         CHECK(e.code && strcmp(e.code, "qualification-db.not-a-store") == 0 && strstr(e.message, stores[i].column), "%s: %s %s",
@@ -944,7 +945,7 @@ static void number_writer(void)
     const struct { double v; const char *want; } c[] = { { 12.5, "12.5" }, { 2.0, "2" }, { 1e-7, "1e-7" }, { 0.1, "0.1" }, { -0.0, "0" } };
     for (size_t i = 0; i < sizeof c / sizeof *c; i++)
         CHECK(pqdb_number(c[i].v, t, sizeof t) == 0 && strcmp(t, c[i].want) == 0, "%g: got %s, want %s", c[i].v, t, c[i].want);
-    CHECK(pqdb_number(1e999, t, sizeof t) != 0 && pqdb_number(-1e999, t, sizeof t) != 0, "a non-finite number was written");
+    CHECK(pqdb_number(INFINITY, t, sizeof t) != 0 && pqdb_number(-INFINITY, t, sizeof t) != 0, "a non-finite number was written");
     CHECK(pqdb_number(0.30000000000000004, t, 8) != 0, "a number too long for the buffer was written");
     {   /* under a comma locale, when one is installed */
         char old[128];

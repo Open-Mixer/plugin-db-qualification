@@ -85,8 +85,14 @@ static int print_result(const pqdb_result *r, void *ctx)
         p->bad = 1;
     printf("],\"rate\":%d,\"quantum\":%d", r->rate, r->quantum);
     printf(",\"outcome\":"); json_string(r->outcome);
-    printf(",\"cost_median_ns\":%.17g,\"cost_p_ns\":%.17g,\"cost_p\":%d,\"has_cost\":%d", r->cost_median_ns, r->cost_p_ns,
-           r->cost_p, r->has_cost);
+    {
+        char m[64], q[64];
+        if (pqdb_number(r->cost_median_ns, m, sizeof m) != 0 || pqdb_number(r->cost_p_ns, q, sizeof q) != 0) {
+            p->bad = 1;
+            strcpy(m, "0"); strcpy(q, "0");
+        }
+        printf(",\"cost_median_ns\":%s,\"cost_p_ns\":%s,\"cost_p\":%d,\"has_cost\":%d", m, q, r->cost_p, r->has_cost);
+    }
     printf(",\"latency_frames\":%ld,\"has_latency\":%d", r->latency_frames, r->has_latency);
     printf(",\"mem_first_kb\":%ld,\"mem_per_instance_kb\":%ld,\"has_memory\":%d", r->mem_first_kb, r->mem_per_instance_kb,
            r->has_memory);
@@ -298,12 +304,14 @@ int main(int argc, char **argv)
         memset(&p, 0, sizeof p);
         p.db = db;
         rc = pqdb_each(db, &q, records ? print_record : print_result, &p);
-        pqdb_close(db);
         if (rc == 0 && p.bad) rc = -2;
         if (rc != 0) {
-            fprintf(stderr, "%s\n", pqdb_code(rc) ? pqdb_code(rc) : "qualification-db.unreadable");
+            fprintf(stderr, "%s%s%s\n", pqdb_code(rc) ? pqdb_code(rc) : "qualification-db.unreadable", pqdb_message(db) ? " " : "",
+                    pqdb_message(db) ? pqdb_message(db) : "");
+            pqdb_close(db);
             return 1;
         }
+        pqdb_close(db);
     }
     return 0;
 }

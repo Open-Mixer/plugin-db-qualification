@@ -11,6 +11,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <math.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -36,7 +37,13 @@ static const char *const CODES[] = {
 struct pqdb {
     sqlite3 *base, *user;
     char verdict_rating[64], verdict_deciding[64];
+    char msg[256];                  /* what the last refusal of pqdb_each said */
 };
+
+const char *pqdb_message(const pqdb *db)
+{
+    return db->msg[0] ? db->msg : NULL;
+}
 
 const char *pqdb_code(int status)
 {
@@ -497,7 +504,7 @@ static const char *const SHADOWED =
     "SELECT 1 FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id "
     "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND r.offer = ?4 AND r.host_class = ?5 LIMIT 1";
 
-static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const pqdb_query *q,
+static int walk_layer(pqdb *owner, sqlite3 *h, const char *layer, sqlite3 *shadow_db, const pqdb_query *q,
                       int (*each)(const pqdb_result *, void *), void *ctx)
 {
     sqlite3_stmt *st, *sh = NULL;
@@ -552,6 +559,12 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
             r.cost_median_ns = sqlite3_column_double(st, 15);
             r.cost_p = sqlite3_column_type(st, 16) == SQLITE_NULL ? 0 : sqlite3_column_int(st, 16);
             r.cost_p_ns = sqlite3_column_double(st, 17);
+            if (!isfinite(r.cost_median_ns) || !isfinite(r.cost_p_ns)) {     /* JSON has no Infinity: refused by name */
+                snprintf(owner->msg, sizeof owner->msg, "%s layer, %s %s (offer %s, class %s): the column %s holds a number that is not finite",
+                         layer, r.format, r.uri, r.offer, r.host_class, isfinite(r.cost_median_ns) ? "cost_percentile_value" : "cost_median");
+                ret = S_NOT_A_STORE;
+                break;
+            }
         }
         if (sqlite3_column_type(st, 18) != SQLITE_NULL || sqlite3_column_type(st, 19) != SQLITE_NULL) {
             r.has_latency = 1;
@@ -587,9 +600,9 @@ int pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result
         else if (strcmp(q->layer, "base") == 0) want_user = 0, shadow = NULL;
         else return S_LAYER;
     }
-    if (want_user && db->user && (ret = walk_layer(db->user, "user", NULL, q, each, ctx)) != 0)
+    if (want_user && db->user && (ret = walk_layer((pqdb *)db, db->user, "user", NULL, q, each, ctx)) != 0)
         return ret;
-    return want_base ? walk_layer(db->base, "base", shadow, q, each, ctx) : 0;
+    return want_base ? walk_layer((pqdb *)db, db->base, "base", shadow, q, each, ctx) : 0;
 }
 
 /* the list of the record a result is a cell of: the record_file rows in ord order (section 3.7) */

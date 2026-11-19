@@ -4,7 +4,7 @@
 # Refuses a Fedora 44 reference in the workflows: the fc44 packages are dropped for this pass (protocol 0.6.0 and later
 # are published for fc45 only), so a job on fedora:44, an fc44 cell, or 44 in a fedora matrix list can no longer resolve
 # its build dependencies. Matches fedora:44, fc44, a fedora line carrying 44 anywhere (fedora: [45, 44], [43, 44]), and a
-# fedora block list whose item is 44. Usage: workflow-fedora-check.sh [repo-root] (default: .), or --self-test, which runs
+# fedora block list whose item is 44; the record-set name fedora44 is not a reference. Usage: workflow-fedora-check.sh [repo-root] (default: .), or --self-test, which runs
 # this check on planted trees with each shape, a missing directory included. Exit 0 clean, 1 a hit (each line named),
 # 2 no .github/workflows to check.
 set -eu
@@ -17,7 +17,10 @@ check() {
 		return 2
 	fi
 	local hits
-	hits=$(grep -rnE 'fedora:44|fc44|fedora.*[^0-9]44([^0-9]|$)' "$wf" || true)
+	# fedora44 names the record sets measured on Fedora 44 (plugin-db-qualification): data, not a build target, so it
+	# is taken out of each line before the match; a fedora:44 image or an fc44 cell on the same line is still refused
+	hits=$(find "$wf" -type f -exec awk '{ l = $0; gsub(/fedora44/, "", l) }
+		l ~ /fedora:44|fc44|fedora.*[^0-9]44([^0-9]|$)/ { print FILENAME ":" FNR ":" $0 }' {} + || true)
 	local blocks
 	blocks=$(find "$wf" -type f \( -name '*.yml' -o -name '*.yaml' \) -exec awk '
 		FNR == 1 { fed = 0 }

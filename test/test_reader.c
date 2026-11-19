@@ -374,6 +374,28 @@ static void t10_read_only(void)
     for (int i = 0; i < na && i < nb; i++)
         CHECK(strcmp(a[i].name, b[i].name) == 0 && a[i].size == b[i].size && a[i].mtime == b[i].mtime, "%s changed", a[i].name);
 }
+
+/* The read-only checks (10, spec 24) compare a snapshot of the directory a store sits in. The listing of a directory is
+ * not changed by a neighbour: another process making or removing a file beside it, in the shared temporary directory,
+ * must not fail them. */
+static void snapshot_neighbours(void)
+{
+    char *t = tmpdir(), *other;
+    ent a[32], b[32];
+    int na, nb, same = 1;
+    copy(fx("base.sqlite"), under(t, "base.sqlite"));
+    na = snapshot(t, a); qsort(a, (size_t)na, sizeof *a, by_name);
+    other = tmpdir();                       /* a neighbour: it changes the modification time of the temporary directory */
+    (void)other;
+    nb = snapshot(t, b); qsort(b, (size_t)nb, sizeof *b, by_name);
+    CHECK(na == nb, "directory listing changed: %d -> %d entries", na, nb);
+    for (int i = 0; i < na && i < nb; i++)
+        if (strcmp(a[i].name, b[i].name) != 0 || a[i].size != b[i].size || a[i].mtime != b[i].mtime) {
+            same = 0;
+            printf("       %s changed with only a neighbour beside it\n", a[i].name);
+        }
+    CHECK(same, "a neighbour in the temporary directory changed the snapshot");
+}
 static void t12_busy(void)
 {
     char *t = tmpdir();
@@ -944,7 +966,7 @@ static const test TESTS[] = {
     { "05 domain too old", t05_domain_too_old, 0 }, { "06 whole-record merge", t06_whole_record_merge, 0 },
     { "07 a user record shadows the whole base record", t07_shadows_whole, 0 },
     { "08 another key is not shadowed", t08_other_key_not_shadowed, 0 }, { "09 package lookup", t09_package_lookup, 0 },
-    { "10 read only", t10_read_only, 0 }, { "12 busy", t12_busy, 0 }, { "13 figures agree with qualcost", t13_figures, 0 },
+    { "10 read only", t10_read_only, 0 }, { "10 snapshots ignore neighbours", snapshot_neighbours, 0 }, { "12 busy", t12_busy, 0 }, { "13 figures agree with qualcost", t13_figures, 0 },
     { "16 hot journal", t16_hot_journal, 0 }, { "17 adapter code in parts", t17_adapter_code, 0 },
     { "18 verdict of a result", t18_verdict, 0 },
     { "spec 17 the identity fields", spec17_identity, 0 }, { "spec 18 pqdb_files", spec18_files, 0 },

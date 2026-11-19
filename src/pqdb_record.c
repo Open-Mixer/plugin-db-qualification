@@ -234,6 +234,16 @@ static void params(buf *b, ctx *c, const char *sql, int nbind, long long a1, lon
     }
     bc(b, '}');
 }
+/* an object of named texts: rows of (name, value) */
+static void params_text(buf *b, ctx *c, const char *sql, long long a1, long long a2)
+{
+    bc(b, '{');
+    ROWS(b, c, st, sql, 2, a1, a2) {
+        key(b, (const char *)sqlite3_column_text(st, 0));
+        jstr(b, (const char *)sqlite3_column_text(st, 1));
+    }
+    bc(b, '}');
+}
 static void reasons(buf *b, ctx *c, const char *by, long long ord)
 {
     char sql[200];
@@ -298,12 +308,54 @@ static void tier(buf *b, ctx *c, const char *name)
     }
 }
 
+/* history[]: the adjust --history blocks, in plugin-qualify's order (HistoryBlock, Adjustment) */
+static void history(buf *b, ctx *c)
+{
+    ARR(b, "history", 0, {
+        ROWS(b, c, st, "SELECT * FROM record_history WHERE record_id = ?1 ORDER BY ord", 1, c->rid, 0) {
+            long long ho = sqlite3_column_int64(st, ci(st, "ord", b));
+            elem(b); bc(b, '{');
+            LEAVES(b, st, { "hostClass", "host_class", 'T' }, { "file", "file", 'T' }, { "at", "at", 'T' });
+            if (!null_of(st, "key_uri", b) || !null_of(st, "key_digest", b))
+                OBJ(b, "key", 1, LEAVES(b, st, { "uri", "key_uri", 'T' }, { "digest", "key_digest", 'T' }));
+            leaf(b, st, "found", "found", 'B');
+            if (!null_of(st, "windows_solo", b) || !null_of(st, "windows_grouped", b))
+                OBJ(b, "windows", 1, LEAVES(b, st, { "solo", "windows_solo", 'I' }, { "grouped", "windows_grouped", 'I' }));
+            if (!null_of(st, "summary_crashed", b) || !null_of(st, "summary_raises_xruns", b))
+                OBJ(b, "summary", 1, LEAVES(b, st, { "crashed", "summary_crashed", 'B' }, { "raisesXruns", "summary_raises_xruns", 'B' }));
+            if (!null_of(st, "unknown_keys", b)) {
+                key(b, "unknownKeys");
+                params_text(b, c, "SELECT name, value FROM history_unknown_key WHERE record_id = ?1 AND history_ord = ?2 ORDER BY rowid", c->rid, ho);
+            }
+            ARR(b, "verdicts", 1, {
+                ROWS(b, c, vs, "SELECT * FROM history_verdict WHERE record_id = ?1 AND history_ord = ?2 ORDER BY ord", 2, c->rid, ho) {
+                    long long vo = sqlite3_column_int64(vs, ci(vs, "ord", b));
+                    elem(b); bc(b, '{');
+                    leaf(b, vs, "host", "host", 'T');
+                    key(b, "measured");
+                    if (null_of(vs, "measured", b)) bs(b, "null"); else jstr(b, (const char *)sqlite3_column_text(vs, ci(vs, "measured", b)));
+                    key(b, "adjusted");
+                    if (null_of(vs, "adjusted", b)) bs(b, "null"); else jstr(b, (const char *)sqlite3_column_text(vs, ci(vs, "adjusted", b)));
+                    LEAVES(b, vs, { "move", "move", 'T' }, { "reason", "reason", 'T' });
+                    if (!null_of(vs, "blocked_by", b)) {
+                        char sql[200];
+                        snprintf(sql, sizeof sql, "SELECT code FROM history_blocked WHERE record_id = ?1 AND history_ord = ?2 AND verdict_ord = %lld ORDER BY ord", vo);
+                        ARR(b, "blockedBy", 1, { ROWS(b, c, bs_, sql, 2, c->rid, ho) { elem(b); jstr(b, (const char *)sqlite3_column_text(bs_, 0)); } });
+                    }
+                    bc(b, '}');
+                }
+            });
+            bc(b, '}');
+        }
+    });
+}
+
 static void record(buf *b, ctx *c, sqlite3_stmt *r)
 {
     long long rid = c->rid;
     bc(b, '{');
     leaf(b, r, "schema", "schema", 'T');
-    OBJ(b, "plugin", 0, LEAVES(b, r, { "format", "p_format", 'T' }, { "id", "p_uri", 'T' }));
+    OBJ(b, "plugin", 0, LEAVES(b, r, { "format", "p_format", 'T' }, { "id", "p_uri", 'T' }, { "name", "plugin_name", 'T' }));
     OBJ(b, "binary", 0, {
         LEAVES(b, r, { "path", "binary_path", 'T' }, { "sha256", "p_sha256", 'T' });
         ARR(b, "files", 1, {
@@ -321,6 +373,7 @@ static void record(buf *b, ctx *c, sqlite3_stmt *r)
     leaf(b, r, "measuredAt", "measured_at", 'T');
     leaf(b, r, "latencyLineMs", "latency_line_ms", 'N');
     leaf(b, r, "rules", "rules", 'T');
+    history(b, c);
     OBJ(b, "run", 0, {
         leaf(b, r, "id", "run_id", 'T');
         ARR(b, "steps", 1, {
@@ -330,7 +383,9 @@ static void record(buf *b, ctx *c, sqlite3_stmt *r)
                 OBJ(b, "figures", 0, LEAVES(b, st, { "cpuPercent", "cpu_percent", 'R' }, { "latencyFrames", "latency_frames", 'I' },
                                              { "midiInputsLinked", "midi_inputs_linked", 'I' }, { "xruns", "xruns", 'I' }));
                 OBJ(b, "pool", 0, LEAVES(b, st, { "allocationsOn", "pool_allocations_on", 'I' }, { "locksOn", "pool_locks_on", 'I' },
-                                          { "syscallsOn", "pool_syscalls_on", 'I' }, { "tasksOnHelpers", "pool_tasks_on_helpers", 'I' }));
+                                          { "syscallsOn", "pool_syscalls_on", 'I' }, { "tasksOnHelpers", "pool_tasks_on_helpers", 'I' },
+                                          { "dspLoadOff", "pool_dsp_load_off", 'N' }, { "dspLoadOn", "pool_dsp_load_on", 'N' },
+                                          { "xrunsOff", "pool_xruns_off", 'I' }, { "xrunsOn", "pool_xruns_on", 'I' }));
                 bc(b, '}');
             }
         });

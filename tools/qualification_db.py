@@ -457,7 +457,7 @@ WORDS = {
     ("verdict", "deciding"): [_HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
     ("tier", "deciding"): [_HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
     ("reason", "code"): [_HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
-    ("history_blocked", "code"): [_q("PIN_VERDICTS"), _HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
+    ("history_blocked", "code"): [_q("HISTORY_BLOCKERS"), _HOSTING] + _PROBE_OUT + _ADAPTER_PARTS,
     ("not_measured", "code"): [_HOSTING],
     ("unmeasured", "code"): [_HOSTING],
     ("cell", "latency_code"): [_HOSTING],

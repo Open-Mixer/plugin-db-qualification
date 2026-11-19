@@ -664,10 +664,10 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
 | `history_verdict.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` | exists |
-| `history_verdict.measured`, `.adjusted` | plugin-qualify | `qualification` | `QUALIFICATION_PIN_VERDICTS` (the `PIN_VERDICTS` of `pins-file.ts`) | added |
+| `history_verdict.measured`, `.adjusted` | plugin-qualify | `qualification` | `QUALIFICATION_PIN_VERDICTS` (the `PIN_VERDICTS` of `pins-file.ts`: `in-process`, `isolated`, `refused`) | added |
 | `history_verdict.move` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_MOVES` (`demote`, `promote`, `none`) | added |
 | `history_verdict.reason` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_REASONS` (`history.crashed`, `history.steady`, `history.no-record`, ...: `HISTORY_REASON`) | added |
-| `history_blocked.code` | plugin-qualify, omx-clap-core, plugin-hostd | `qualification`, `hosting`, `probe` | `QUALIFICATION_PIN_VERDICTS` (`refused`, `unknown`) and the items of `reason.code` | added |
+| `history_blocked.code` | plugin-qualify, omx-clap-core, plugin-hostd | `qualification`, `hosting`, `probe` | `QUALIFICATION_HISTORY_BLOCKERS` (the words `blockers()` of `history-adjust.ts` writes that are no reason code: `refused`, `unknown`, `no-deciding-reason`; plugin-qualify names them) and the items of `reason.code` | added |
 
 An adapter code is written `<host>.<kind>` or `<host>.<kind>-<parameter>` and stored as written. Its check splits it:
 `<host>` is a word of `QUALIFICATION_ADAPTER_HOSTS`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the

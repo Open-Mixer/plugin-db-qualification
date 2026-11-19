@@ -305,6 +305,11 @@ class Command(Layer):
         return ["--sha256", k["sha256"], "--format", k["format"], "--uri", k["uri"], "--offer", k["offer"],
                 "--host-class", k["host_class"]]
 
+    @staticmethod
+    def dot_dot(r):
+        r["binary"]["path"] = "../" + r["binary"]["path"]
+        r["binary"]["files"][0]["path"] = r["binary"]["path"]
+
     def test_the_command_exists_and_is_executable(self):
         self.assertTrue(os.access(COMMAND, os.X_OK), COMMAND)
 
@@ -346,8 +351,7 @@ class Command(Layer):
             "files-empty": (self.edited(lambda r: r["binary"].update(files=[])), {}),
             "word-unknown": (self.edited(lambda r: r["verdicts"][0].update(rating="excellent")), {}),
             "field-unmapped": (self.edited(lambda r: r["verdicts"][0].update(mood="calm")), {}),
-            "schema-refused": (self.edited(lambda r: (r["binary"].update(path="../" + r["binary"]["path"]),
-                                                      r["binary"]["files"][0].update(path="../" + r["binary"]["path"]))), {}),
+            "schema-refused": (self.edited(self.dot_dot), {}),
         }
         for name, (rec, kw) in cases.items():
             with self.subTest(name):

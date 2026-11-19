@@ -48,6 +48,15 @@ WORD_CHECK = [
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
     # the hosting columns (section 3.4): mixed with probe words, or hosting words only
+    ("history_verdict", "host", "qualification", "QUALIFICATION_HOST_PROFILES"),
+    ("history_verdict", "measured", "qualification", "QUALIFICATION_PIN_VERDICTS"),
+    ("history_verdict", "adjusted", "qualification", "QUALIFICATION_PIN_VERDICTS"),
+    ("history_verdict", "move", "qualification", "QUALIFICATION_HISTORY_MOVES"),
+    ("history_verdict", "reason", "qualification", "QUALIFICATION_HISTORY_REASONS"),
+    ("history_blocked", "code", "qualification", "QUALIFICATION_PIN_VERDICTS"),
+    ("history_blocked", "code", "hosting", "HOSTING_COST_CODES"),
+    ("history_blocked", "code", "hosting", "HOSTING_MEMORY_CODES"),
+    ("history_blocked", "code", "hosting", "HOSTING_LATENCY_CODES"),
     ("tier", "deciding", "probe", "PROBE_OUTCOMES"),
     ("tier", "deciding", "hosting", "HOSTING_COST_CODES"),
     ("tier", "deciding", "hosting", "HOSTING_MEMORY_CODES"),
@@ -258,9 +267,19 @@ def build_records(path):
     c.execute("INSERT INTO adapter_cell_param VALUES (1, 0, 'peak', 0.5, NULL)")
     c.execute("INSERT INTO adapter_cell VALUES (1, 1, 96000, 256, 0, 0, NULL, 1)")   # params present and empty
     c.execute("UPDATE adapter_cell SET params = 1 WHERE record_id = 1 AND ord = 0")
-    c.executemany("INSERT INTO run_step VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                  [(0, "instantiate", "ok", None, None, None, None, None, None, None, None, None),
-                   (1, "process", "ok", "probe.ok", 12.5, 64, 2, 3, 4, 5, 6, 7)])
+    c.executemany("INSERT INTO run_step VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  [(0, "instantiate", "ok", None, None, None, None, None, None, None, None, None, None, None, None, None),
+                   (1, "process", "ok", "probe.ok", 12.5, 64, 2, 3, 4, 5, 6, 7, 31.25, 18.5, 3, 0)])
+    # history (adjust --history): a full block, and a block of a class the history has no line for
+    c.execute("UPDATE record SET plugin_name = 'The P1 \u00e9' WHERE record_id = 1")
+    c.execute("INSERT INTO record_history VALUES (1, 0, 'x86_64/8/ghz-3', 'history-1.json', '2026-11-19T20:00:00Z', 'urn:p1', 'dd', 1, 400, 40, 0, 1, 1)")
+    c.execute("INSERT INTO record_history VALUES (1, 1, 'aarch64/4/ghz-2', 'history-2.json', '2026-11-19T20:01:00Z', NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL)")
+    c.executemany("INSERT INTO history_unknown_key VALUES (1, 0, ?, ?)", [("extra", "1"), ("zeta", "two")])
+    c.executemany("INSERT INTO history_verdict VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  [(0, 0, "omx-clap-host", "isolated", "refused", "demote", "history.crashed", None),
+                   (0, 1, "openmixer-console", None, None, "none", "history.not-liftable", 1),
+                   (1, 0, "omx-clap-host", "in-process", "in-process", "none", "history.no-record", None)])
+    c.executemany("INSERT INTO history_blocked VALUES (1, 0, 1, ?, ?)", [(0, "refused"), (1, "hosting.cost.above-ceiling")])
     c.executemany("INSERT INTO probe_end VALUES (1, ?, ?, ?, ?, ?)", [(0, "process", "probe.ok", 0, None), (1, "exit", "probe.crashed", None, "SIGSEGV")])
     c.executemany("INSERT INTO cost_entry VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
     c.executemany("INSERT INTO reason (reason_id, record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (?, 1, ?, ?, ?, ?, ?, ?)",

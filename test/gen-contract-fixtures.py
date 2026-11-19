@@ -27,6 +27,12 @@ WORDS = {
         "QUALIFICATION_SET_TIERS": ["reference", "provisional", "hardware"],
         "QUALIFICATION_HOST_PROFILES": ["omx-clap-host", "openmixer-console"],
         "QUALIFICATION_ADAPTER_HOSTS": ["omx-clap-host", "mod-host", "jalv"],
+        # plugin-qualify's PIN_VERDICTS (src/pins-file.ts) and `unknown`, which a blockedBy code can be; HISTORY_REASON
+        # (src/history-adjust.ts) and the moves
+        "QUALIFICATION_PIN_VERDICTS": ["in-process", "isolated", "refused", "unknown"],
+        "QUALIFICATION_HISTORY_MOVES": ["demote", "promote", "none"],
+        "QUALIFICATION_HISTORY_REASONS": ["history.crashed", "history.xruns-grouped", "history.crashed-alone", "history.steady",
+                                          "history.no-record", "history.no-change", "history.not-liftable"],
         "QUALIFICATION_OFFERS": ["default", "custom"],
         "QUALIFICATION_PACKAGE_FORMATS": ["deb", "rpm"],
         "QUALIFICATION_PACKAGE_DISTROS": ["trixie", "fc44", "fc45"],

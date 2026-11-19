@@ -83,6 +83,8 @@ CREATE TABLE record (
   host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
   measured_at    TEXT NOT NULL,
+  latency_line_ms REAL,                    -- latencyLineMs: the line the cells' latency_ms stand against; NULL: absent (a record from before it)
+  rules          TEXT CHECK (rules IS NULL OR rules GLOB 'plugin-qualify-rules/[0-9]*.[0-9]*'),   -- the rules the verdicts were judged by, a name; NULL: absent
   run_id         TEXT NOT NULL,
   tool_runner    TEXT NOT NULL,
   tool_child     TEXT NOT NULL,
@@ -230,6 +232,7 @@ CREATE TABLE cell (                        -- measurements.grid[]
   quantum   INTEGER NOT NULL,
   outcome   TEXT NOT NULL CHECK ((length(outcome) > 0 AND instr(outcome, ' ') = 0 AND instr(outcome, char(9)) = 0 AND instr(outcome, char(10)) = 0)),
   latency_declared_frames INTEGER, latency_measured_frames INTEGER,
+  latency_ms REAL,                          -- latencyMs: the measured latency in ms at the cell's rate, as written; NULL: absent
   latency_code TEXT CHECK (latency_code IS NULL OR (length(latency_code) > 0 AND instr(latency_code, ' ') = 0 AND instr(latency_code, char(9)) = 0 AND instr(latency_code, char(10)) = 0)),
   latency_unmeasured_reason TEXT CHECK (latency_unmeasured_reason IS NULL OR (length(latency_unmeasured_reason) > 0 AND instr(latency_unmeasured_reason, ' ') = 0 AND instr(latency_unmeasured_reason, char(9)) = 0 AND instr(latency_unmeasured_reason, char(10)) = 0)),
   cost_median REAL, cost_percentile_p INTEGER, cost_percentile_value REAL,

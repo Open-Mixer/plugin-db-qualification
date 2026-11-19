@@ -80,6 +80,7 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	LD_PRELOAD=$(abspath $(BUILD)/shim.so) PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) \
 	  $(BUILD)/test_reader $(BUILD)/fixtures $(abspath test/fixtures) scopes
 	sh test/test_nm.sh $(BUILD)/$(SONAME)
+	sh test/test_cxx.sh $(BUILD)
 	sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures
 	rm -rf $(BUILD)/stage
 	$(MAKE) install DESTDIR=$(abspath $(BUILD)/stage) PREFIX=/usr

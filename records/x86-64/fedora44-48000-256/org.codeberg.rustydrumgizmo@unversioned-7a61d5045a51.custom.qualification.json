@@ -22,26 +22,30 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "suitable",
-      "qualified": true,
+      "rating": "conditional",
+      "qualified": false,
       "hosting": "isolated",
       "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "suitable",
-          "code": "hosting.rt-safety.clean-under-sweep",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
           "params": {
-            "blocks": 512
+            "allocations": 0,
+            "syscalls": 1,
+            "locks": 0
           }
         },
         {
           "dimension": "rtSafety",
-          "rating": "suitable",
-          "code": "hosting.rt-safety.clean-under-notes",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
           "params": {
-            "blocks": 512,
-            "events": 0
+            "allocations": 1,
+            "syscalls": 0,
+            "locks": 0
           }
         }
       ]
@@ -51,8 +55,10 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": true,
-      "rating": "suitable"
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
     },
     "offeredOn": [
       "isolated"
@@ -93,7 +99,7 @@
           "blocks": 512,
           "allocations": 0,
           "locks": 0,
-          "syscalls": 0,
+          "syscalls": 1,
           "threadViolations": 0,
           "processErrors": 0,
           "events": []
@@ -101,15 +107,15 @@
         "noteSweep": {
           "applicable": true,
           "dialect": "clap",
-          "allocations": 0,
+          "allocations": 1,
           "locks": 0,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 62436,
-          "afterActivateKb": 62592,
-          "atRestKb": 62592,
-          "secondInstanceKb": 6620,
+          "afterInstantiateKb": 41064,
+          "afterActivateKb": 41368,
+          "atRestKb": 41368,
+          "secondInstanceKb": 6392,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
         }
@@ -127,11 +133,11 @@
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T11:55:21+00:00",
+  "measuredAt": "2026-11-09T14:45:54+00:00",
   "probe": {
     "file": "org.codeberg.rustydrumgizmo@unversioned-7a61d5045a51.custom.probe.json",
-    "sha256": "cf454f30e919a21470ffd8966e80b45be4977fb6a1fc926a2ae9b9347a95f837",
-    "bytes": 10563,
+    "sha256": "16d52d9c504449d7049c58ec175f9e17d897405a97a0a92ff628e140150c4f82",
+    "bytes": 10420,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -149,12 +155,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 4.94,
+      "loadavg1": 14.51,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T115521Z-8504-259cde1d",
+    "id": "20261109T144554Z-7d2d-f956aed6",
     "steps": [
       {
         "step": "scan",
@@ -170,11 +176,19 @@
       },
       {
         "step": "rt-safety",
-        "result": "safe"
+        "result": "unsafe"
       },
       {
-        "step": "pool",
-        "result": "not-asked"
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.silent-output",
+        "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 1.3333333333333333,
+          "xruns": 0,
+          "midiInputsLinked": 1
+        }
       }
     ]
   }

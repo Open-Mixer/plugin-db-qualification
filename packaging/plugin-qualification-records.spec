@@ -20,7 +20,7 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026111001
+Version: 2026111501
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
@@ -38,10 +38,26 @@ Provides: omx-qualification-x86-64-fedora44 = %{version}-%{release}
 Obsoletes: omx-qualification-x86-64-fedora44 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-176400-128 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-176400-128 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-176400-256 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-176400-256 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-176400-512 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-176400-512 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-192000-128 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-128 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-192000-256 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-256 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-192000-512 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-512 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-44100-128 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-44100-128 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-44100-256 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-44100-256 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-44100-512 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-44100-512 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-44100-64 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-44100-64 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-48000-128 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-128 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-48000-256 = %{version}-%{release}
@@ -50,6 +66,14 @@ Provides: plugin-db-qualification-x86-64-fedora44-48000-512 = %{version}-%{relea
 Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-512 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-48000-64 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-64 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-88200-128 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-88200-128 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-88200-256 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-88200-256 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-88200-512 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-88200-512 < %{version}-%{release}
+Provides: plugin-db-qualification-x86-64-fedora44-88200-64 = %{version}-%{release}
+Obsoletes: plugin-db-qualification-x86-64-fedora44-88200-64 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-96000-128 = %{version}-%{release}
 Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-128 < %{version}-%{release}
 Provides: plugin-db-qualification-x86-64-fedora44-96000-256 = %{version}-%{release}

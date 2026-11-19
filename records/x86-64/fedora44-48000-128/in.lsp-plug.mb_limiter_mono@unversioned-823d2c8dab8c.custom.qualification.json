@@ -22,17 +22,20 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "suitable",
-      "qualified": true,
+      "rating": "conditional",
+      "qualified": false,
       "hosting": "isolated",
       "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "suitable",
-          "code": "hosting.rt-safety.clean-under-sweep",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
           "params": {
-            "blocks": 512
+            "allocations": 1,
+            "syscalls": 1,
+            "locks": 1
           }
         }
       ]
@@ -42,8 +45,10 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": true,
-      "rating": "suitable"
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
     },
     "offeredOn": [
       "isolated"
@@ -60,7 +65,7 @@
           "rating": "unsuitable",
           "code": "hosting.cost.above-ceiling",
           "params": {
-            "coreFractionP95": 0.07632384,
+            "coreFractionP95": 0.09205536,
             "ceiling": 0.05
           }
         },
@@ -69,7 +74,7 @@
           "rating": "conditional",
           "code": "hosting.cost.spiky-tail",
           "params": {
-            "tailRatio": 4.167160236284443,
+            "tailRatio": 4.2186791963079795,
             "ceiling": 4
           }
         }
@@ -87,10 +92,10 @@
           "measuredFrames": 480
         },
         "cost": {
-          "median": 381.574,
+          "median": 454.602,
           "percentile": {
             "p": 95,
-            "value": 1590.08
+            "value": 1917.82
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -100,22 +105,26 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 0,
-          "locks": 0,
-          "syscalls": 0,
+          "allocations": 1,
+          "locks": 1,
+          "syscalls": 1,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": []
+          "events": [
+            "malloc",
+            "pthread_mutex_lock",
+            "nanosleep"
+          ]
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 47848,
+          "afterInstantiateKb": 47916,
           "afterActivateKb": 51076,
-          "atRestKb": 52408,
+          "atRestKb": 52292,
           "secondInstanceKb": 32580,
-          "firstInstanceKb": 52408,
+          "firstInstanceKb": 52292,
           "perInstanceKb": 32580
         }
       }
@@ -132,11 +141,11 @@
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T11:03:03+00:00",
+  "measuredAt": "2026-11-09T14:17:40+00:00",
   "probe": {
     "file": "in.lsp-plug.mb_limiter_mono@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "596780648cfd70aa78759732d0e7a351a85dfa2270a2355b95d4459a9223cff0",
-    "bytes": 10485,
+    "sha256": "c47ec298a2dac2c85d689584cb5e2690ce6128361438a7292c662cea4b3d4101",
+    "bytes": 10420,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -154,12 +163,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 1.21,
+      "loadavg1": 9.23,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T110303Z-5977-55814774",
+    "id": "20261109T141740Z-5456-c69053a2",
     "steps": [
       {
         "step": "scan",
@@ -175,7 +184,17 @@
       },
       {
         "step": "rt-safety",
-        "result": "safe"
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 960,
+          "cpuPercent": 2,
+          "xruns": 0,
+          "midiInputsLinked": 0
+        }
       },
       {
         "step": "pool",

@@ -34,8 +34,8 @@
           "code": "hosting.rt-safety.violations-in-run",
           "params": {
             "allocations": 1,
-            "syscalls": 2,
-            "locks": 2
+            "syscalls": 3,
+            "locks": 3
           }
         }
       ]
@@ -65,8 +65,17 @@
           "rating": "unsuitable",
           "code": "hosting.cost.above-ceiling",
           "params": {
-            "coreFractionP95": 0.1813368,
+            "coreFractionP95": 0.2894568,
             "ceiling": 0.05
+          }
+        },
+        {
+          "dimension": "cost",
+          "rating": "conditional",
+          "code": "hosting.cost.spiky-tail",
+          "params": {
+            "tailRatio": 4.249987666589142,
+            "ceiling": 4
           }
         }
       ]
@@ -83,10 +92,10 @@
           "measuredFrames": 480
         },
         "cost": {
-          "median": 990.488,
+          "median": 1418.91,
           "percentile": {
             "p": 95,
-            "value": 3777.85
+            "value": 6030.35
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -97,12 +106,14 @@
           "sweepApplicable": true,
           "blocks": 512,
           "allocations": 1,
-          "locks": 2,
-          "syscalls": 2,
+          "locks": 3,
+          "syscalls": 3,
           "threadViolations": 0,
           "processErrors": 0,
           "events": [
             "malloc",
+            "pthread_mutex_lock",
+            "nanosleep",
             "pthread_mutex_lock",
             "nanosleep",
             "pthread_mutex_lock",
@@ -113,11 +124,11 @@
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 76792,
-          "afterActivateKb": 82348,
-          "atRestKb": 84464,
+          "afterInstantiateKb": 77272,
+          "afterActivateKb": 82840,
+          "atRestKb": 84816,
           "secondInstanceKb": 64940,
-          "firstInstanceKb": 84464,
+          "firstInstanceKb": 84816,
           "perInstanceKb": 64940
         }
       }
@@ -134,11 +145,11 @@
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T11:07:06+00:00",
+  "measuredAt": "2026-11-09T14:23:10+00:00",
   "probe": {
     "file": "in.lsp-plug.sc_mb_limiter_stereo@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "81d59176801784d4845886765e30dcbbef25e0bcd947cff490e3dfe6b23b19bc",
-    "bytes": 10595,
+    "sha256": "7eae4d36724051f89f83c03825efb764e2883b4a15f8084d687c251e23e328ac",
+    "bytes": 10502,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -156,12 +167,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 0.58,
+      "loadavg1": 12.84,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T110706Z-7953-2a3c6170",
+    "id": "20261109T142310Z-753d-4f53cc35",
     "steps": [
       {
         "step": "scan",
@@ -184,8 +195,8 @@
         "result": "isolated",
         "figures": {
           "latencyFrames": 960,
-          "cpuPercent": 1.6666666666666667,
-          "xruns": 0,
+          "cpuPercent": 3.3333333333333335,
+          "xruns": 2,
           "midiInputsLinked": 0
         }
       },

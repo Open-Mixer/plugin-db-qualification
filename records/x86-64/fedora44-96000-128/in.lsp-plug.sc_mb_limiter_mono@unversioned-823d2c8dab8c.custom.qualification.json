@@ -22,20 +22,17 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 1,
-            "syscalls": 1,
-            "locks": 1
+            "blocks": 512
           }
         }
       ]
@@ -45,10 +42,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-in-run",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -83,10 +78,10 @@
           "measuredFrames": 960
         },
         "cost": {
-          "median": 345.648,
+          "median": 258.883,
           "percentile": {
             "p": 95,
-            "value": 1680.02
+            "value": 1310.9
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -96,28 +91,25 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 1,
-          "locks": 1,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "pthread_mutex_lock",
-            "nanosleep"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 48160,
-          "afterActivateKb": 53468,
-          "atRestKb": 55280,
+          "afterInstantiateKb": 47292,
+          "afterActivateKb": 52692,
+          "atRestKb": 54660,
           "secondInstanceKb": 35248,
-          "firstInstanceKb": 55280,
+          "firstInstanceKb": 54660,
           "perInstanceKb": 35248
-        }
+        },
+        "latencyMs": 10
       }
     ]
   },
@@ -128,15 +120,17 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:47:53+00:00",
+  "measuredAt": "2026-11-09T21:21:59+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
   "probe": {
     "file": "in.lsp-plug.sc_mb_limiter_mono@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "4878af4c4affb98ab9f8d6830280c864f9fa457fa5a11174d0125ffdd7dee375",
-    "bytes": 10533,
+    "sha256": "46a650a33705b99638b09f8431905aae6d87eb47cf792fa03a0dd0ec0adf8dd0",
+    "bytes": 10363,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -154,12 +148,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 5.96,
+      "loadavg1": 2.93,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T094753Z-7c9b-ac7c05ec",
+    "id": "20261109T212159Z-7de4-ab141039",
     "steps": [
       {
         "step": "scan",
@@ -175,17 +169,7 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
-      },
-      {
-        "step": "isolated",
-        "result": "isolated",
-        "figures": {
-          "latencyFrames": 960,
-          "cpuPercent": 1.6666666666666667,
-          "xruns": 0,
-          "midiInputsLinked": 0
-        }
+        "result": "safe"
       },
       {
         "step": "pool",

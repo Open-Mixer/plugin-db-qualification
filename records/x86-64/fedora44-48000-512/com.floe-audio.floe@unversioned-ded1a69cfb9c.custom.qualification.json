@@ -1,0 +1,203 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.floe-audio.floe"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/Floe.clap",
+    "sha256": "ded1a69cfb9cda4fcd63a8120f2a9be98ead7789e3497c3b97c8fc2614618031",
+    "files": [
+      {
+        "path": "Floe.clap",
+        "sha256": "ded1a69cfb9cda4fcd63a8120f2a9be98ead7789e3497c3b97c8fc2614618031"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "02559cdd1d643d9de01293550e83695b4f99a92be8425ce43d400427b73b1272"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 2,
+            "syscalls": 0,
+            "locks": 9
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 512,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 1
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "clap",
+          "allocations": 2,
+          "locks": 9,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 36124,
+          "afterActivateKb": 43224,
+          "atRestKb": 43224,
+          "secondInstanceKb": 19352,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T15:19:01+00:00",
+  "probe": {
+    "file": "com.floe-audio.floe@unversioned-ded1a69cfb9c.custom.probe.json",
+    "sha256": "b04e56ec74a30a1af262578a28b9fce050c6a57b271315f751cf201fdea4423c",
+    "bytes": 10406,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 18.98,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T151901Z-1799-edd6de1c",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 1,
+          "xruns": 2,
+          "midiInputsLinked": 1
+        }
+      },
+      {
+        "step": "pool",
+        "result": "not-run",
+        "code": "pool.not-watched",
+        "detail": "the plugin's tasks were not seen on helper threads under the interposer",
+        "pool": {
+          "allocationsOn": 0,
+          "locksOn": 0,
+          "syscallsOn": 0,
+          "tasksOnHelpers": 0
+        }
+      }
+    ]
+  }
+}

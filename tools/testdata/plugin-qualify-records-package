@@ -8,6 +8,7 @@ so that tools/build-package.sh unpacks it as it unpacks the tool's. Its control 
 import hashlib
 import io
 import json
+import re
 import os
 import sys
 import tarfile
@@ -78,6 +79,11 @@ def main(argv):
         fail(f"{state} holds no record that can go in the package")
     text = opts["provenance"]
     prov = json.loads(text) if text.lstrip().startswith("{") else json.load(open(text, encoding="utf-8"))
+    # as the tool does since plugin-qualify#317 (records-package.ts recordsSetName): a set of one cell is named
+    # <set>-<rate>-<quantum> by the tool itself, from its cell (here the provenance's grid, the one cell build-package names)
+    m = re.fullmatch(r"([1-9][0-9]*)/([1-9][0-9]*)", str(prov.get("grid", "")))
+    if m:
+        set_ = f"{set_}-{m.group(1)}-{m.group(2)}"
     pkg = f"plugin-db-qualification-{cls}-{set_}"
     prov.update({"schema": "plugin-qualify.distributed-provenance/1", "set": set_, "hostClass": cls,
                  "package": {"name": pkg, "version": version}, "date": time.strftime("%Y-%m-%d")})

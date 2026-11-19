@@ -30,12 +30,10 @@
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 2,
-            "syscalls": 1,
-            "locks": 1
+            "blocks": 512
           }
         },
         {
@@ -90,10 +88,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 335.63,
+          "median": 185.436,
           "percentile": {
             "p": 95,
-            "value": 667.909
+            "value": 373.899
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -103,27 +101,22 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 2,
-          "locks": 1,
-          "syscalls": 1,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "malloc",
-            "pthread_mutex_lock",
-            "nanosleep"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 19768,
-          "afterActivateKb": 21012,
-          "atRestKb": 22132,
+          "afterInstantiateKb": 19960,
+          "afterActivateKb": 21828,
+          "atRestKb": 22348,
           "secondInstanceKb": 2588,
-          "firstInstanceKb": 22132,
+          "firstInstanceKb": 22348,
           "perInstanceKb": 2588
         }
       }
@@ -136,15 +129,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-08T17:23:19+00:00",
+  "measuredAt": "2026-11-09T15:45:25+00:00",
   "probe": {
     "file": "in.lsp-plug.para_equalizer_x16_lr@unversioned-823d2c8dab8c.default.probe.json",
-    "sha256": "f85fd636b442f65527a4a25fb63653d80c280cd00ba076f9021b7435222b41dd",
-    "bytes": 10353,
+    "sha256": "9232652a13e796f7fe777b5b1e877bcc69c68b72eebfbe0131e563ab7299cbb3",
+    "bytes": 10310,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -162,12 +155,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 87.5,
+      "loadavg1": 10.22,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261108T172319Z-85fc-f4442c4c",
+    "id": "20261109T154525Z-6161-76dd1e97",
     "steps": [
       {
         "step": "scan",
@@ -184,6 +177,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

@@ -2,16 +2,16 @@
   "format": "plugin-hostd.probe-output",
   "formatVersion": "1.4",
   "run": {
-    "id": "20261109T082647Z-20bb-5bf18c27",
-    "startedAt": "2026-11-09T08:26:47+00:00",
-    "elapsedMs": 67,
+    "id": "20261109T135718Z-1e94-e74b6ede",
+    "startedAt": "2026-11-09T13:57:18+00:00",
+    "elapsedMs": 42,
     "complete": true,
     "outcome": "probe.ok",
     "reason": "on-request",
     "protocol": {"name": "plugin-hostd.probe-protocol", "version": 1},
-    "tools": {"runner": "plugin-hostd-probe 0.19.1", "child": "clap-qualify", "interposer": "rt_interpose.so"},
+    "tools": {"runner": "plugin-hostd-probe 0.20.0", "child": "clap-qualify", "interposer": "rt_interpose.so"},
     "via": "runner",
-    "realtime": {"class": "none", "priority": 0, "requested": 99, "grantedBy": "none", "reason": "no CAP_SYS_NICE and an RLIMIT_RTPRIO hard limit of 0; this version does not ask rtkit", "capabilityBound": true, "observed": {"policy": "other", "priority": 0}},
+    "realtime": {"class": "fifo", "priority": 99, "requested": 99, "grantedBy": "cap", "capabilityBound": true, "observed": {"policy": "fifo", "priority": 99}},
     "memoryLock": {"locked": false, "limitBytes": 8388608, "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 6442450944: a lock would fail the plugin's own allocations first"}
   },
   "plugin": {"format": "clap", "id": "com.punklabs.onetrick.chonk"},
@@ -88,7 +88,7 @@
       "meetsProtocol": false, "unmet": ["probe.profile.governor", "probe.profile.not-pinned"]},
     "pinnedCpus": "0-15"
   },
-  "offer": {"id": "custom", "clapExtensions": ["clap.log", "clap.thread-check", "clap.latency", "clap.params", "clap.audio-ports", "clap.state", "clap.note-ports", "clap.note-name", "clap.voice-info", "clap.event-registry", "clap.timer-support", "clap.posix-fd-support", "clap.thread-pool", "clap.tail", "clap.surround/4", "clap.ambisonic/3", "clap.audio-ports-config", "clap.preset-load/2", "clap.track-info/1", "clap.remote-controls/2"], "realtime": "none"},
+  "offer": {"id": "custom", "clapExtensions": ["clap.log", "clap.thread-check", "clap.latency", "clap.params", "clap.audio-ports", "clap.state", "clap.note-ports", "clap.note-name", "clap.voice-info", "clap.event-registry", "clap.timer-support", "clap.posix-fd-support", "clap.thread-pool", "clap.tail", "clap.surround/4", "clap.ambisonic/3", "clap.audio-ports-config", "clap.preset-load/2", "clap.track-info/1", "clap.remote-controls/2"], "realtime": "fifo"},
   "limits": {"set": "default",
     "applied": [
       {"limit": "wall-clock", "value": 60, "unit": "s", "by": "supervisor"},
@@ -108,15 +108,15 @@
     ]
   },
   "steps": [
-    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 3},
-    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 61, "exitStatus": 0},
+    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 4},
+    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 35, "exitStatus": 0},
     {"step": "instantiate", "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
     {"step": "latency", "rate": 48000, "quantum": 64, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
     {"step": "rt-safety", "outcome": "probe.ok", "elapsedMs": 0, "detail": "counts are totals over every rate, read from the child's line"},
     {"step": "note-sweep", "outcome": "probe.ok", "elapsedMs": 0, "detail": "counts are totals over every rate, read from the child's line"}
   ],
   "grid": [
-    {"rate": 48000, "quantum": 64, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 3, "method": "note-onset", "heard": true}, "memory": {"afterInstantiateKb": 5876, "afterActivateKb": 6276, "atRestKb": 6276, "secondInstanceKb": 408, "unmeasuredReason": "voices-unknown", "unmeasuredDetail": "no count of notes to hold for the footprint"}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 512, "allocations": 0, "locks": 0, "syscalls": 0, "threadViolations": 0, "processErrors": 0, "events": []}, "noteSweep": {"applicable": true, "dialect": "clap", "allocations": 11, "locks": 0, "syscalls": 0}}
+    {"rate": 48000, "quantum": 64, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 3, "method": "note-onset", "heard": true}, "memory": {"afterInstantiateKb": 5848, "afterActivateKb": 6312, "atRestKb": 6312, "secondInstanceKb": 408, "unmeasuredReason": "voices-unknown", "unmeasuredDetail": "no count of notes to hold for the footprint"}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 512, "allocations": 0, "locks": 0, "syscalls": 0, "threadViolations": 0, "processErrors": 0, "events": []}, "noteSweep": {"applicable": true, "dialect": "clap", "allocations": 0, "locks": 0, "syscalls": 0}}
   ],
-  "logs": [{"name": "stderr", "path": "/tmp/plugin-qualify-probe-PAYHUb/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
+  "logs": [{"name": "stderr", "path": "/tmp/plugin-qualify-probe-HBt8yD/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
 }

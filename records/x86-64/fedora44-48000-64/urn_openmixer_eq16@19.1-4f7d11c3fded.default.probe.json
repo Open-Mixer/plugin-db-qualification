@@ -2,16 +2,16 @@
   "format": "plugin-hostd.probe-output",
   "formatVersion": "1.4",
   "run": {
-    "id": "20261109T081729Z-b1d-1f2daa6b",
-    "startedAt": "2026-11-09T08:17:29+00:00",
+    "id": "20261109T134344Z-a9d-8985e692",
+    "startedAt": "2026-11-09T13:43:44+00:00",
     "elapsedMs": 69,
     "complete": true,
     "outcome": "probe.ok",
     "reason": "on-request",
     "protocol": {"name": "plugin-hostd.probe-protocol", "version": 1},
-    "tools": {"runner": "plugin-hostd-probe 0.19.1", "child": "lv2_measure", "interposer": "rt_interpose.so"},
+    "tools": {"runner": "plugin-hostd-probe 0.20.0", "child": "lv2_measure", "interposer": "rt_interpose.so"},
     "via": "runner",
-    "realtime": {"class": "none", "priority": 0, "requested": 99, "grantedBy": "none", "reason": "no CAP_SYS_NICE and an RLIMIT_RTPRIO hard limit of 0; this version does not ask rtkit", "capabilityBound": true, "observed": {"policy": "other", "priority": 0}},
+    "realtime": {"class": "fifo", "priority": 99, "requested": 99, "grantedBy": "cap", "capabilityBound": true, "observed": {"policy": "fifo", "priority": 99}},
     "memoryLock": {"locked": false, "limitBytes": 8388608, "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 6442450944: a lock would fail the plugin's own allocations first"}
   },
   "plugin": {"format": "lv2", "id": "urn:openmixer:eq16", "version": "19.1"},
@@ -50,7 +50,7 @@
         {"cpu": 6, "state": "C3", "latencyUs": 350, "disabled": false, "usageDelta": 0},
         {"cpu": 7, "state": "POLL", "latencyUs": 0, "disabled": false, "usageDelta": 0},
         {"cpu": 7, "state": "C1", "latencyUs": 1, "disabled": false, "usageDelta": 0},
-        {"cpu": 7, "state": "C2", "latencyUs": 18, "disabled": false, "usageDelta": 0},
+        {"cpu": 7, "state": "C2", "latencyUs": 18, "disabled": false, "usageDelta": 1},
         {"cpu": 7, "state": "C3", "latencyUs": 350, "disabled": false, "usageDelta": 0},
         {"cpu": 8, "state": "POLL", "latencyUs": 0, "disabled": false, "usageDelta": 0},
         {"cpu": 8, "state": "C1", "latencyUs": 1, "disabled": false, "usageDelta": 0},
@@ -88,7 +88,7 @@
       "meetsProtocol": false, "unmet": ["probe.profile.governor", "probe.profile.not-pinned"]},
     "pinnedCpus": "0-15"
   },
-  "offer": {"id": "default", "realtime": "none"},
+  "offer": {"id": "default", "realtime": "fifo"},
   "limits": {"set": "default",
     "applied": [
       {"limit": "wall-clock", "value": 60, "unit": "s", "by": "supervisor"},
@@ -108,16 +108,16 @@
     ]
   },
   "steps": [
-    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 30, "exitStatus": 0},
+    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 31, "exitStatus": 0},
     {"step": "instantiate", "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
     {"step": "rt-safety", "rate": 48000, "quantum": 64, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
     {"step": "latency", "rate": 48000, "quantum": 64, "outcome": "probe.ok", "elapsedMs": 0},
     {"step": "cost", "rate": 48000, "quantum": 64, "outcome": "probe.ok", "elapsedMs": 0},
-    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 31, "exitStatus": 0}
+    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 30, "exitStatus": 0}
   ],
   "grid": [
-    {"rate": 48000, "quantum": 64, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 0, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 103.477, "percentile": {"p": 95, "value": 117.875}, "min": 47.9062, "max": 585.781, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 1288, "afterActivateKb": 1288, "atRestKb": 1580, "secondInstanceKb": 16}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 512, "allocations": 0, "locks": 0, "syscalls": 0, "events": []}, "noteSweep": {"applicable": false}}
+    {"rate": 48000, "quantum": 64, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 0, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 70.1328, "percentile": {"p": 95, "value": 106.367}, "min": 44.625, "max": 189.25, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 1332, "afterActivateKb": 1332, "atRestKb": 1776, "secondInstanceKb": 16}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 512, "allocations": 0, "locks": 0, "syscalls": 0, "events": []}, "noteSweep": {"applicable": false}}
   ],
   "behaviour": {"lifecycle": {"cycles": 30, "instantiated": 30, "failed": 0}, "threads": {"before": 1, "afterFirstInstantiate": 1, "afterAllFreed": 1}, "features": {"required": []}},
-  "logs": [{"name": "stderr", "path": "/tmp/plugin-qualify-probe-fzhjwH/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
+  "logs": [{"name": "stderr", "path": "/tmp/plugin-qualify-probe-oBRCyV/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
 }

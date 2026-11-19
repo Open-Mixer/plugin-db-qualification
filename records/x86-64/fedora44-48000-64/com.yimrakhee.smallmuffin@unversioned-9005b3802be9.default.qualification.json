@@ -30,12 +30,10 @@
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-in-run",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
           "params": {
-            "allocations": 5,
-            "syscalls": 0,
-            "locks": 0
+            "blocks": 512
           }
         },
         {
@@ -90,10 +88,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 34.5156,
+          "median": 23.5625,
           "percentile": {
             "p": 95,
-            "value": 58.3906
+            "value": 38.6719
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -103,29 +101,23 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 5,
+          "allocations": 0,
           "locks": 0,
           "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": [
-            "malloc",
-            "free",
-            "calloc",
-            "calloc",
-            "malloc"
-          ]
+          "events": []
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 6496,
-          "afterActivateKb": 6708,
-          "atRestKb": 6908,
-          "secondInstanceKb": 172,
-          "firstInstanceKb": 6908,
-          "perInstanceKb": 172
+          "afterInstantiateKb": 5744,
+          "afterActivateKb": 6268,
+          "atRestKb": 6424,
+          "secondInstanceKb": 160,
+          "firstInstanceKb": 6424,
+          "perInstanceKb": 160
         }
       }
     ]
@@ -137,15 +129,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T08:49:38+00:00",
+  "measuredAt": "2026-11-09T14:24:19+00:00",
   "probe": {
     "file": "com.yimrakhee.smallmuffin@unversioned-9005b3802be9.default.probe.json",
-    "sha256": "b1259e7370e44ce98eff141b2b75a6d0e30c4fcc9232b9bd55bbfb492867b407",
-    "bytes": 10331,
+    "sha256": "b89385ca9cca3daea8d673869b16e0dd0f23fd67c63062a0727c4834ae2df165",
+    "bytes": 10260,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -163,12 +155,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 51.03,
+      "loadavg1": 10.5,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T084938Z-9ed0-caca1c04",
+    "id": "20261109T142419Z-78cb-92e15d11",
     "steps": [
       {
         "step": "scan",
@@ -185,6 +177,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

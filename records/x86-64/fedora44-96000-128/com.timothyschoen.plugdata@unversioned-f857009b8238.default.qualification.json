@@ -33,9 +33,9 @@
           "rating": "conditional",
           "code": "hosting.rt-safety.violations-in-run",
           "params": {
-            "allocations": 1981529,
+            "allocations": 1972496,
             "syscalls": 2,
-            "locks": 115665
+            "locks": 115086
           }
         },
         {
@@ -43,9 +43,9 @@
           "rating": "conditional",
           "code": "hosting.rt-safety.violations-under-notes",
           "params": {
-            "allocations": 1102489,
+            "allocations": 1102353,
             "syscalls": 0,
-            "locks": 102761
+            "locks": 102896
           }
         },
         {
@@ -104,45 +104,46 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 1981529,
-          "locks": 115665,
+          "allocations": 1972496,
+          "locks": 115086,
           "syscalls": 2,
           "threadViolations": 0,
           "processErrors": 0,
           "events": [
-            "free",
-            "free",
             "malloc",
-            "malloc",
-            "free",
-            "free",
-            "free",
-            "malloc",
-            "free",
-            "free",
-            "free",
             "malloc",
             "malloc",
             "free",
             "free",
-            "free"
+            "pthread_mutex_lock",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "free",
+            "free",
+            "malloc",
+            "malloc"
           ]
         },
         "noteSweep": {
           "applicable": true,
           "dialect": "midi",
-          "allocations": 1102489,
-          "locks": 102761,
+          "allocations": 1102353,
+          "locks": 102896,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 70788,
-          "afterActivateKb": 71316,
-          "atRestKb": 74212,
-          "secondInstanceKb": 10968,
+          "afterInstantiateKb": 70044,
+          "afterActivateKb": 70632,
+          "atRestKb": 73404,
+          "secondInstanceKb": 10800,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
-        }
+        },
+        "latencyMs": 0.677083
       }
     ]
   },
@@ -153,15 +154,17 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:49:16+00:00",
+  "measuredAt": "2026-11-09T21:23:27+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
   "probe": {
     "file": "com.timothyschoen.plugdata@unversioned-f857009b8238.default.probe.json",
-    "sha256": "4385b5df31511a8235e041589d3575d3b2153c01bfd6a71e81d77da8f6b55d01",
-    "bytes": 10684,
+    "sha256": "ee8041ed1d35c7058152b3bc20ac6e22855a28b310b6fefc94dcf6cfaf7ab710",
+    "bytes": 10596,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -179,12 +182,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 9.71,
+      "loadavg1": 2.44,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T094916Z-8433-1492302b",
+    "id": "20261109T212327Z-8441-93f4fad7",
     "steps": [
       {
         "step": "scan",
@@ -201,6 +204,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

@@ -33,9 +33,9 @@
           "rating": "conditional",
           "code": "hosting.rt-safety.violations-in-run",
           "params": {
-            "allocations": 2185,
+            "allocations": 2131,
             "syscalls": 0,
-            "locks": 654
+            "locks": 626
           }
         },
         {
@@ -90,10 +90,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 367.055,
+          "median": 369.406,
           "percentile": {
             "p": 95,
-            "value": 563.796
+            "value": 657.717
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -103,27 +103,27 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 2185,
-          "locks": 654,
+          "allocations": 2131,
+          "locks": 626,
           "syscalls": 0,
           "threadViolations": 0,
           "processErrors": 0,
           "events": [
-            "malloc",
-            "malloc",
-            "malloc",
-            "malloc",
+            "pthread_mutex_lock",
             "pthread_mutex_lock",
             "malloc",
             "free",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
+            "pthread_mutex_lock",
             "free",
-            "free",
-            "free",
-            "free",
+            "malloc",
+            "malloc",
+            "pthread_mutex_lock",
             "free",
             "free",
             "malloc",
-            "free",
             "free"
           ]
         },
@@ -131,13 +131,14 @@
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 8088,
-          "afterActivateKb": 9236,
-          "atRestKb": 9768,
+          "afterInstantiateKb": 8364,
+          "afterActivateKb": 9460,
+          "atRestKb": 10060,
           "secondInstanceKb": 1384,
-          "firstInstanceKb": 9768,
+          "firstInstanceKb": 10060,
           "perInstanceKb": 1384
-        }
+        },
+        "latencyMs": 0
       }
     ]
   },
@@ -148,15 +149,17 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:50:29+00:00",
+  "measuredAt": "2026-11-09T21:24:52+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
   "probe": {
     "file": "com.brummer10.ToneShiftEQ.Live@unversioned-b200bc4a3381.default.probe.json",
-    "sha256": "f48989bc14a604fb6e5cf8dfa90128ea58835c8cafa78bd3ad93e00da0773d7e",
-    "bytes": 10560,
+    "sha256": "bb9f09411298e99a1f073376f81748ea2e9158c106015f64396bda1885a5eec2",
+    "bytes": 10535,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -174,12 +177,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 8.22,
+      "loadavg1": 2.11,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T095029Z-8832-24989cf8",
+    "id": "20261109T212452Z-8885-f6f761e1",
     "steps": [
       {
         "step": "scan",
@@ -196,6 +199,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

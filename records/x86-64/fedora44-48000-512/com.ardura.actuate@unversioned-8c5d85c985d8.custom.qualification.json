@@ -22,11 +22,10 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "conditional",
-      "qualified": false,
+      "rating": "suitable",
+      "qualified": true,
       "hosting": "isolated",
       "arm": "declaration",
-      "deciding": "hosting.rt-safety.violations-under-notes",
       "reasons": [
         {
           "dimension": "rtSafety",
@@ -38,12 +37,11 @@
         },
         {
           "dimension": "rtSafety",
-          "rating": "conditional",
-          "code": "hosting.rt-safety.violations-under-notes",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
           "params": {
-            "allocations": 1,
-            "syscalls": 0,
-            "locks": 0
+            "blocks": 512,
+            "events": 0
           }
         }
       ]
@@ -53,10 +51,8 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": false,
-      "rating": "conditional",
-      "deciding": "hosting.rt-safety.violations-under-notes",
-      "runsAlone": true
+      "qualified": true,
+      "rating": "suitable"
     },
     "offeredOn": [
       "isolated"
@@ -105,15 +101,15 @@
         "noteSweep": {
           "applicable": true,
           "dialect": "clap",
-          "allocations": 1,
+          "allocations": 0,
           "locks": 0,
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 9248,
-          "afterActivateKb": 9252,
-          "atRestKb": 9316,
-          "secondInstanceKb": 2156,
+          "afterInstantiateKb": 8988,
+          "afterActivateKb": 9188,
+          "atRestKb": 9188,
+          "secondInstanceKb": 2136,
           "unmeasuredReason": "voices-unknown",
           "unmeasuredDetail": "no count of notes to hold for the footprint"
         }
@@ -127,15 +123,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-08T16:59:56+00:00",
+  "measuredAt": "2026-11-09T15:15:08+00:00",
   "probe": {
     "file": "com.ardura.actuate@unversioned-8c5d85c985d8.custom.probe.json",
-    "sha256": "14508c858b167b52df3401cfe857a916cb85ccf1b3d789765b33a19f5b35660c",
-    "bytes": 10395,
+    "sha256": "9aa0f1f6fbe8f39a288914119c7b9556da1c411298f9a08f3b19d6c729270eb3",
+    "bytes": 10379,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -153,12 +149,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 55.4,
+      "loadavg1": 9.62,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261108T165956Z-209d-6eb11149",
+    "id": "20261109T151508Z-116b-3dbaed80",
     "steps": [
       {
         "step": "scan",
@@ -174,19 +170,11 @@
       },
       {
         "step": "rt-safety",
-        "result": "unsafe"
+        "result": "safe"
       },
       {
-        "step": "isolated",
-        "result": "refused",
-        "code": "isolated.silent-output",
-        "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 1.3333333333333333,
-          "xruns": 4,
-          "midiInputsLinked": 1
-        }
+        "step": "pool",
+        "result": "not-asked"
       }
     ]
   }

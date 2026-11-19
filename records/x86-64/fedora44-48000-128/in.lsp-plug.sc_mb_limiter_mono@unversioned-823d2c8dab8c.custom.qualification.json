@@ -22,17 +22,20 @@
     {
       "host": "omx-clap-host",
       "measured": true,
-      "rating": "suitable",
-      "qualified": true,
+      "rating": "conditional",
+      "qualified": false,
       "hosting": "isolated",
       "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-in-run",
       "reasons": [
         {
           "dimension": "rtSafety",
-          "rating": "suitable",
-          "code": "hosting.rt-safety.clean-under-sweep",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
           "params": {
-            "blocks": 512
+            "allocations": 1,
+            "syscalls": 1,
+            "locks": 1
           }
         }
       ]
@@ -42,8 +45,10 @@
     "isolated": {
       "host": "omx-clap-host",
       "measured": true,
-      "qualified": true,
-      "rating": "suitable"
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
     },
     "offeredOn": [
       "isolated"
@@ -60,7 +65,7 @@
           "rating": "unsuitable",
           "code": "hosting.cost.above-ceiling",
           "params": {
-            "coreFractionP95": 0.06501408,
+            "coreFractionP95": 0.15412368,
             "ceiling": 0.05
           }
         },
@@ -69,7 +74,7 @@
           "rating": "conditional",
           "code": "hosting.cost.spiky-tail",
           "params": {
-            "tailRatio": 4.2124283523927115,
+            "tailRatio": 4.862510222006844,
             "ceiling": 4
           }
         }
@@ -87,10 +92,10 @@
           "measuredFrames": 480
         },
         "cost": {
-          "median": 321.539,
+          "median": 660.34,
           "percentile": {
             "p": 95,
-            "value": 1354.46
+            "value": 3210.91
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -100,22 +105,26 @@
           "swept": true,
           "sweepApplicable": true,
           "blocks": 512,
-          "allocations": 0,
-          "locks": 0,
-          "syscalls": 0,
+          "allocations": 1,
+          "locks": 1,
+          "syscalls": 1,
           "threadViolations": 0,
           "processErrors": 0,
-          "events": []
+          "events": [
+            "malloc",
+            "pthread_mutex_lock",
+            "nanosleep"
+          ]
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 47820,
-          "afterActivateKb": 50984,
-          "atRestKb": 52364,
+          "afterInstantiateKb": 47976,
+          "afterActivateKb": 51176,
+          "atRestKb": 52552,
           "secondInstanceKb": 32584,
-          "firstInstanceKb": 52364,
+          "firstInstanceKb": 52552,
           "perInstanceKb": 32584
         }
       }
@@ -132,11 +141,11 @@
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T11:07:06+00:00",
+  "measuredAt": "2026-11-09T14:23:06+00:00",
   "probe": {
     "file": "in.lsp-plug.sc_mb_limiter_mono@unversioned-823d2c8dab8c.custom.probe.json",
-    "sha256": "db1e8307d65c9d8896064537d5f004d2dda4db6f851dc103828c2efe35e9dd6d",
-    "bytes": 10475,
+    "sha256": "d299b7324b0cdbb70ab9df36383ba27b3bf7afc406e526470d60be459841a22a",
+    "bytes": 10412,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -154,12 +163,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 0.58,
+      "loadavg1": 13,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T110706Z-7944-d07136aa",
+    "id": "20261109T142306Z-74c0-bb9babd9",
     "steps": [
       {
         "step": "scan",
@@ -175,7 +184,17 @@
       },
       {
         "step": "rt-safety",
-        "result": "safe"
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 960,
+          "cpuPercent": 2.3333333333333335,
+          "xruns": 0,
+          "midiInputsLinked": 0
+        }
       },
       {
         "step": "pool",

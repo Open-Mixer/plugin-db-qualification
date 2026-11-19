@@ -35,7 +35,7 @@
           "params": {
             "allocations": 0,
             "syscalls": 1,
-            "locks": 0
+            "locks": 1
           }
         },
         {
@@ -90,10 +90,10 @@
           "measuredFrames": 0
         },
         "cost": {
-          "median": 2.42969,
+          "median": 2.1875,
           "percentile": {
             "p": 95,
-            "value": 2.89844
+            "value": 4.14844
           },
           "blocks": 512,
           "warmupBlocks": 64
@@ -104,25 +104,26 @@
           "sweepApplicable": true,
           "blocks": 512,
           "allocations": 0,
-          "locks": 0,
+          "locks": 1,
           "syscalls": 1,
           "threadViolations": 0,
           "processErrors": 0,
           "events": [
-            "nanosleep"
+            "pthread_mutex_lock"
           ]
         },
         "noteSweep": {
           "applicable": false
         },
         "memory": {
-          "afterInstantiateKb": 17636,
-          "afterActivateKb": 17964,
-          "atRestKb": 18316,
-          "secondInstanceKb": 160,
-          "firstInstanceKb": 18316,
-          "perInstanceKb": 160
-        }
+          "afterInstantiateKb": 17352,
+          "afterActivateKb": 17756,
+          "atRestKb": 18164,
+          "secondInstanceKb": 60,
+          "firstInstanceKb": 18164,
+          "perInstanceKb": 60
+        },
+        "latencyMs": 0
       }
     ]
   },
@@ -133,15 +134,17 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.19.1",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "clap-qualify",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-09T09:48:13+00:00",
+  "measuredAt": "2026-11-09T21:22:17+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
   "probe": {
     "file": "in.lsp-plug.send_stereo@unversioned-823d2c8dab8c.default.probe.json",
-    "sha256": "2b666195dcae6a01572c04e1ed4d49652226be660c34e8d5b3b04852cd9affed",
-    "bytes": 10401,
+    "sha256": "29015cf29352177c0458b93a5fecc213ad773c4839b15437871cca0e1f86892b",
+    "bytes": 10309,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -159,12 +162,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 5.38,
+      "loadavg1": 2.92,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261109T094813Z-7f29-16652a8f",
+    "id": "20261109T212217Z-7fd9-8fe284dc",
     "steps": [
       {
         "step": "scan",
@@ -181,6 +184,12 @@
       {
         "step": "rt-safety",
         "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509"
       }
     ]
   }

@@ -170,8 +170,8 @@ static int check_store(sqlite3 *db, const char *path, int want_user, pqdb_error 
 }
 
 /* The hosting exception (section 3.4, this pass only): there is no `hosting` domain. The reader does not open its
- * store_domain row and does not check the columns of word_check that have an item of it; the writer checked those words
- * against omx-clap-core's package. Removing the exception is this one function's removal (and its two calls). */
+ * store_domain row and does not check the words `hosting.*` of the word_check columns that have an item of it (the
+ * writer checked them against omx-clap-core's package); the other words of such a column are checked as any. Removing the exception is this one function's removal (and its two calls). */
 static int hosting_exception(const char *domain)
 {
     return strcmp(domain, "hosting") == 0;
@@ -317,8 +317,10 @@ static int ident_ok(const char *s)
     return 1;
 }
 
-/* the distinct words of one column, each looked up in the column's items */
-static int check_column(sqlite3 *db, const char *path, const char *tbl, const char *col, const item_set *set, pqdb_error *err)
+/* the distinct words of one column, each looked up in the column's items. A column that has an item of the hosting
+ * domain (`hosting_col`) skips only the words that begin `hosting.`; any other word of it must be in its other items. */
+static int check_column(sqlite3 *db, const char *path, const char *tbl, const char *col, const item_set *set, int hosting_col,
+                        pqdb_error *err)
 {
     sqlite3_stmt *words;
     char sql[300];
@@ -328,6 +330,8 @@ static int check_column(sqlite3 *db, const char *path, const char *tbl, const ch
         return fail(err, S_NOT_A_STORE, "%s: word_check names %s.%s, which is no column of the store", path, tbl, col);
     while ((wrc = sqlite3_step(words)) == SQLITE_ROW) {
         const char *w = (const char *)sqlite3_column_text(words, 0);
+        if (hosting_col && strncmp(w, "hosting.", 8) == 0)
+            continue;
         if (!in_items(set, w, NULL) && !adapter_code_ok(set, w)) {
             status = fail(err, S_WORD_UNKNOWN, "%s: %s.%s holds the word %s, which none of its items in the "
                           "installed domains holds", path, tbl, col, w);
@@ -361,8 +365,7 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
             break;
         }
         if (pending && (rc == SQLITE_DONE || strcmp(t, tbl) != 0 || strcmp(c, col) != 0)) {
-            if (!skip)     /* a column with an item of the hosting domain is checked by the writer only */
-                status = check_column(db, path, tbl, col, &set, err);
+            status = check_column(db, path, tbl, col, &set, skip, err);
             if (status != S_OK)
                 break;
             skip = 0;

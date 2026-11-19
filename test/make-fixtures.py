@@ -208,6 +208,10 @@ def build_records(path):
     # record 1 holds every column; 2 is an LV2 record with none of the CLAP-only parts; 3 a CLAP record with an empty extension list
     fill_nulls(c, "record", "record_id = 1", skip=("pkg_format", "pkg_name", "pkg_version", "pkg_release", "pkg_distro", "pkg_arch"),
                flags=("host_extensions", "adapter_params", "unpinnable"))
+    # strings the JSON must escape or pass through exactly: a non-ASCII letter (2 bytes) and a 4-byte character, the
+    # control characters U+0001 and U+001F, the named escapes, a quote and a backslash, and DEL, which is not escaped
+    c.execute("UPDATE record SET run_id = ?, tool_interposer = ?, tested_version = ? WHERE record_id = 1",
+              ("run-\u00e9-\u0001-\u001f", "q\"b\\n\n\t\r\b\f\x7f", "1.2.3-\u00e9\U0001d11e"))
     c.execute("UPDATE record SET host_extensions = 1 WHERE record_id = 3")
     c.execute("UPDATE record SET adapter_params = NULL WHERE record_id = 3")
     for rid in (1, 2, 3):

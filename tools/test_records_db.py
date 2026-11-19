@@ -718,10 +718,10 @@ class SmallStore(Base):
         self.assertEqual(self.rows("PRAGMA page_size"), [(4096,)])
         self.assertEqual(self.rows("PRAGMA journal_mode"), [("delete",)])
         domains = dict(self.rows("SELECT domain, version FROM store_domain"))
-        self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["omx-clap-core"]))
+        self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["hosting"]))
         for dom, version in domains.items():
-            if dom == "omx-clap-core":
-                self.assertEqual(version, load(os.path.join(contract_dir(), "3", dom, "MANIFEST.json"))["version"])
+            if dom == "hosting":
+                self.assertEqual(version, load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))["version"])
             else:
                 self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
         checked = {(t, c) for t, c in self.rows("SELECT DISTINCT tbl, col FROM word_check")}
@@ -729,7 +729,7 @@ class SmallStore(Base):
         self.assertEqual(missing, [], "word columns with no word_check row")
         for (d, i) in self.rows("SELECT DISTINCT domain, item FROM word_check"):
             self.assertIn(d, domains)
-            if d == "omx-clap-core":
+            if d == "hosting":
                 self.assertTrue(i.startswith("HOSTING_") and i.endswith("CODES"), i)
             else:
                 self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])

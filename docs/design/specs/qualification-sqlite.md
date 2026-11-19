@@ -616,7 +616,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `schema` | `record.schema` |
 | `plugin.format`, `plugin.id`, `binary.sha256` | `plugin.format`, `plugin.uri`, `plugin.sha256` (the key) |
 | (none) | `record.pkg_format`, `pkg_name`, `pkg_version`, `pkg_release`, `pkg_distro`, `pkg_arch`: NULL (below) |
-| `binary.path` | `record.binary_path`: the path RELATIVE TO THE INSTALL ROOT (section 3.7); a record written before it, absolute, is made relative by the rule there |
+| `binary.path` | `record.binary_path`: the path RELATIVE TO THE INSTALL ROOT (section 3.7). An absolute one is refused (`path-absolute`); `records/` is rewritten once, not read in two forms (section 3.7) |
 | `binary.files[].path`, `.sha256` | `record_file.path`, `record_file.sha256`, in the list order of section 3.7 |
 | `binary.layout.scheme`, `.sha256` | `record.layout_scheme`, `record.layout_sha256` |
 | `binary.unpinnable` | `record.unpinnable` = 1 (its sentence: see below) |
@@ -793,11 +793,19 @@ matched instead, by the pin.
 - the pin has no probe bytes: the store holds none (section 9, ruling 1), the sync copies none beside the store, and
   the reader (section 6) hands the list, the layout and the version, which are all the pin takes.
 
-**Records of today.** The migration (section 5) makes `binary_path` of a record that holds an absolute one
-(all 9,262 CLAP records: `/usr/lib64/clap/...` 8,100, `/usr/lib/clap/...` 1,160, `/usr/local/lib/...` 2) the file's
-own name, which is its single list entry's path, and refuses (`binary-not-in-files`) a record where it is not. The 3,691
-LV2 records hold the relative form already and change in nothing. The list of every record is in the order above. No
-key changes: no file name of `records/` changes.
+**Records of today: one rewrite, no conversion.** 9,262 CLAP record files of `records/` hold an absolute `binary.path`
+(`/usr/lib64/clap/...` 8,100, `/usr/lib/clap/...` 1,160, `/usr/local/lib/...` 2); the 3,691 LV2 files hold the relative
+form already. `records/` is REWRITTEN ONCE, in the change that lands this amendment's code: a commit of its own that
+sets each CLAP file's `binary.path` to the file's own name (its single list entry's path) and adds the fields of
+section 6.2 that the probe outputs beside the records hold (`hostExtensions`), and nothing else. No file name changes
+and no key changes. After that commit:
+
+- the builder (`tools/records-db.py`) and the writer (`put`) REFUSE an absolute `binary.path` by name,
+  `path-absolute`, naming the file and the path, and write nothing. Neither makes a path relative, on any run, for any
+  caller: the sync writes relative paths itself, and a record of the old form is a refused record;
+- `tools/check-records.py`, the repository's gate on the text, refuses the same, so no record of the old form can be
+  added to `records/` again;
+- the list of every record is in the order above.
 
 ## 4. Merge semantics
 
@@ -826,8 +834,8 @@ key changes: no file name of `records/` changes.
   maps them, for the classes of one architecture (`packaging/arch-classes`, the same selection as
   `tools/sets.py install`). The probe outputs are read only to check that each record's `probe.sha256` and
   `probe.bytes` match its file; a mismatch is refused by name. The writer also applies section 3.7 to every record:
-  `binary_path` relative (an absolute one becomes the file's own name), the list in order, the key's SHA-256 the
-  binary's entry; a record that breaks it is refused by the name given there.
+  `binary_path` relative (an absolute one is refused, `path-absolute`; `records/` is rewritten once, section 3.7), the
+  list in order, the key's SHA-256 the binary's entry; a record that breaks it is refused by the name given there.
 - **Tool and place.** Python 3, standard library `sqlite3` and `json`, plus `jsonschema` for the domain document:
   `tools/qualification_db.py` (the record-to-rows writer and the rows-to-record exporter, one module) and
   `tools/records-db.py` (its command). The module is the one writer: the user layer's writer, after the switch, is the
@@ -1032,7 +1040,7 @@ the reader's commands:
 
 - `put --scope user|system`: one record, the JSON document of `plugin-qualify.qualification-record/1` on standard
   input, in one transaction. It creates the layer from the installed DDL when the file is absent (section 2), checks
-  every word against the installed domains, applies section 3.7 (`binary-not-in-files`, `key-not-the-binary`,
+  every word against the installed domains, applies section 3.7 (`path-absolute`, `binary-not-in-files`, `key-not-the-binary`,
   `files-unordered`, `files-duplicate`, `files-empty`) and replaces, whole, the layer's record of the same shadow key
   (section 4). A refusal names the code, the path and the word, and writes nothing;
 - `delete --scope user|system --sha256 .. --format .. --uri .. --offer .. --host-class ..`: the layer's record of that
@@ -1177,11 +1185,13 @@ makes it fail.
     is written into a `CHECK`.
 18. **Fractional reason param.** A fixture reason with `params.coreFractionP95: 0.37` and another with `params.blocks: 40` read back as 0.37 and 40, the second an integer (`typeof` `integer`, `real` for the first). Fails when `reason_param.number` is `INTEGER` (the fraction is refused or rounded) or when the exporter writes 40 as 40.0.
 19. **Adapter params round trip.** A fixture record with `adapter.params: {}`, one with `adapter.params: {"resp": 3, "step": "add"}`, one without `params`, and an adapter cell with `params: {"peak": 0.5}` and one with `params: {}` read back exactly, `{}` staying `{}` and absence staying absent. Fails when presence is not stored (`record.adapter_params`, `adapter_cell.params`) or a param is dropped.
-20. **Binary path relative.** A fixture CLAP record whose `binary.path` is `/usr/lib/clap/X.clap/Contents/x86_64-linux/X.clap`
-    with the one file `X.clap` migrates to `binary_path` `X.clap`; the same file under `/usr/lib64/clap/` and under
-    a home's `.clap/` give the same value; an LV2 record's `AutoFilter.so` is unchanged; a `binary_path` that is
-    absolute, empty or holds `..` is refused by the schema. Every CLAP record of `records/` reads back relative. Fails
-    when the migration keeps the absolute path (sabotage: skip the derivation), or the `CHECK` is dropped.
+20. **Binary path relative, and no conversion.** After the one-time rewrite, every CLAP record of `records/` has a relative
+    `binary.path` (the file's own name) and the builder reads it as written. A fixture CLAP record whose `binary.path` is
+    `/usr/lib/clap/X.clap/Contents/x86_64-linux/X.clap` is refused as `path-absolute` by the builder, by `put` and by
+    `tools/check-records.py`, each naming the file and the path, and no file is written; a `binary_path` that is
+    absolute, empty or holds `..` is refused by the schema. A test that diffs `records/` before and after the rewrite
+    commit sees only `binary.path` and the section 6.2 fields change. Fails when any of them makes the path relative
+    itself (sabotage: strip the directory in the builder), or when the `CHECK` is dropped.
 21. **The key is the binary's entry.** For every record of `records/`, the test's own SQL finds
     `record_file.sha256` at `binary_path` and it equals `plugin.sha256`. A fixture LV2 record whose key is the
     SHA-256 of its first entry (`manifest.ttl`) is refused as `key-not-the-binary`; one whose `binary_path` is no

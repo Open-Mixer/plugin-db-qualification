@@ -360,6 +360,7 @@ def prove(root, kind, pkgs):
         subprocess.run(["bash", script, "remove", kind], cwd=root)
         return 1
     failed = []
+    total, unmatched = len(sets), []
     try:
         # the package holds the classes of its architecture, each with the sets of the tree, and nothing else
         installed = os.path.join(os.environ.get("PROVE_ROOT") or "/", QUALIFICATION)
@@ -382,6 +383,7 @@ def prove(root, kind, pkgs):
             print(f"::notice::{cls}/{set_}: measured on {measured_on(set_)}, not proven in {here}", flush=True)
         if unmatched:
             print(f"{len(unmatched)} sets measured on another host class, not proven in {here}", flush=True)
+        total = len(sets)
         sets = [x for x in sets if x not in unmatched]
         if not sets:
             print(f"::warning::proved 0 of {len(unmatched)} sets: none was measured on {here}", flush=True)
@@ -394,7 +396,7 @@ def prove(root, kind, pkgs):
                 failed.append(set_)
     finally:
         subprocess.run(["bash", script, "remove", kind], cwd=root)
-    print(f"{len(sets) - len(failed)} of {len(sets)} sets proven" + (f"; failed: {' '.join(failed)}" if failed else ""))
+    print(f"{len(sets) - len(failed)} of {total} sets proven, {len(unmatched)} not proven (measured on another host class)" + (f"; failed: {' '.join(failed)}" if failed else ""))
     return 1 if failed else 0
 
 

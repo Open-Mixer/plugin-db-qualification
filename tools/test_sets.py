@@ -482,7 +482,7 @@ class Prove(Tree):
         rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "44"))
         self.assertEqual(rc, 0, out + log)
         self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
-        self.assertNotIn("not proven", out)
+        self.assertNotIn("::notice::", out)
 
     def test_a_matching_set_that_fails_still_fails(self):
         self.with_two_cells()

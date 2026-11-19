@@ -53,7 +53,7 @@ WORD_CHECK = [
     ("history_verdict", "adjusted", "qualification", "QUALIFICATION_PIN_VERDICTS"),
     ("history_verdict", "move", "qualification", "QUALIFICATION_HISTORY_MOVES"),
     ("history_verdict", "reason", "qualification", "QUALIFICATION_HISTORY_REASONS"),
-    ("history_blocked", "code", "qualification", "QUALIFICATION_PIN_VERDICTS"),
+    ("history_blocked", "code", "qualification", "QUALIFICATION_HISTORY_BLOCKERS"),
     ("history_blocked", "code", "hosting", "HOSTING_COST_CODES"),
     ("history_blocked", "code", "hosting", "HOSTING_MEMORY_CODES"),
     ("history_blocked", "code", "hosting", "HOSTING_LATENCY_CODES"),
@@ -287,7 +287,7 @@ def build_records(path):
                   [(0, 0, "omx-clap-host", "isolated", "refused", "demote", "history.crashed", None),
                    (0, 1, "openmixer-console", None, None, "none", "history.not-liftable", 1),
                    (1, 0, "omx-clap-host", "in-process", "in-process", "none", "history.no-record", None)])
-    c.executemany("INSERT INTO history_blocked VALUES (1, 0, 1, ?, ?)", [(0, "refused"), (1, "hosting.cost.above-ceiling")])
+    c.executemany("INSERT INTO history_blocked VALUES (1, 0, 1, ?, ?)", [(0, "refused"), (1, "hosting.cost.above-ceiling"), (2, "no-deciding-reason")])
     c.executemany("INSERT INTO probe_end VALUES (1, ?, ?, ?, ?, ?)", [(0, "process", "probe.ok", 0, None), (1, "exit", "probe.crashed", None, "SIGSEGV")])
     c.executemany("INSERT INTO cost_entry VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
     c.executemany("INSERT INTO reason (reason_id, record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (?, 1, ?, ?, ?, ?, ?, ?)",

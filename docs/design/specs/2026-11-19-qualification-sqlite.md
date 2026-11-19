@@ -6,7 +6,8 @@ Status: SPEC. Nothing here is built. Three changes follow it, in this repository
 
 1. this spec;
 2. the migration: `schema/qualification.sql`, the writer module and the tool that builds the base database from
-   `records/`, the round-trip test, and the package carrying the database beside today's files;
+   `records/`, the round-trip test, and the package carrying the database beside today's files. It merges only after
+   its preconditions (section 3.4): the owners publish the words it checks;
 3. the reader: a C library and its command, `plugin-qualification-db`, with red-first tests.
 
 No consumer reads the database during the current release pass. The consumers switch in one change right after the
@@ -43,26 +44,33 @@ The spec is this repository's first design spec; each is named by its date and t
 | --- | --- | --- | --- |
 | record fields and their meaning | plugin-qualify (it writes each record) | plugin-qualify, in its record format | plugin-qualify |
 | words a record holds (ratings, reasons, dimensions, bases) | plugin-qualify | plugin-qualify, in a minor of the `qualification` domain | `qualification` (plugin-qualify) |
-| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | omx-clap-core (no domain document yet; open question 2) |
-| probe outcomes (`probe.*`) | plugin-hostd's probe | plugin-hostd | plugin-hostd (no domain document yet; open question 2) |
-| plugin key (SHA-256, format, uri) | plugin-qualify, from the binary | nobody: it is the bytes | plugin-db's address formats (`clap`, `lv2`) |
-| package fields | the measuring run (none today) | plugin-qualify's record format | plugin-qualify (open question 3) |
+| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | omx-clap-core; read through an `x-from` item of `qualification` that precondition 1 adds (section 3.4) |
+| probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | plugin-hostd; the same, through `x-from` items of `qualification` |
+| the machine class of a probe (arch, core band, clock band) | plugin-hostd's probe | plugin-hostd | the `machine` domain (plugin-hostd), read directly |
+| plugin key (SHA-256, format, uri) | plugin-qualify, from the binary | nobody: it is the bytes | plugin-db: the formats are plugin-db's words, checked against plugin-db's own published item, never a copy (section 3.4) |
+| package fields (format, distro, arch words) | the measuring run (none today) | plugin-qualify's record format | `qualification`, the `package` object precondition 1 adds |
 | the database layout, `user_version`, the reader | this repository | this repository | plugin-db-qualification |
 
-The database stores words and checks them against their domain; it never defines a word.
+The database stores words and checks every word column against its owner's domain item; it never defines a word,
+and its DDL holds no list of words.
 
 ## 2. Files and locations
 
 | file | path | shipped or written by | opened |
 | --- | --- | --- | --- |
 | base database | `/usr/share/omx/qualification/qualification.sqlite` | the package `plugin-qualification-records`, one per architecture, built at package build from `records/` | read only, immutable |
-| user layer, user scope | `~/.local/share/omx/qualification/qualification.sqlite` (the XDG data directory's default, with the home from the password database) | plugin-qualify-sync of that user, after the consumer switch; nobody before it | read only by readers; read-write by the writer only |
+| user layer, user scope | `<home>/.local/share/omx/qualification/qualification.sqlite`: the XDG data directory's default, `<home>` from `getpwuid(geteuid())`; `XDG_DATA_HOME` is not read | plugin-qualify-sync of that user, after the consumer switch; nobody before it | read only by readers; read-write by the writer only |
 | user layer, system scope | `/var/lib/omx/qualification/qualification.sqlite` (the system sync's `qualification_dir`) | `plugin-qualify-sync --system`, after the consumer switch | the same |
 | the DDL | `schema/qualification.sql` in this repository | read by the writer at build and when it creates a user layer | |
 
 The base database sits beside today's `<host class>/<set>/` directories, which stay as they are (section 5). A
 database file in that directory is no `<host class>` directory, so `plugin-qualify-sync`'s distributed reader, which
 reads `<dir>/<host class>/` by name, does not see it.
+
+**Scopes.** `PQDB_SCOPE_USER` reads the base and the home's user layer only; `PQDB_SCOPE_SYSTEM` reads the base and
+`/var/lib/omx/qualification/qualification.sqlite` only. Neither reads the other's layer. plugin-hostd takes
+`PQDB_SCOPE_SYSTEM` when it runs as root (a system service) and `PQDB_SCOPE_USER` otherwise: the rule it applies to its
+`qualification_dir` today (its docs/guide.md). plugin-qualify-sync takes the scope of its `--system` flag.
 
 **Pointing elsewhere** follows omx-contract's docs/runtime-data.md:
 
@@ -94,8 +102,9 @@ readable, and they are never part of the key.
 
 - A WORD is a value of a closed set: a rating, a reason, a dimension, a basis. A word column holds no whitespace
   (`WORD(c)` below is `length(c) > 0 AND instr(c, ' ') = 0 AND instr(c, char(9)) = 0 AND instr(c, char(10)) = 0`), and
-  the table `word_check` names the domain item that holds its words. The writer refuses a word not in its item; the
-  reader checks every distinct word at open (section 6).
+  the table `word_check` names the owner domain item (or items) that hold its words: every word column has at least
+  one row, filled at build from the domains (section 3.4). The writer refuses a word not in its items; the reader
+  checks every distinct word at open (section 6). `WORD()` is only a shape check; no column is checked by shape alone.
 - A NAME is an identifier written by a program: an id, a path, a hash, a version, a time, a symbol. It is stored as
   written and is not checked against a domain.
 - A NUMBER is stored as INTEGER (counts, rates, quanta, frames, kilobytes, bytes) or REAL (figures that may be
@@ -115,25 +124,29 @@ readable, and they are never part of the key.
 ```sql
 CREATE TABLE store_info (
   one            INTEGER PRIMARY KEY CHECK (one = 1),
-  layer          TEXT NOT NULL CHECK (layer IN ('base', 'user')),
-  domain         TEXT NOT NULL CHECK (domain = 'qualification'),
-  domain_version TEXT NOT NULL,            -- info.version of the domain the words were checked against
+  user_layer     INTEGER NOT NULL CHECK (user_layer IN (0, 1)),   -- 0: the base, 1: a user layer
   record_schema  TEXT NOT NULL,            -- 'plugin-qualify.qualification-record/1'
   built_from     TEXT CHECK (built_from IS NULL OR (length(built_from) = 40 AND built_from NOT GLOB '*[^0-9a-f]*'))
-                                           -- base: the commit of this repository; user: NULL
+                                           -- base: the commit of this repository (section 5); user: NULL
 ) STRICT;
 
-CREATE TABLE word_check (                  -- which domain item holds the words of a column
-  tbl  TEXT NOT NULL,
-  col  TEXT NOT NULL,
-  item TEXT NOT NULL,                      -- a components.schemas name of the domain, e.g. QUALIFICATION_MEASUREMENT_VERDICT_RATINGS
-  PRIMARY KEY (tbl, col)
+CREATE TABLE store_domain (                -- each domain the words were checked against, at its info.version
+  domain  TEXT PRIMARY KEY,                -- 'qualification', 'machine'
+  version TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE word_check (                  -- the owner domain items that hold the words of a column
+  tbl    TEXT NOT NULL,
+  col    TEXT NOT NULL,
+  domain TEXT NOT NULL REFERENCES store_domain,
+  item   TEXT NOT NULL,                    -- a components.schemas name, e.g. QUALIFICATION_MEASUREMENT_VERDICT_RATINGS
+  PRIMARY KEY (tbl, col, domain, item)     -- a word is valid when one of its column's items holds it
 ) STRICT;
 
 CREATE TABLE plugin (
   plugin_id INTEGER PRIMARY KEY,
   sha256    TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
-  format    TEXT NOT NULL CHECK (format IN ('clap', 'lv2')),     -- plugin-db's address formats
+  format    TEXT NOT NULL CHECK (WORD(format)),
   uri       TEXT NOT NULL CHECK (length(uri) > 0),
   UNIQUE (sha256, format, uri)
 ) STRICT;
@@ -141,7 +154,7 @@ CREATE TABLE plugin (
 CREATE TABLE record_set (                  -- one provenance.json; base layer only
   set_id          INTEGER PRIMARY KEY,
   host_class      TEXT NOT NULL CHECK (WORD(host_class)),
-  name            TEXT NOT NULL CHECK (WORD(name)),
+  name            TEXT NOT NULL,           -- a name: the set's own (zynthian-vangelis, fedora44-48000-512)
   schema          TEXT NOT NULL,
   tier            TEXT NOT NULL CHECK (WORD(tier)),
   host_profile    TEXT NOT NULL CHECK (WORD(host_profile)),
@@ -154,10 +167,10 @@ CREATE TABLE record_set (                  -- one provenance.json; base layer on
 
 CREATE TABLE set_package (                 -- provenance.packages and provenance.passes
   set_id  INTEGER NOT NULL REFERENCES record_set ON DELETE CASCADE,
-  kind    TEXT NOT NULL CHECK (kind IN ('packages', 'passes')),
+  pass    INTEGER NOT NULL CHECK (pass IN (0, 1)),   -- 0: provenance.packages, 1: provenance.passes
   name    TEXT NOT NULL,
   version TEXT NOT NULL,
-  PRIMARY KEY (set_id, kind, name)
+  PRIMARY KEY (set_id, pass, name)
 ) STRICT;
 
 CREATE TABLE set_setting (                 -- provenance.settings, its note left out
@@ -176,7 +189,7 @@ CREATE TABLE record (
   name        TEXT NOT NULL,               -- the file name without .<offer>.qualification.json
   schema      TEXT NOT NULL,
   -- the package the binary came from: NULL when not known, never guessed
-  pkg_format  TEXT CHECK (pkg_format IS NULL OR pkg_format IN ('deb', 'rpm')),
+  pkg_format  TEXT CHECK (pkg_format IS NULL OR WORD(pkg_format)),   -- deb, rpm
   pkg_name    TEXT,
   pkg_version TEXT,
   pkg_release TEXT,
@@ -228,7 +241,8 @@ CREATE TABLE record (
   rejudged_runner TEXT, rejudged_child TEXT, rejudged_interposer TEXT,
   rejudged_adapter_measured_at TEXT,
   rejudged_memory_measured_at TEXT, rejudged_memory_runner TEXT, rejudged_memory_child TEXT,
-  CHECK ((layout_scheme IS NULL) = (layout_sha256 IS NULL))
+  CHECK ((layout_scheme IS NULL) = (layout_sha256 IS NULL)),
+  UNIQUE (record_id, plugin_id, offer, host_class)      -- the target of claim's foreign key
 ) STRICT;
 CREATE INDEX record_plugin  ON record (plugin_id, offer, host_class);
 CREATE INDEX record_package ON record (pkg_format, pkg_name, pkg_version, pkg_release, pkg_distro, pkg_arch);
@@ -243,10 +257,10 @@ CREATE TABLE record_file (                 -- binary.files[]
 
 CREATE TABLE record_version (              -- adapter.versions, rejudged.figures.adapter.versions
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
-  scope     TEXT NOT NULL CHECK (scope IN ('adapter', 'rejudged-adapter')),
+  rejudged  INTEGER NOT NULL CHECK (rejudged IN (0, 1)),   -- 0: adapter.versions, 1: rejudged.figures.adapter.versions
   name      TEXT NOT NULL,
   version   TEXT NOT NULL,
-  PRIMARY KEY (record_id, scope, name)
+  PRIMARY KEY (record_id, rejudged, name)
 ) STRICT;
 
 CREATE TABLE verdict (                     -- verdicts[]
@@ -275,14 +289,18 @@ CREATE TABLE cost_entry (                  -- cost[]
 CREATE TABLE reason (                      -- verdicts[].reasons[] and cost[].reasons[]
   reason_id INTEGER PRIMARY KEY,
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
-  owner     TEXT NOT NULL CHECK (owner IN ('verdict', 'cost')),
-  owner_ord INTEGER NOT NULL,              -- verdict.ord or cost_entry.ord
+  verdict_ord INTEGER,                     -- the verdict it is a reason of, or
+  cost_ord    INTEGER,                     -- the cost entry it is a reason of: exactly one is set
   ord       INTEGER NOT NULL,
   dimension TEXT NOT NULL CHECK (WORD(dimension)),
   rating    TEXT NOT NULL CHECK (WORD(rating)),
   code      TEXT NOT NULL CHECK (WORD(code)),
-  UNIQUE (record_id, owner, owner_ord, ord)
+  CHECK ((verdict_ord IS NULL) <> (cost_ord IS NULL)),
+  FOREIGN KEY (record_id, verdict_ord) REFERENCES verdict (record_id, ord) ON DELETE CASCADE,
+  FOREIGN KEY (record_id, cost_ord) REFERENCES cost_entry (record_id, ord) ON DELETE CASCADE
 ) STRICT;
+CREATE UNIQUE INDEX reason_of_verdict ON reason (record_id, verdict_ord, ord) WHERE verdict_ord IS NOT NULL;
+CREATE UNIQUE INDEX reason_of_cost    ON reason (record_id, cost_ord, ord)    WHERE cost_ord IS NOT NULL;
 
 CREATE TABLE reason_param (                -- reasons[].params
   reason_id INTEGER NOT NULL REFERENCES reason ON DELETE CASCADE,
@@ -295,7 +313,7 @@ CREATE TABLE reason_param (                -- reasons[].params
 
 CREATE TABLE tier (                        -- tiers.inProcess, tiers.isolated
   record_id  INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
-  tier       TEXT NOT NULL CHECK (tier IN ('inProcess', 'isolated')),
+  tier       TEXT NOT NULL CHECK (WORD(tier)),          -- inProcess, isolated
   host       TEXT NOT NULL CHECK (WORD(host)),
   measured   INTEGER NOT NULL CHECK (measured IN (0, 1)),
   qualified  INTEGER NOT NULL CHECK (qualified IN (0, 1)),
@@ -359,7 +377,11 @@ CREATE TABLE claim (                       -- the cells a layer answers for: one
   host_class TEXT NOT NULL,
   rate       INTEGER NOT NULL,
   quantum    INTEGER NOT NULL,
-  PRIMARY KEY (plugin_id, offer, host_class, rate, quantum)
+  PRIMARY KEY (plugin_id, offer, host_class, rate, quantum),
+  -- the claim repeats the record's key, offer and class and the cell's rate and quantum: these tie them
+  FOREIGN KEY (record_id, plugin_id, offer, host_class)
+    REFERENCES record (record_id, plugin_id, offer, host_class) ON DELETE CASCADE,
+  FOREIGN KEY (record_id, rate, quantum) REFERENCES cell (record_id, rate, quantum) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE feature_required (            -- measurements.behaviour.features.required[]
@@ -447,34 +469,82 @@ A present empty array or map is told from an absent one by one rule, which every
 The writer refuses a record that breaks the rule (an absent array of the first list, a present empty array of the
 second), naming the file and the path.
 
-The user-layer rule for `set_id` (NULL exactly when `store_info.layer` is `user`) needs a subquery, which a `CHECK`
+The user-layer rule for `set_id` (NULL exactly when `store_info.user_layer` is 1) needs a subquery, which a `CHECK`
 cannot hold, so the DDL states it as a trigger:
 
 ```sql
 CREATE TRIGGER record_set_by_layer BEFORE INSERT ON record
-WHEN (NEW.set_id IS NULL) <> ((SELECT layer FROM store_info) = 'user')
+WHEN (NEW.set_id IS NULL) <> ((SELECT user_layer FROM store_info) = 1)
 BEGIN SELECT RAISE(ABORT, 'record.set_id: NULL exactly in the user layer'); END;
 ```
 
 ### 3.4 Domain words and their check
 
-The writer reads the `qualification` domain from the installed contract directory (as docs/runtime-data.md says for
-Python: the installed JSON, validated with `jsonschema` against Draft 2020-12, `info.version` at least the floor) and
-records its `info.version` in `store_info.domain_version`. Each word column with a domain item has a row in
-`word_check`; the writer refuses a word outside its item, naming the record file, the JSON path and the word. Today:
+**Preconditions of change 2.** The words of section 3.3 that no readable domain item holds today are published by
+their owners before change 2 merges:
 
-| column(s) | domain item |
-| --- | --- |
-| `verdict.rating`, `tier.rating`, `reason.rating` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` |
-| `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` |
-| `cell.voices_basis`, `cell.mem_basis` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` |
+1. **plugin-qualify: one minor of the `qualification` domain** that adds every `qualification` item marked "added"
+   below: the missing qualification words, and the words of the record's `package` object (package format `deb` and
+   `rpm`, distro, arch). Each item whose words another repository owns carries `x-from` to that owner
+   (consumer-move.md, step 1).
+2. **plugin-db: a small change that publishes its address formats as a domain item.** The formats `clap` and `lv2`
+   stay plugin-db's words and never move into plugin-qualify; the store checks them against plugin-db's own published
+   list, never a copy. plugin-db has no domain document today: its repository has no `contract.d/`; the formats are
+   `PLUGIN_DB_ADDRESS_FORMATS` of `data/db.json`, which `plugin-db-contract` installs into the older rendered contract
+   layout (`contract.d/3/plugin-db`), not as a domain the loader opens. The change exposes that item in a `plugin-db`
+   domain document (proposed: domain `plugin-db`, item `PLUGIN_DB_ADDRESS_FORMATS`).
+3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain, in the same wave.
 
-Every other word column holds words no domain item holds today: the dimensions `memory` and `hostAdmission` (the
-domain's `QUALIFICATION_MEASUREMENT_DIMENSIONS` holds `latency`, `cost`, `stability`, `rtSafety`, `features`), host
-classes (`rpi5`, `x86-64`; the domain's `QUALIFICATION_MACHINE_CLASSES` holds `desk`, `raspberry-pi-4`,
-`raspberry-pi-5`), host profiles, offers, hosting and arm words, tiers, run steps and their results, `hosting.*`
-codes and `probe.*` outcomes. Open question 2 decides where those words live; the word columns of section 3.3 carry
-`WORD()` until then.
+Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
+item names below are proposed; each owner's change names them.
+
+The writer reads each domain from the installed contract directory (as docs/runtime-data.md says for Python: the
+installed JSON, validated with `jsonschema` against Draft 2020-12, `info.version` at least the floor), records each
+domain's `info.version` in `store_domain`, and fills `word_check` from the table below. It refuses a word that none of
+its column's items holds, naming the record file, the JSON path and the word.
+
+| column(s) | owner | domain | item | today |
+| --- | --- | --- | --- | --- |
+| `plugin.format` | plugin-db | `plugin-db` | `PLUGIN_DB_ADDRESS_FORMATS` (`clap`, `lv2`) | published by the plugin-db precondition; today only in `data/db.json` |
+| `record_set.host_class`, `record.host_class` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_CLASSES` (`rpi5`, `x86-64`) | added; the existing `QUALIFICATION_MACHINE_CLASSES` holds `desk`, `raspberry-pi-4`, `raspberry-pi-5`, words no record holds |
+| `record_set.tier` | plugin-qualify | `qualification` | `QUALIFICATION_SET_TIERS` (`reference`, `provisional`, `hardware`) | added |
+| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host`, `record.adapter_host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
+| `set_setting.key` | plugin-qualify | `qualification` | `QUALIFICATION_SYNC_SETTINGS` (plugin-qualify-sync's setting keys) | added |
+| `record.offer` | plugin-qualify | `qualification` | `QUALIFICATION_OFFERS` (`default`, `custom`) | added |
+| `record.pkg_format` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_FORMATS` (`deb`, `rpm`) | added (the `package` object) |
+| `record.pkg_distro` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_DISTROS` (`trixie`, `fc44`, `fc45`, ...) | added (the `package` object) |
+| `record.pkg_arch` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_ARCHES` (`arm64`, `amd64`, `all`, `aarch64`, `x86_64`, `noarch`) | added (the `package` object) |
+| `record.mc_arch` | plugin-hostd | `machine` | `MACHINE_ARCHES` | exists (1.0.0) |
+| `record.mc_core_band` | plugin-hostd | `machine` | `MACHINE_CORE_BANDS` | exists |
+| `record.mc_clock_band` | plugin-hostd | `machine` | `MACHINE_CLOCK_BANDS` | exists |
+| `record.mc_family` | plugin-hostd | `machine` | `MACHINE_FAMILIES` | added by plugin-hostd in the same wave |
+| `record.probe_reason` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_REASONS`, `x-from` plugin-hostd's probe output (`on-request`) | added |
+| `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_OUTCOMES`, `x-from` plugin-hostd (`probe.ok`, `probe.crashed`, ...) | added |
+| `probe_end.step` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_STEPS`, `x-from` plugin-hostd | added |
+| `probe_end.signal` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_SIGNALS`, `x-from` plugin-hostd (`SIGSEGV`, `SIGABRT`) | added |
+| `record.adapter_code`, `adapter_cell.code` | omx-clap-core | `qualification` | `QUALIFICATION_ADAPTER_CODES`, `x-from` omx-clap-core's `omx-clap-host.*` codes | added |
+| `verdict.rating`, `tier.rating`, `reason.rating` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
+| `verdict.hosting` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`) | added |
+| `verdict.arm` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
+| `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd | `qualification` | `QUALIFICATION_HOSTING_CODES` (`x-from` omx-clap-core's hosting tables), `QUALIFICATION_PROBE_OUTCOMES`, `QUALIFICATION_ADAPTER_CODES`: today's values come from all three | added |
+| `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `qualification` | `QUALIFICATION_HOSTING_CODES` | added |
+| `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory` and `hostAdmission` |
+| `reason_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...) | added |
+| `reason_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
+| `tier.tier`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`) | added |
+| `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
+| `cell.voices_basis`, `cell.mem_basis` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
+| `cell.mem_limit_mechanism` | plugin-qualify | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
+| `cell.note_sweep_dialect` | plugin-qualify | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
+| `run_step.step` | plugin-qualify | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
+| `run_step.result` | plugin-qualify, plugin-hostd | `qualification` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...) and `QUALIFICATION_PROBE_OUTCOMES` | added |
+| `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
+| `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
+| `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
+
+`claim.offer` and `claim.host_class` are not checked on their own: their foreign key ties them to the record's. The
+columns this table does not name are names or numbers (section 3.2). The words in parentheses are today's values, given
+to show what each item holds; the DDL and the writer hold none of them.
 
 ### 3.5 Old field to column
 
@@ -507,10 +577,10 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `probe.machineClass.arch`, `.family`, `.coreBand`, `.clockBand`, `.preemptRt`, `.cstatesLimited` | `record.mc_arch`, `.mc_family`, `.mc_core_band`, `.mc_clock_band`, `.mc_preempt_rt`, `.mc_cstates_limited` |
 | `probe.ends[].step`, `.outcome`, `.exitStatus`, `.signal` | `probe_end.step`, `.outcome`, `.exit_status`, `.signal` |
 | `verdicts[].host`, `.measured`, `.rating`, `.qualified`, `.hosting`, `.arm`, `.deciding` | `verdict.*` of the same names |
-| `verdicts[].reasons[].dimension`, `.rating`, `.code` | `reason.*` with `owner` = `verdict` |
+| `verdicts[].reasons[].dimension`, `.rating`, `.code` | `reason.*` with `verdict_ord` = the verdict's `ord` |
 | `verdicts[].reasons[].params.<name>` | `reason_param.name`, `.number` or `.word` |
 | `cost[].host`, `.rate`, `.quantum` | `cost_entry.*` |
-| `cost[].reasons[]` and their `params` | `reason`, `reason_param` with `owner` = `cost` |
+| `cost[].reasons[]` and their `params` | `reason`, `reason_param` with `cost_ord` = the cost entry's `ord` |
 | `tiers.inProcess.*`, `tiers.isolated.*` (`host`, `measured`, `qualified`, `rating`, `deciding`, `runsAlone`) | `tier` row with `tier` = `inProcess` or `isolated` |
 | `tiers.offeredOn[]` | `tier_offered.tier` |
 | `measurements.grid[].rate`, `.quantum`, `.outcome` | `cell.rate`, `.quantum`, `.outcome`; and one `claim` row |
@@ -528,18 +598,18 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.behaviour.features.required[]` | `feature_required.feature` |
 | `notMeasured[].dimension`, `.code` | `not_measured.*` |
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
-| `adapter.versions.<name>` | `record_version` with `scope` = `adapter` |
+| `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
 | `adapter.cells[].rate`, `.quantum`, `.admitted`, `.measured`, `.code` | `adapter_cell.*` |
 | `memoryRun.measuredAt`, `.runId`, `.tool.runner`, `.tool.child` | `record.memory_run_measured_at`, `.memory_run_id`, `.memory_run_runner`, `.memory_run_child` |
 | `memoryRun.cells[].rate`, `.quantum`, `.outcome` | `memory_run_cell.*` |
 | `rejudged.at`, `.by` | `record.rejudged_at`, `.rejudged_by` |
 | `rejudged.figures.measuredAt`, `.runId`, `.tool.runner`, `.tool.child`, `.tool.interposer` | `record.rejudged_measured_at`, `.rejudged_run_id`, `.rejudged_runner`, `.rejudged_child`, `.rejudged_interposer` |
-| `rejudged.figures.adapter.measuredAt`, `.adapter.versions.<name>` | `record.rejudged_adapter_measured_at`; `record_version` with `scope` = `rejudged-adapter` |
+| `rejudged.figures.adapter.measuredAt`, `.adapter.versions.<name>` | `record.rejudged_adapter_measured_at`; `record_version` with `rejudged` = 1 |
 | `rejudged.figures.memory.measuredAt`, `.tool.runner`, `.tool.child` | `record.rejudged_memory_measured_at`, `.rejudged_memory_runner`, `.rejudged_memory_child` |
 | `rejudged.owes[].code`, `.measurement` | `rejudged_owe.*` |
 
 `provenance.json` of a set: `schema`, `set`, `hostClass`, `hostProfile`, `tier`, `measured`, `date`, `package.name`,
-`package.version` → `record_set`; `packages.<name>` and `passes.<name>` → `set_package`; `settings.<key>` (but `note`)
+`package.version` → `record_set`; `packages.<name>` and `passes.<name>` → `set_package` (`pass` 0 and 1); `settings.<key>` (but `note`)
 → `set_setting`.
 
 **The package fields, field by field.** No current record or provenance holds the package of a binary, so the
@@ -565,15 +635,19 @@ migration writes NULL in all six for every one of the 12,953 records:
   `sources`, `repositories`.
 
 The probe outputs (`*.probe.json`) are not stored either: they are plugin-hostd's documents, and they hold prose
-(`run.memoryLock.reason`, step details). The record keeps the probe's file name, SHA-256 and size. Open question 1
-asks the owner to confirm both lists.
+(`run.memoryLock.reason`, step details). The record keeps the probe's file name, SHA-256 and size. The owner decided both
+lists (section 9, ruling 1).
 
 ### 3.6 `user_version`
 
 `PRAGMA user_version = 1` for this schema, set by the writer as the last statement of a build. The rule:
 
-- The reader is built for one range, `PQDB_SCHEMA_MIN` to `PQDB_SCHEMA_MAX` (both 1 now). It refuses a database above
-  the range (`schema-too-new`) and below it (`schema-too-old`); 0 is a file that is no store (`not-a-store`).
+- There is ONE version, `PQDB_SCHEMA_VERSION` (1), held once in `schema/qualification.sql` and compiled into the
+  reader and the writer from it. Any change of the DDL is +1. A reader reads exactly its version; there is no range
+  and no reader of an older version.
+- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` (`schema-other`, naming the
+  file, its version and the reader's); a base and a user layer at different versions (`schema-mismatch`, naming both
+  files and both versions, checked first); 0, a file that is no store (`not-a-store`).
 - The base database is never upgraded: each build writes it new, at the writer's version. A package whose base is at a
   new version depends on the reader at the floor that reads it.
 - The user layer is not upgraded in place in this pass: there is one version. A later version states its own rule,
@@ -581,21 +655,23 @@ asks the owner to confirm both lists.
 
 ## 4. Merge semantics
 
-- **Per whole record.** A reader's result is one record at one cell. Its key is (`sha256`, `format`, `uri`, `offer`,
-  `host_class`, `rate`, `quantum`): the `claim` key. When the user layer has a claim on that key, the result is the
-  user record, every field of it; the base record for that key is not consulted. When the user layer has none, the
-  result is the base record. Why whole: a record's verdicts, figures and probe come from one run. A field taken from the
+- **Per whole record.** A reader's result is one record at one cell. The SHADOW KEY is (`sha256`, `format`, `uri`,
+  `offer`, `host_class`). When the user layer holds a record for a shadow key, that user record shadows EVERY base
+  record of the key, at every cell, including cells the user record does not hold: the results for the key are the user
+  record's cells only, every field of them from the user record. When the user layer holds none, the results are the
+  base records' cells. Why whole: a record's verdicts, figures and probe come from one run. A field taken from the
   base beside fields from the user's run would be a combination nobody measured; a NULL in a user record (a figure not
   measured) means "not measured here", never "take the base's".
 - **User first, base never overwritten.** The base file is read only and immutable. The user layer is a separate file;
   nothing is ever written to the base by a reader or by the user writer.
-- **No tombstone.** A user cannot hide a base result except by measuring the same key at the same cell, which shadows
-  it. Removing a user record brings the base result back. Hiding without measuring would need a new word and a new
+- **No tombstone.** A user cannot hide a base record except by measuring the same key, which shadows it. Removing a
+  user record brings the base records back. Hiding without measuring would need a new word and a new
   rule; nothing asks for it today.
 - **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell. In the
-  base, the migration refuses a second claim, naming both files (no current set has one). In the user layer, the writer
-  replaces the user's own earlier record for that claim in one transaction (a newer measurement of the same bytes).
-  Across layers there is no conflict: the user's record wins and each result says its `layer`.
+  base, the migration refuses a second claim, naming both files (no current set has one). In the user layer, a newer
+  user record for a shadow key replaces the user's earlier record for that key, whole, in one transaction, even when it
+  holds fewer cells. Decided (#17): a newer user record shadows the whole base record (the user-first merge), and the
+  base is never deleted. Across layers there is no conflict: the user's record wins and each result says its `layer`.
 - A different SHA-256 is a different plugin: a user record for other bytes never shadows a base record.
 
 ## 5. Migration (change 2)
@@ -614,6 +690,12 @@ asks the owner to confirm both lists.
   `page_size` 4096, and a `VACUUM` before `user_version` is set. The same input gives a ROW-IDENTICAL database
   everywhere (the sorted `iterdump()` text is equal), and a BYTE-IDENTICAL file with the same SQLite library version.
   The test checks both in one environment.
+- **`built_from`, the commit.** In a git checkout the tool takes `git rev-parse HEAD`. A source tarball (the `.orig`
+  tarball of the deb source and the RPM's `Source0`) is made with `git archive`, and carries the file `BUILT_FROM`,
+  whose content is `$Format:%H$` and which `.gitattributes` marks `export-subst`: `git archive` writes the commit into
+  it. The tool takes `--built-from-file BUILT_FROM` from `debian/rules` and the spec file. A tree with neither a `.git`
+  nor a substituted `BUILT_FROM` (the file still holding `$Format:%H$`) is refused (`built-from-unknown`); the commit is
+  never guessed and never left NULL in the base.
 - **The round-trip proof** (`tools/test_records_db.py`, `unittest` like the repository's other tools):
   - build the base database of every set of `records/` (both classes, not one architecture);
   - for every record file, export the record from the database and compare it with the parsed file as JSON values,
@@ -623,10 +705,19 @@ asks the owner to confirm both lists.
     back absent;
   - counts are equal: record files per set = `record` rows per set, and for every array of section 3.5 the number of
     elements across the files = the rows of its table; sets = `record_set` rows; distinct (format, SHA-256, id) =
-    `plugin` rows (2,278 today).
+    `plugin` rows (2,278 today);
+  - an INDEPENDENT check, which does not use the module's mapping: `tools/testdata/field-columns.tsv`, written by hand
+    from the table of section 3.5, one line per leaf (`<JSON path>\t<table>.<column>`). For fixture records chosen to
+    hold every leaf at least once, the test reads each path's value from the JSON and the column's value with its own
+    SQL, and compares them. A mapping that is wrong in both directions (two columns swapped by the writer and the
+    exporter alike) passes the round trip and fails this check.
 - **The old package and files.** Nothing is removed in this pass. `plugin-qualification-records` keeps installing
   every `<class>/<set>/` file byte for byte, and adds `qualification.sqlite` beside them. The package's name, its
-  Provides, Replaces and Breaks, and its dependencies stay as they are.
+  Provides, Replaces and Breaks, and its dependencies stay as they are. This follows the owner's sequencing: no
+  consumer switches until after the console's 0.2.1 release, and the switch is one change. That change, the consumer
+  switch, is the one that stops installing the JSON files: in the same change the consumers read the database and the
+  package ships only `qualification.sqlite`. `records/` stays in this repository as the source the database is built
+  from.
 
 ## 6. Reader API (change 3)
 
@@ -637,7 +728,7 @@ asks the owner to confirm both lists.
 - plugin-qualify-sync (TypeScript, Node.js): `src/distributed-records.ts` reads the shipped records of its class and
   cell. It already runs plugin-db's command for plugin-db's store (`src/plugin-db-cli.ts`). It reads the
   database the same way, through `plugin-qualification-db query --json`, in one call per run: Node.js 18, the
-  package's floor, and Debian trixie's Node.js have no built-in SQLite (open question 4).
+  package's floor, and Debian trixie's Node.js have no built-in SQLite (section 9, ruling 4).
 - The console does not read records; it reads what plugin-hostd and plugin-db answer.
 
 One implementation, in C, so the two consumers cannot answer differently.
@@ -676,7 +767,7 @@ typedef struct {
 } pqdb_result;
 
 /* Calls each(result, ctx) for every result the query matches, user first, a base result only when the user layer has
-   no claim on its key (section 4), in key order. A non-zero return of each stops the walk and is returned. */
+   no record of its shadow key (section 4), in key order. A non-zero return of each stops the walk and is returned. */
 int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result *, void *), void *ctx);
 
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none). */
@@ -692,19 +783,23 @@ int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqd
   - `qualification-db.absent`: the base file does not exist. An absent USER layer is not an error: it is an empty
     layer;
   - `qualification-db.unreadable`: it exists and SQLite cannot open or read it;
-  - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `layer` that is not the file's
-    (a user file opened as the base);
-  - `qualification-db.schema-too-new`, `qualification-db.schema-too-old`: `user_version` outside the reader's range;
-  - `qualification-db.domain-too-old`: the installed `qualification` domain's `info.version` is below the
-    `store_info.domain_version` the file was checked against;
-  - `qualification-db.word-unknown`: a word of a `word_check` column is not in its item of the installed domain; the
-    message names the table, the column and the word;
+  - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `user_layer` that is not the
+    file's (a user file opened as the base);
+  - `qualification-db.schema-mismatch`: the base and the user layer are at different `user_version`s;
+  - `qualification-db.schema-other`: a file's `user_version` is not the reader's `PQDB_SCHEMA_VERSION`;
+  - `qualification-db.domain-too-old`: an installed domain's `info.version` is below the `store_domain.version` the
+    file was checked against;
+  - `qualification-db.word-unknown`: a word of a `word_check` column is in none of its items of the installed
+    domains; the message names the table, the column and the word;
+  - `qualification-db.hot-journal`: the user layer has a hot journal (its writer stopped inside a transaction). A
+    read-only reader cannot roll it back (SQLite answers `SQLITE_READONLY_ROLLBACK`), so it refuses, names the file
+    and the journal, and changes nothing; the next write by the writer rolls it back;
   - `qualification-db.busy`: the user layer stayed locked by its writer past the busy timeout (250 ms);
   - the loader's own codes (`contract.dir.absent`, `contract.file.invalid`, `contract.package.too-old` and the rest),
     passed through when the domain cannot be opened.
-- **Word check at open.** `pqdb_open` opens the domain through omx-contract's loader (`omx_domain_open("qualification",
-  floor)`), then for each `word_check` row reads the column's distinct words and looks each up
-  (`omx_domain_word`). It is done once, at open; no lookup checks a word again.
+- **Word check at open.** `pqdb_open` opens each domain of `store_domain` through omx-contract's loader
+  (`omx_domain_open(domain, floor)`), then for each column of `word_check` reads its distinct words and looks each up
+  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again.
 - **Concurrency.** The base is opened `file:<path>?mode=ro&immutable=1`: no lock, no journal, nothing written. A package
   upgrade renames a new file over it; an open handle keeps reading the old one until it is closed. The user layer is
   opened `mode=ro` with `busy_timeout` 250 ms; it uses the rollback journal (`journal_mode` `DELETE`), not WAL, because a
@@ -725,8 +820,8 @@ int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqd
 
 | package | ships | built how | new dependencies (floors only) |
 | --- | --- | --- | --- |
-| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)` for `STRICT` tables, `plugin-qualify-contract (>= 0.20.6~)` (the `qualification` domain, `info.version` 1.1.0), `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, `plugin-qualify-contract >= 0.20.6`. Run time: none |
-| `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0` and `libomx-domain0` at the floors their symbols files give (`${shlibs:Depends}`), `plugin-qualify-contract (>= 0.20.6~)` |
+| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same three contract floors. Run time: none |
+| `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
 | `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` | | `libplugin-qualification-db0 (= ${binary:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
 
@@ -735,8 +830,10 @@ A committed database would be a second copy of them that a diff cannot show and 
 Generating it at build from the text keeps one source; the build is cheap (one pass over the files) and its output is
 held by the round-trip test. `sets.py check` and `tools/check-records.py` stay the gate on the text.
 
-No version ceiling is added anywhere. The records package's existing plugin-qualify ranges are not touched by this work
-(section 10).
+**SQLite floor.** 3.37.0 is the first SQLite with `STRICT` tables, which every table of section 3.3 is. It is stated
+as an explicit floor in both formats, at build and at run time: `libsqlite3-0 (>= 3.37.0)` and `sqlite-libs >= 3.37.0`.
+
+No version ceiling is added anywhere.
 
 ## 8. Red-first tests
 
@@ -759,8 +856,9 @@ makes it fail.
    Fails when the writer ignores unknown fields.
 7. **Sentence not stored.** No TEXT value in the database holds a field of the sentence list (search for their exact
    strings from the fixtures). Fails when a detail is written into a column.
-8. **Store info.** `user_version` = 1, `store_info.layer` = `base`, `domain_version` = the installed domain's
-   `info.version`, `built_from` = the build's commit. Fails when any is missing or the pragma is not set last.
+8. **Store info.** `user_version` = `PQDB_SCHEMA_VERSION`, `store_info.user_layer` = 0, one `store_domain` row per
+   domain at its installed `info.version`, and a `word_check` row for every word column of section 3.4. Fails when any
+   is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
    from the record's, an empty object, and a second claim on one key and cell each refuse by name and leave no output
    file. Fails when a partial file is left at `--out`.
@@ -768,58 +866,90 @@ makes it fail.
     the `CHECK`s are dropped.
 11. **Package contents.** The built `plugin-qualification-records` (deb and rpm) holds `qualification.sqlite` and every
     file of today's sets, byte for byte equal to `records/`. Fails when a file is dropped or rewritten.
+12. **`built_from` from a tarball.** A build from a `git archive` tarball of a fixture commit gives `built_from` =
+    that commit; a build from a copied tree with an unsubstituted `BUILT_FROM` and no `.git` is refused as
+    `built-from-unknown`. Fails when the tool falls back to NULL or to a date.
+13. **Independent field check.** `field-columns.tsv` against the fixtures, path by path. Fails when the writer and the
+    exporter swap `cell.mem_first_instance_kb` and `cell.mem_per_instance_kb` together (sabotage), which the round
+    trip alone does not see.
+14. **Claim tied to its record and cell.** Inserting a `claim` whose offer, class or plugin differs from its record's,
+    or whose rate and quantum are no cell of its record, is refused by the foreign keys. Fails when the composite
+    foreign keys are dropped.
+15. **`mem_unmeasured_reason` checked.** A fixture cell with `memory.unmeasuredReason: "limit-exceeded"` (a word of
+    `QUALIFICATION_RESOURCE_UNMEASURED_REASONS`, not of `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS`) is refused as
+    `word-unknown`. Fails when the column is checked against the wrong item or by shape only.
+16. **Formats against plugin-db's own item.** With a fixture `plugin-db` domain whose `PLUGIN_DB_ADDRESS_FORMATS`
+    holds `clap` only, an LV2 record is refused as `word-unknown`, naming `plugin.format` and `lv2`. Fails when the
+    writer checks the formats against a list of its own or of the `qualification` domain.
+17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string. Fails when a word list
+    is written into a `CHECK`.
 
 ### Change 3: the reader
 
 1. **Absent base** → `qualification-db.absent` with the path. Fails when open succeeds on an empty layer.
 2. **Absent user layer** → open succeeds; results are the base's. Fails when an absent user file is refused or created.
-3. **`user_version` 2** → `schema-too-new`; **0** → `not-a-store`; a user file opened as the base → `not-a-store`.
+3. **One schema version.** A base at `user_version` 2 (and a reader at 1) → `schema-other`; a base at 1 with a user
+   layer at 2 → `schema-mismatch`, naming both files; **0** → `not-a-store`; a user file opened as the base →
+   `not-a-store`. Fails when the reader accepts a range.
 4. **Word not in the domain.** A fixture domain without `conditional` → `word-unknown` naming `verdict.rating` and
    `conditional`. Fails when the open skips the word check.
 5. **Domain too old.** A fixture domain at `info.version` 1.0.0 against a store at 1.1.0 → `domain-too-old`.
 6. **Whole-record merge.** A user record without memory figures and a base record with them, same key and cell: the
    result has `layer` `user` and `has_memory` 0. Fails under a per-field merge (sabotage: fill missing user figures
    from the base).
-7. **Shadowing is per key and cell.** A user record at another cell, or for another SHA-256, leaves the base result
-   visible. Fails when shadowing ignores the cell or the SHA-256.
-8. **Package lookup.** A user record with `rpm`, `clap-dexed`, `1.1.0`, `4.fc44`, `fc44`, `x86_64` is found by that
+7. **A user record shadows the whole base record (#17).** A base record holding 48000/256 and 96000/256 and a user
+   record of the same SHA-256, format, uri, offer and class holding only 48000/256: the results are the user's
+   48000/256 alone; the base's 96000/256 is hidden, and the base file is unchanged. Fails when shadowing is per cell
+   (sabotage: let base cells the user record does not hold through).
+8. **Another key is not shadowed.** A user record for another SHA-256, offer or class leaves the base results visible.
+   Fails when the shadow key drops one of its fields.
+9. **Package lookup.** A user record with `rpm`, `clap-dexed`, `1.1.0`, `4.fc44`, `fc44`, `x86_64` is found by that
    package; a migrated record (all NULL) is found by no package query. Fails when NULL matches any value.
-9. **Read only.** Opening and querying both layers leaves their size, mtime and directory listing unchanged (no
+10. **Read only.** Opening and querying both layers leaves their size, mtime and directory listing unchanged (no
    `-journal`, `-wal` or `-shm` file). Fails when a layer is opened read-write.
-10. **No environment in production.** The library's dynamic symbols import no `getenv` or `secure_getenv`, and
+11. **No environment in production.** The library's dynamic symbols import no `getenv` or `secure_getenv`, and
     `pqdb_open` with `PLUGIN_QUALIFICATION_DB_BASE` set to a fixture still opens the installed path. Fails when the
     library reads a variable.
-11. **Busy.** A writer holding an exclusive lock on the user layer gives `qualification-db.busy` within 250 ms plus a
+12. **Busy.** A writer holding an exclusive lock on the user layer gives `qualification-db.busy` within 250 ms plus a
     margin, never a hang. Fails without a busy timeout.
-12. **Figures agree with today's reader.** For every record of a fixture set, `pqdb_each` at each cell gives the cost
+13. **Figures agree with today's reader.** For every record of a fixture set, `pqdb_each` at each cell gives the cost
     median, the 95th percentile, the latency frames and the memory figures computed from the same JSON by the test's
     own reference (the rules of plugin-hostd's `qualcost.h`). Fails when a column is mapped to the wrong figure.
-13. **The command.** `query --json` prints words and numbers only; `--base` and `PLUGIN_QUALIFICATION_DB_BASE` are
+14. **The command.** `query --json` prints words and numbers only; `--base` and `PLUGIN_QUALIFICATION_DB_BASE` are
     honoured by the command; a usage error exits 2. Fails when the command and the library disagree on a fixture.
+15. **Scopes.** With `XDG_DATA_HOME` set to a fixture directory holding a user layer, `pqdb_open(PQDB_SCOPE_USER)`
+    reads the layer under the home from the password database, not the fixture's (the test runs as a user whose
+    home is a fixture). `PQDB_SCOPE_SYSTEM` never opens the home's layer, and `PQDB_SCOPE_USER` never opens
+    `/var/lib/omx/qualification/` (checked by the test's `open` trace, or by fixtures at both places). Fails when the
+    library reads `XDG_DATA_HOME` or a scope reads the other's layer.
+16. **Hot journal.** A user layer with a hot journal (a writer killed inside a transaction) → `hot-journal`, naming
+    the file; the layer and its journal are unchanged afterwards. Fails when the reader opens it read-write to roll
+    back, or reads it as if no journal were there.
 
-## 9. Open questions for the owner
+## 9. Owner rulings
 
-1. **Sentences and probe outputs are not stored.** Section 3.5 lists the prose fields of today's records and
-   provenances, and the probe outputs; the database keeps codes, presence, and the probe's name, hash and size, and
-   `built_from` points at the text. *Recommendation:* confirm. The round trip then proves every field but those, by
-   name, and plugin-qualify gives `binary.unpinnable` a code in its next record format.
-2. **Words no domain holds.** Dimensions `memory` and `hostAdmission`, host classes (`rpi5`, `x86-64` against the
-   domain's `desk`, `raspberry-pi-4`, `raspberry-pi-5`), host profiles, offers, hosting and arm words, set tiers, run
-   steps and results, and the `hosting.*` and `probe.*` codes other repositories own. *Recommendation:* plugin-qualify
-   adds the record's items to the `qualification` domain in one minor (with `x-from` for the words omx-clap-core and
-   plugin-hostd own) before change 2 merges, so every word column has a `word_check` row and change 2's floor is that
-   domain version.
-3. **The package fields are NULL for every current record.** *Recommendation:* plugin-qualify's record gains a
-   `package` object (format, name, version, release, distro, arch), filled at measurement time from the package
-   manager's owner of `binary.path` (`dpkg-query -S`, `rpm -qf`), NULL when no package owns it; the next measured
-   sets fill the base. No back-fill from a provenance's package list, which would be a guess.
-4. **How plugin-qualify-sync reads.** *Recommendation:* through `plugin-qualification-db query --json`, one call per
-   run, as it reads plugin-db; not Node's built-in `node:sqlite` (absent from Node.js 18, the package's floor, and
-   from Debian trixie's Node.js), and not a native npm binding.
-5. **The system scope's user layer and the device's existing records.** *Recommendation:* the system sync's user layer
-   is `/var/lib/omx/qualification/qualification.sqlite`, beside its `qualification_dir`. The records a device already
-   holds in its `qualification_dir` are not migrated by this work; the consumer switch decides whether the device
-   re-measures them or runs the same writer over that directory.
+Decided by the owner (2026-11-19):
+
+1. **DECIDED: codes, not prose.** The database stores codes, presence, and the probe output's name, hash and size; not
+   the prose fields of section 3.5 and not the raw probe outputs. The round trip proves every field but those, by name.
+2. **DECIDED: the missing words first.** plugin-qualify adds the missing qualification words and the package words in
+   one `qualification` domain minor BEFORE change 2 merges (section 3.4, precondition 1).
+3. **DECIDED: a package object.** plugin-qualify's record gains a `package` object (format, name, version, release,
+   distro, arch), filled at measurement time from the package manager's owner of `binary.path` (`dpkg-query -S`,
+   `rpm -qf`). No back-fill: a NULL stays NULL.
+4. **DECIDED: one reader.** The reader is the C library and its command `plugin-qualification-db query --json`;
+   TypeScript (plugin-qualify-sync) reads through the command, so there is one implementation. Node's `node:sqlite` is
+   revisited only if a measured need appears after Node 26.
+5. **DECIDED: the system user layer.** The system scope's user layer is in `/var/lib/omx/qualification`
+   (`qualification.sqlite`, section 2).
+6. **DECIDED: formats stay plugin-db's.** `clap` and `lv2` are checked against plugin-db's own published list, never a
+   copy, and never move into plugin-qualify; plugin-db publishes them as a domain item first (section 3.4,
+   precondition 2).
+7. **DECIDED (#17): whole-record shadowing.** A newer user record shadows the whole base record, at every cell, and the
+   base is never deleted (section 4).
+
+The records a device already holds in its `qualification_dir` are not migrated by this work; the consumer switch
+decides whether the device re-measures them or runs the same writer over that directory.
 
 ## 10. Out of scope
 
@@ -829,5 +959,4 @@ makes it fail.
   alias, no shim, no second format. If the switch seems to need one, it stops and asks the owner.
 - Removing the old files or the old package names: nothing is removed in this pass.
 - An upgrade path for a user layer at another `user_version`.
-- The records package's existing plugin-qualify version ranges.
 - plugin-db's store and its judged and reference layers.

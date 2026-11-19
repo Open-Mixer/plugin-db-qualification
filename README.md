@@ -125,7 +125,7 @@ run; `--force` measures everything.
 
 The channel is `https://www.openmixer.org/deb/debian/trixie/`; add it with the `openmixer-release` package.
 
-On Fedora 44 x86_64, once the x86_64 package is released:
+On Fedora 45 x86_64, once the x86_64 package is released:
 
 ```
 dnf install https://www.openmixer.org/rpm/openmixer-release.noarch.rpm
@@ -227,7 +227,7 @@ A tag `v*` runs `.github/workflows/release.yml`. It builds `plugin-qualification
   built, linted and published without an install proof; its sets are proven by the x86_64 RPM.
 - an RPM architecture: the package from `packaging/plugin-qualification-records.spec` through Open-Mixer/.github's
   `build-rpm.yml` (its `%check` runs `tools/check-records.py` over every installed set), signed, published into the
-  channel's `rpm/` tree and attached to the same GitHub release; then installed in Fedora 44 with plugin-qualify from
+  channel's `rpm/` tree and attached to the same GitHub release; then installed in Fedora 45 with plugin-qualify from
   the channel, and for every set, with the omx-plugins version that set measured, the sync must take it from the
   records.
 
@@ -242,7 +242,7 @@ arm64 goes first. This version's `packaging/release-arches` names `deb arm64` an
 builds and publishes the arm64 deb alone, whose plugin-qualify range the channel already serves. Once plugin-qualify
 0.20.1 is in the channel, the next dated version adds `amd64` to the `deb` line and `x86_64` to the `rpm` line
 (`deb arm64 amd64`, `rpm x86_64`), gets its own `debian/changelog` entry and spec `Version`, and is tagged: that tag
-builds the RPM first and the debs after it, and proves the x86_64 package in Fedora 44. `tools/sets.py check` refuses
+builds the RPM first and the debs after it, and proves the x86_64 package in Fedora 45. `tools/sets.py check` refuses
 a release architecture whose classes hold no set.
 
 ## Versions

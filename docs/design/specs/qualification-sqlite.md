@@ -528,7 +528,7 @@ A present empty array or map is told from an absent one by one rule, which every
   records), `measurements.grid`, `measurements.grid[].rtSafety.events` (present with `rtSafety`, empty in 9,015
   cells), `measurements.behaviour.features.required` (present with `behaviour`, empty in 3,077 records),
   `notMeasured`, `run.steps`, `memoryRun.cells`;
-- A CLAP record's `hostExtensions` is present (empty when the run offered none) when its probe reached the offer, and absent when the probe ended before it (a crash or a timeout: 254 of today's CLAP records); an LV2 record has none. `record.host_extensions` is 1 when the list is present and NULL otherwise. Such a CLAP record owes `figures-unreadable` when judged again (section 6.2); nothing guesses an empty list for it.
+- A CLAP record's `hostExtensions` is present (empty when the run offered none) when its probe reached the offer, and absent when the probe ended before it (a crash or a timeout: 254 of today's CLAP records); an LV2 record has none. `record.host_extensions` is 1 when the list is present and NULL otherwise. The row judge reads such a CLAP record's NULL as an empty list, exactly as the probe judge reads the absent `offer.clapExtensions` today (`hostExtensions: output.offer.clapExtensions ?? []`), so a storage move changes no verdict (section 6.2; ruling 11).
 - PRESENT ONLY WITH ROWS: `adapter.cells`, `probe.ends`, `measurements.unmeasured`, `rejudged.owes`.
 
 `binary.files` is in neither list: it is always present and never empty (section 3.7; every record of today holds at
@@ -1032,7 +1032,9 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     keys, in this order: `layer`, `sha256`, `format`, `uri`, `offer`, `host_class`, `set`, `pkg_format`, `pkg_name`,
     `pkg_version`, `pkg_release`, `pkg_distro`, `pkg_arch`, `binary_path` (string), `layout_scheme`, `layout_sha256`,
     `tested_version` (string or `null`), `unpinnable` (0 or 1), `files`, `rate`, `quantum`, `outcome`, the cost,
-    latency and memory keys of `pqdb_result` as today, and `verdicts`. `files` is the record's list in its order: an
+    latency and memory keys of `pqdb_result` as today, and `verdicts`: an array, in the record's order, of
+    `{"host": ..., "rating": ..., "measured": 0|1, "qualified": 0|1, "deciding": ...}`, the fields of `pqdb_verdict`
+    (`deciding` a string or `null`). `files` is the record's list in its order: an
     array of `{"path": "...", "sha256": "..."}`, never empty. No other key; an absent figure is `null`, as today;
   - `query ... --json --records`: one JSON object per line per RECORD (the results of one record are one line):
     `{"layer": ..., "sha256": ..., "format": ..., "uri": ..., "offer": ..., "host_class": ..., "record": <the record of
@@ -1108,7 +1110,7 @@ function that does; a field the table says nothing decides is carried into the j
 | `plugin.format`, `plugin.id` | the judge's uri and branch, `rejudgeProfiles`, `runsOwed` | `plugin.format`, `plugin.uri` |
 | `plugin.version` | the pin's `integrity` only; no reason | `record.tested_version` |
 | `offer.id` | `rejudgeProfiles` (a CLAP host joins only its own offer) | `record.offer` |
-| `offer.clapExtensions` | `rtSafetyDocument` (a profile is judged only against the extensions it offers; any other list reads `unknown`, `hosting.clap.extensions-not-covered`), as `hostExtensions` | NEW: `record_extension` rows, in order, and `record.host_extensions` = 1 for a CLAP record whose probe reached the offer (an empty list is data); NULL for an LV2 record and for a CLAP probe that ended before the offer, which owes `figures-unreadable`. Not stored before this amendment |
+| `offer.clapExtensions` | `rtSafetyDocument` (a profile is judged only against the extensions it offers; any other list reads `unknown`, `hosting.clap.extensions-not-covered`), as `hostExtensions` | NEW: `record_extension` rows, in order, and `record.host_extensions` = 1 for a CLAP record whose probe reached the offer (an empty list is data); NULL for an LV2 record and for a CLAP probe that ended before the offer, which the row judge reads as `[]`, as the probe judge reads the absent `offer.clapExtensions` today. Not stored before this amendment |
 | `grid[]` (its points, in order) | every function below; `blockFrames` is the first rt point's quantum | `cell` rows in `ord`, every cell of the record (the probe's points are a subset in the same order in every record of `records/`; the cells a memory-only pass added carry a footprint and no other figure) |
 | `grid[].rate`, `.quantum`, `.outcome` | `okPoints`, `cellOf`, `costOf`, `failedOutcome`, `isOutOfMemory` | `cell.rate`, `.quantum`, `.outcome` |
 | `grid[].latency.declaredFrames`, `.measuredFrames` | the CLAP line's `latency`; no reason | `cell.latency_declared_frames`, `.latency_measured_frames` |
@@ -1132,8 +1134,10 @@ What `rejudgeRecord` reads of the RECORD itself is already rows: the verdicts an
 (`record.adapter_*`, `adapter_param`), the memory pass (`memory_run_*`, whose footprints are already in the `cell` rows),
 and the tool, `measuredAt` and `rejudged_*` columns. `withMemoryRun`'s merge is therefore a no-op on rows.
 
-A record whose rows lack a figure the judge needs (a NULL where the judge reads a figure, a CLAP record without
-`host_extensions`) owes `figures-unreadable` and is not judged again. Nothing is guessed from a missing field.
+A record whose rows lack a figure the judge needs (a NULL where the judge reads a figure) owes `figures-unreadable`
+and is not judged again. Nothing is guessed from a missing field, with one exception that is today's behaviour, not a
+guess: a CLAP record's NULL `host_extensions` reads as `[]`, as the probe judge reads an absent `offer.clapExtensions`
+(`?? []`). A storage move must not change a verdict.
 
 The grid of the judge is the record's `cell` rows in `ord` order, so `blockFrames` and the order of the interposer's
 counts are the probe's. The store's proof is section 8, change 3, case 25, which compares the row judge with today's
@@ -1231,8 +1235,8 @@ makes it fail.
 24. **The columns of the row judge.** A fixture CLAP record round-trips with `hostExtensions` `["clap.log", "clap.params"]`, one
     with `[]`, and an LV2 record with none; a cell with `ownThreads: 2` and `otherThreads` of three counts reads back
     exactly, one with `otherThreads` of one count only is refused by the schema, and a CLAP record without
-    `hostExtensions` (a probe that ended before the offer) is stored with `host_extensions` NULL and owes
-    `figures-unreadable` when judged again. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
+    `hostExtensions` (a probe that ended before the offer) is stored with `host_extensions` NULL, which the row judge
+    reads as `[]`; C6b holds byte-equal on all 254 such records of `records/`. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
     dropped.
 
 ### Change 3: the reader

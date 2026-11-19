@@ -88,6 +88,8 @@ def contract_dir():
                 "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
             doc["components"]["schemas"].setdefault("QUALIFICATION_PIN_VERDICTS", {
                 "oneOf": [{"const": w} for w in ("in-process", "isolated", "refused")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_BLOCKERS", {
+                "oneOf": [{"const": w} for w in ("refused", "unknown", "no-deciding-reason")]})
             doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_MOVES", {
                 "oneOf": [{"const": w} for w in ("demote", "promote", "none")]})
             doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_REASONS", {

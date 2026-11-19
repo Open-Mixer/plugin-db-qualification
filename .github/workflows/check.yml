@@ -65,6 +65,29 @@ jobs:
           if grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
       - run: make check
 
+  # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the
+  # owners' own, read from their main (the test assembles the contract directory from these clones); the hosting domain
+  # is read from its branch until omx-clap-core publishes it on main.
+  layer-writer:
+    name: the layer writer refuses by name
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PDQ_SIBLINGS: ${{ github.workspace }}/siblings
+      PDQ_HOSTING_REF: origin/lane/omx-clap-core-hosting-domain
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-qualify, path: siblings/plugin-qualify, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-hostd, path: siblings/plugin-hostd, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
+      - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
+      - run: python3 -m unittest tools/test_qualification_db_write.py
+
   # The base database (tools/records-db.py) over every record of records/: the round trip, the counts, the refusals. The
   # words are the owners' own, read from their main (the test assembles the contract directory from these clones);
   # the hosting domain is read from its branch until omx-clap-core publishes it on main.

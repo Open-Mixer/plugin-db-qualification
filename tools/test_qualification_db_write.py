@@ -2,11 +2,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 """The writer of a layer (this repository's qualification store spec, section 6.1): `put` and `delete` of
-tools/qualification_db.py into the user or the system layer file, and every refusal by its exact name.
+tools/qualification_db.py into the user or the system layer file, the command plugin-qualification-db-write, and every
+refusal by its exact name.
 
     PDQ_SIBLINGS=<dir of the clones> python3 -m unittest tools/test_qualification_db_write.py
 
-The words come from the owners' contract documents, assembled by tools/test_records_db.py (TEST ONLY: PDQ_SIBLINGS).
+The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones
+(TEST ONLY, the writer reads no variable for it): PDQ_SIBLINGS names the directory that holds the clones
+(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
+(default origin/main), the hosting domain at PDQ_HOSTING_REF. Without PDQ_SIBLINGS the tests that need the words are
+skipped, saying so. The fixture records are records of records/, in the section 3.7 form the rewrite of records/ gives
+them (a CLAP record's relative binary.path and its hostExtensions).
 """
 import contextlib
 import copy
@@ -20,23 +26,109 @@ import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
-import test_records_db as T  # noqa: E402
 import qualification_db as q  # noqa: E402
 
+RECORDS = os.path.join(REPO, "records")
+HEADER = os.path.join(REPO, "include", "plugin-qualification-db", "pqdb.h")
+DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
+               "plugin-db": "plugin-db", "hosting": "omx-clap-core"}
+SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
+REF = os.environ.get("PDQ_REF", "origin/main")
+HOSTING_REF = os.environ.get("PDQ_HOSTING_REF", "origin/lane/omx-clap-core-hosting-domain")
+X86 = ("x86-64", "fedora44-48000-512")
 LV2 = ("rpi5", "zynthian-vangelis")
+_contract = {}
 
 
-def first_record(src=T.SRC_SET, predicate=None, offer=None):
-    """(record, offer, host class) of the first record of a real set; its paths already in the section 3.7 form."""
-    tmp = tempfile.mkdtemp(prefix="pdq-fixture-")
-    try:
-        f = T.find(predicate or (lambda r, n: True), src)
-        d = T.make_set(tmp, [f], src=src)
-        rec = T.load(os.path.join(d, f))
-        return rec, f.rsplit(".", 3)[-3], src[0]
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+def contract_dir():
+    """The contract directory assembled from the sibling clones, once; skips the test when they are not given."""
+    if "dir" in _contract:
+        return _contract["dir"]
+    if not SIBLINGS:
+        raise unittest.SkipTest("PDQ_SIBLINGS is not set: no sibling clones to read the owners' words from")
+    root = tempfile.mkdtemp(prefix="pdq-contract-")
+    for dom, repo in DOMAIN_REPO.items():
+        clone = os.path.join(SIBLINGS, repo)
+        if not os.path.isdir(clone):
+            raise unittest.SkipTest(f"{clone}: no such sibling clone")
+        ref = HOSTING_REF if dom == "hosting" else REF
+        r = subprocess.run(["git", "-C", clone, "show", f"{ref}:contract.d/{dom}/{dom}.json"], capture_output=True)
+        if r.returncode:
+            raise unittest.SkipTest(f"{repo} {ref}: contract.d/{dom}/{dom}.json: {r.stderr.decode().strip()}")
+        os.makedirs(os.path.join(root, dom))
+        with open(os.path.join(root, dom, dom + ".json"), "wb") as f:
+            f.write(r.stdout)
+    _contract["dir"] = root
+    return root
+
+
+def tearDownModule():
+    if "dir" in _contract:
+        shutil.rmtree(_contract["dir"], ignore_errors=True)
+
+
+def load(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def first_difference(a, b, path=""):
+    if isinstance(a, dict) and isinstance(b, dict):
+        for k in sorted(set(a) | set(b)):
+            if k not in a or k not in b:
+                return f"{path}.{k}: only in the {'record' if k in a else 'database'}"
+            d = first_difference(a[k], b[k], f"{path}.{k}")
+            if d:
+                return d
+        return None
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return f"{path}: {len(a)} elements in the record, {len(b)} in the database"
+        for i, (x, y) in enumerate(zip(a, b)):
+            d = first_difference(x, y, f"{path}[{i}]")
+            if d:
+                return d
+        return None
+    if isinstance(a, bool) != isinstance(b, bool) or a != b:
+        return f"{path}: {a!r} in the record, {b!r} in the database"
+    return None
+
+
+def without_sentences(rec):
+    """The record as the database gives it back: its sentences are not stored (section 3.5)."""
+    rec = copy.deepcopy(rec)
+    rec["binary"].pop("unpinnable", None)
+    rec["tiers"].pop("dimmed", None)
+    for s in rec["run"]["steps"]:
+        s.pop("detail", None)
+    for c in rec["measurements"]["grid"]:
+        c.get("memory", {}).pop("unmeasuredDetail", None)
+    for u in rec["measurements"].get("unmeasured", []):
+        u.pop("detail", None)
+    return rec
+
+
+def first_record(src=X86, predicate=lambda r: True):
+    """(record, offer, host class) of the first record of a real set that satisfies the predicate, in the form of section
+    3.7: a CLAP record's binary.path is its file's own name and its hostExtensions are the probe output's list (a
+    crashed or timed-out probe offered none, and the record gets none)."""
+    cls, set_ = src
+    d = os.path.join(RECORDS, cls, set_)
+    for f in sorted(os.listdir(d), key=os.fsencode):
+        if not f.endswith(".qualification.json"):
+            continue
+        rec = load(os.path.join(d, f))
+        if rec["plugin"]["format"] == "clap":
+            rec["binary"]["path"] = rec["binary"]["files"][0]["path"]
+            offer = load(os.path.join(d, rec["probe"]["file"]))["offer"]
+            rec.pop("hostExtensions", None)
+            if "clapExtensions" in offer:
+                rec["hostExtensions"] = offer["clapExtensions"]
+        if predicate(rec):
+            return rec, f.rsplit(".", 3)[-3], cls
+    raise AssertionError(f"no record of {src} satisfies the predicate")
 
 
 class Layer(unittest.TestCase):
@@ -46,11 +138,11 @@ class Layer(unittest.TestCase):
         self.root = os.path.join(self.tmp, "qualification")
         self.db = os.path.join(self.root, "qualification.sqlite")
         self.rec, self.offer, self.cls = first_record(
-            LV2, lambda r, n: r["plugin"]["format"] == "clap" and len(r["measurements"]["grid"]) > 1)
+            LV2, lambda r: r["plugin"]["format"] == "clap" and len(r["measurements"]["grid"]) > 1)
 
     def put(self, rec=None, scope="user", offer=None, cls=None, root=None):
         return q.put(rec if rec is not None else self.rec, scope=scope, offer=offer or self.offer, host_class=cls or self.cls,
-                     contract_dir=T.contract_dir(), root=root or self.root)
+                     contract_dir=contract_dir(), root=root or self.root)
 
     def rows(self, sql, *args):
         with contextlib.closing(sqlite3.connect(self.db)) as db:
@@ -79,6 +171,75 @@ class Layer(unittest.TestCase):
             return q.Exporter(db).export_record(1)
 
 
+class Columns(Layer):
+    """Case 24: the columns of the row judge (record_extension, record.host_extensions, cell.rt_own_threads and
+    rt_other_*) are written and read back, and the DDL's own checks hold."""
+
+    def named(self, rec):
+        return f"{rec['probe']['file'][: -len('.' + self.offer + '.probe.json')]}"
+
+    def put_back(self, rec):
+        self.put(rec)
+        got = self.export()
+        self.assertIsNone(first_difference(without_sentences(rec), got))
+        return got
+
+    def test_24_host_extensions_of_a_clap_record_round_trip(self):
+        rec = self.edited(lambda r: r.update(hostExtensions=["clap.log", "clap.params"]))
+        self.assertEqual(self.put_back(rec)["hostExtensions"], ["clap.log", "clap.params"])
+        self.assertEqual(self.rows("SELECT host_extensions FROM record"), [(1,)])
+        self.assertEqual(self.rows("SELECT ord, extension FROM record_extension ORDER BY ord"),
+                         [(0, "clap.log"), (1, "clap.params")])
+
+    def test_24_an_empty_list_of_host_extensions_is_data(self):
+        self.assertEqual(self.put_back(self.edited(lambda r: r.update(hostExtensions=[])))["hostExtensions"], [])
+        self.assertEqual(self.rows("SELECT host_extensions FROM record"), [(1,)])
+        self.assertEqual(self.rows("SELECT count(*) FROM record_extension"), [(0,)])
+
+    def test_24_a_clap_record_without_the_list_is_stored_without_it(self):
+        """A probe that crashed or timed out offered no list (254 records of records/): nothing is guessed, the column
+        stays NULL, and the row judge owes figures-unreadable (section 6.2)."""
+        self.assertNotIn("hostExtensions", self.put_back(self.edited(lambda r: r.pop("hostExtensions", None))))
+        self.assertEqual(self.rows("SELECT host_extensions FROM record"), [(None,)])
+
+    def test_24_an_lv2_record_has_none(self):
+        rec, offer, cls = first_record(LV2, lambda r: r["plugin"]["format"] == "lv2")
+        self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(self.rows("SELECT host_extensions FROM record"), [(None,)])
+        self.assertNotIn("hostExtensions", self.export())
+
+    def test_24_an_lv2_record_with_host_extensions_is_refused(self):
+        rec, offer, cls = first_record(LV2, lambda r: r["plugin"]["format"] == "lv2")
+        rec["hostExtensions"] = ["clap.log"]
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(cm.exception.name, "field-unmapped")
+        self.assertIn("hostExtensions", str(cm.exception))
+
+    def test_24_own_threads_and_other_threads_round_trip(self):
+        def put(r):
+            rt = r["measurements"]["grid"][0]["rtSafety"]
+            rt["ownThreads"] = 2
+            rt["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+        got = self.put_back(self.edited(put))
+        rt = got["measurements"]["grid"][0]["rtSafety"]
+        self.assertEqual((rt["ownThreads"], rt["otherThreads"]), (2, {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}))
+        self.assertEqual(self.rows("SELECT rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls FROM cell "
+                                   "WHERE rt_own_threads IS NOT NULL"), [(2, 5, 0, 7)])
+
+    def test_24_records_of_today_hold_none(self):
+        got = self.put_back(self.rec)
+        for c in got["measurements"]["grid"]:
+            self.assertNotIn("ownThreads", c.get("rtSafety", {}))
+            self.assertNotIn("otherThreads", c.get("rtSafety", {}))
+        self.assertEqual(self.rows("SELECT count(*) FROM cell WHERE rt_own_threads IS NOT NULL OR rt_other_locks IS NOT NULL"), [(0,)])
+
+    def test_24_other_threads_with_one_count_only_is_refused_by_the_schema(self):
+        def put(r):
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locksInRun": 1}
+        self.refused("schema-refused", rec=self.edited(put))
+
+
 class Put(Layer):
     def test_a_missing_layer_is_created_from_the_ddl_and_holds_the_record(self):
         self.put()
@@ -93,16 +254,8 @@ class Put(Layer):
     def test_the_record_reads_back_equal(self):
         self.put()
         got = self.export()
-        want = copy.deepcopy(self.rec)
-        want["binary"].pop("unpinnable", None)
-        want["tiers"].pop("dimmed", None)
-        for s in want["run"]["steps"]:
-            s.pop("detail", None)
-        for c in want["measurements"]["grid"]:
-            c.get("memory", {}).pop("unmeasuredDetail", None)
-        for u in want["measurements"].get("unmeasured", []):
-            u.pop("detail", None)
-        self.assertIsNone(T.RoundTrip.first_difference(want, got))
+        want = without_sentences(self.rec)
+        self.assertIsNone(first_difference(want, got))
 
     def test_the_name_comes_from_the_probe_file_and_the_offer(self):
         self.put()
@@ -168,22 +321,22 @@ class Refusals(Layer):
         self.refused("key-not-the-binary", "binary.sha256", rec=rec)
 
     def test_key_not_the_binary_for_an_lv2_key_taken_from_the_first_entry(self):
-        rec, offer, cls = first_record(LV2, lambda r, n: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
+        rec, offer, cls = first_record(LV2, lambda r: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
                             and r["binary"]["files"][0]["path"] != r["binary"]["path"])
         first = rec["binary"]["files"][0]
         self.assertNotEqual(first["path"], rec["binary"]["path"])
         rec["binary"]["sha256"] = first["sha256"]
         with self.assertRaises(q.Refusal) as cm:
-            q.put(rec, scope="user", offer=offer, host_class=cls, contract_dir=T.contract_dir(), root=self.root)
+            q.put(rec, scope="user", offer=offer, host_class=cls, contract_dir=contract_dir(), root=self.root)
         self.assertEqual(cm.exception.name, "key-not-the-binary")
 
     def lv2(self):
-        return first_record(LV2, lambda r, n: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
+        return first_record(LV2, lambda r: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
                             and r["binary"]["files"][0]["path"] != r["binary"]["path"])
 
     def put_lv2(self, rec, offer, cls):
         with self.assertRaises(q.Refusal) as cm:
-            q.put(rec, scope="user", offer=offer, host_class=cls, contract_dir=T.contract_dir(), root=self.root)
+            q.put(rec, scope="user", offer=offer, host_class=cls, contract_dir=contract_dir(), root=self.root)
         self.assertFalse(os.path.exists(self.db))
         return cm.exception
 
@@ -295,7 +448,7 @@ class Command(Layer):
 
     def put_cmd(self, rec=None, *extra, offer=None, cls=None, scope="user"):
         return self.run_cmd("put", "--scope", scope, "--offer", offer or self.offer, "--host-class", cls or self.cls,
-                            "--root", self.root, "--contract-dir", T.contract_dir(), *extra,
+                            "--root", self.root, "--contract-dir", contract_dir(), *extra,
                             stdin=json.dumps(rec if rec is not None else self.rec))
 
     def key_args(self, **kw):
@@ -336,7 +489,7 @@ class Command(Layer):
         self.assertEqual(self.rows("SELECT count(*) FROM record"), [(1,)])
 
     def test_every_refusal_is_named_on_standard_error_with_exit_1_and_writes_nothing(self):
-        lv2, loffer, lcls = first_record(LV2, lambda r, n: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
+        lv2, loffer, lcls = first_record(LV2, lambda r: r["plugin"]["format"] == "lv2" and len(r["binary"]["files"]) > 2
                                          and r["binary"]["files"][0]["path"] != r["binary"]["path"])
         swapped = copy.deepcopy(lv2)
         swapped["binary"]["files"][0], swapped["binary"]["files"][1] = swapped["binary"]["files"][1], swapped["binary"]["files"][0]
@@ -368,7 +521,7 @@ class Command(Layer):
 
     def test_standard_input_that_is_no_json_is_refused(self):
         r = self.run_cmd("put", "--scope", "user", "--offer", self.offer, "--host-class", self.cls, "--root", self.root,
-                         "--contract-dir", T.contract_dir(), stdin="{not json")
+                         "--contract-dir", contract_dir(), stdin="{not json")
         self.assertEqual(r.returncode, 1)
         self.assertIn("refused: file-unreadable:", r.stderr)
 
@@ -390,7 +543,7 @@ class Command(Layer):
 
 class Version(unittest.TestCase):
     def test_the_writer_and_the_reader_name_one_version(self):
-        with open(q.HEADER, encoding="utf-8") as f:
+        with open(HEADER, encoding="utf-8") as f:
             self.assertIn(f"#define PQDB_SCHEMA_VERSION {q.schema_version()}\n", f.read())
 
 

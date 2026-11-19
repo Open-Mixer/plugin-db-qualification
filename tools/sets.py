@@ -40,10 +40,13 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE = "plugin-qualification-records"
 # The source package's binary packages, exactly (this repository's qualification store spec, section 7): the records
-# package, which this tool builds the sets of, and the reader's library, its development files and its command. A
-# package, or a debian/<name>.install, .symbols or .lintian-overrides file, of any other name is refused.
-DEB_PACKAGES = [PACKAGE, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db"]
-RPM_PACKAGES = [PACKAGE, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db"]
+# package, which this tool builds the sets of, and the reader's library, its development files and its command, the DDL
+# (plugin-qualification-db-schema) and the layer writer (plugin-qualification-db-write). A package, or a
+# debian/<name>.install, .symbols or .lintian-overrides file, of any other name is refused.
+DEB_PACKAGES = [PACKAGE, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db",
+                "plugin-qualification-db-schema", "plugin-qualification-db-write"]
+RPM_PACKAGES = [PACKAGE, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db",
+                "plugin-qualification-db-schema", "plugin-qualification-db-write"]
 PACKAGE_FILES = (".install", ".symbols", ".lintian-overrides")
 SPEC = os.path.join("packaging", f"{PACKAGE}.spec")
 ARCH_CLASSES = os.path.join("packaging", "arch-classes")

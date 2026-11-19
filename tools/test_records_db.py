@@ -716,7 +716,11 @@ class RoundTrip(unittest.TestCase):
         if r.returncode:
             raise AssertionError(f"records-db.py refused: {r.stderr}")
         sys.path.insert(0, HERE)
+        import importlib.util
         import qualification_db
+        spec = importlib.util.spec_from_file_location("records_db", TOOL)
+        cls.rdb = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.rdb)
         cls.q = qualification_db
         cls.db = sqlite3.connect(cls.db_path)
         cls.db.row_factory = sqlite3.Row
@@ -785,7 +789,7 @@ class RoundTrip(unittest.TestCase):
                 want.pop(k, None)
             if "settings" in want:
                 want["settings"].pop("note", None)
-            got = ex.export_set(r["set_id"])
+            got = self.rdb.export_set(ex, r["set_id"])
             self.assertIsNone(self.first_difference(want, got), f"{r['host_class']}/{r['name']}")
 
     def test_01_the_ids_follow_the_byte_order_of_the_paths(self):

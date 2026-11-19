@@ -130,7 +130,8 @@ class BuildPackage(unittest.TestCase):
             names = subprocess.run(["rpmspec", "-q", "--target", "x86_64", "--qf", "%{name}\n", os.path.join(self.tree, *SPEC)],
                                    capture_output=True, text=True, check=True).stdout.split()
             self.assertEqual(names, ["plugin-qualification-records", "libplugin-qualification-db",
-                                     "libplugin-qualification-db-devel", "plugin-qualification-db"])
+                                     "libplugin-qualification-db-devel", "plugin-qualification-db",
+                                     "plugin-qualification-db-schema", "plugin-qualification-db-write"])
 
     def test_an_rpi5_run_adds_sets_and_no_packaging(self):
         spec_before = self.spec_text()

@@ -87,12 +87,14 @@ done
 
 # ---- test 22: the widened shape ----
 keys='layer sha256 format uri offer host_class set pkg_format pkg_name pkg_version pkg_release pkg_distro pkg_arch binary_path layout_scheme layout_sha256 tested_version unpinnable files rate quantum outcome cost_median_ns cost_p_ns cost_p has_cost latency_frames has_latency mem_first_kb mem_per_instance_kb has_memory verdicts'
-python3 -I - "$fx/command-query.out" "$keys" <<'PY' || fail=1
+"$cmd" query --json --layer base --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" > "$fx/command-base.out" 2>&1
+python3 -I - "$fx/command-query.out" "$keys" "$fx/command-base.out" <<'PY' || fail=1
 import json, sys
 bad = 0
 want = sys.argv[2].split()
 seen = set()
-for n, l in enumerate(l for l in open(sys.argv[1]).read().splitlines() if l):
+# the merged answer hides the base record that has a layout (a user record shadows it): the base's own shows the variety
+for n, l in enumerate([l for l in open(sys.argv[1]).read().splitlines() if l] + [l for l in open(sys.argv[3]).read().splitlines() if l]):
     o = json.loads(l)
     if list(o) != want:
         print("  FAIL: line %d keys are %s, expected %s" % (n, list(o), want)); bad = 1; break

@@ -11,11 +11,14 @@
 #include <sqlite3.h>
 
 #include <errno.h>
+#include <locale.h>
+#include <math.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct { char *p; size_t n, cap; int oom; const char *bad; } buf;
+typedef struct { char *p; size_t n, cap; int oom; const char *bad, *nonfinite; } buf;
 
 static void bput(buf *b, const char *s, size_t n)
 {
@@ -190,6 +193,10 @@ static void leaf(buf *b, sqlite3_stmt *st, const char *jk, const char *col, char
     int i = ci(st, col, b);
     if (i < 0 || sqlite3_column_type(st, i) == SQLITE_NULL)
         return;
+    if ((kind == 'R' || kind == 'N') && !isfinite(sqlite3_column_double(st, i))) {   /* JSON has no Infinity: refused by name */
+        if (!b->nonfinite) b->nonfinite = col;
+        return;
+    }
     key(b, jk);
     switch (kind) {
     case 'I': jint(b, sqlite3_column_int64(st, i)); break;
@@ -229,7 +236,10 @@ static void params(buf *b, ctx *c, const char *sql, int nbind, long long a1, lon
     ROWS(b, c, st, sql, nbind, a1, a2) {
         key(b, (const char *)sqlite3_column_text(st, 0));
         if (sqlite3_column_type(st, 1) == SQLITE_INTEGER) jint(b, sqlite3_column_int64(st, 1));
-        else if (sqlite3_column_type(st, 1) == SQLITE_FLOAT) jreal(b, sqlite3_column_double(st, 1));
+        else if (sqlite3_column_type(st, 1) == SQLITE_FLOAT) {
+            if (!isfinite(sqlite3_column_double(st, 1))) { if (!b->nonfinite) b->nonfinite = "number"; bs(b, "0"); }
+            else jreal(b, sqlite3_column_double(st, 1));
+        }
         else jstr(b, (const char *)sqlite3_column_text(st, 2));
     }
     bc(b, '}');
@@ -532,7 +542,26 @@ static void record(buf *b, ctx *c, sqlite3_stmt *r)
     bc(b, '}');
 }
 
+static locale_t c_locale;
+static pthread_once_t c_locale_once = PTHREAD_ONCE_INIT;
+static void make_c_locale(void) { c_locale = newlocale(LC_ALL_MASK, "C", (locale_t)0); }
+
+/* The document is written under the C locale, whatever the program's: snprintf and strtod follow LC_NUMERIC, and a decimal
+ * comma is not JSON. uselocale is per thread, so a thread of the program is not touched. */
+static int document(sqlite3 *h, long long record_id, char **json, char *why, size_t why_n);
 int pqdb_record_document(sqlite3 *h, long long record_id, char **json, char *why, size_t why_n)
+{
+    locale_t old;
+    int rc;
+    pthread_once(&c_locale_once, make_c_locale);
+    if (!c_locale) { snprintf(why, why_n, "cannot make the C locale"); *json = NULL; return -1; }
+    old = uselocale(c_locale);
+    rc = document(h, record_id, json, why, why_n);
+    uselocale(old);
+    return rc;
+}
+
+static int document(sqlite3 *h, long long record_id, char **json, char *why, size_t why_n)
 {
     buf b = { 0 };
     ctx c = { h, record_id, "" };
@@ -553,6 +582,11 @@ int pqdb_record_document(sqlite3 *h, long long record_id, char **json, char *why
     if (!found) { snprintf(why, why_n, "no record %lld", record_id); free(b.p); return -1; }
     if (b.oom) { snprintf(why, why_n, "out of memory"); free(b.p); return -1; }
     if (b.bad) { snprintf(why, why_n, "cannot read the record: %s", b.bad); free(b.p); return -1; }
+    if (b.nonfinite) {
+        snprintf(why, why_n, "record %lld: the column %s holds a number that is not finite (JSON has none)", record_id, b.nonfinite);
+        free(b.p);
+        return -2;
+    }
     *json = b.p;
     return 0;
 }

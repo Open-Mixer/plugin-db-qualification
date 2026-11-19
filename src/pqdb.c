@@ -713,7 +713,10 @@ int pqdb_record_json(const pqdb *db, const pqdb_result *r, char **json, pqdb_err
     if (!found)
         return fail(err, S_UNREADABLE, "no record of %s %s (offer %s, class %s) at %d/%d in the %s layer", r->format, r->uri,
                     r->offer, r->host_class, r->rate, r->quantum, r->layer);
-    if (pqdb_record_document(h, rid, json, why, sizeof why) != 0)
+    rc = pqdb_record_document(h, rid, json, why, sizeof why);
+    if (rc == -2)     /* a value no document can hold: the store is not what the writer writes */
+        return fail(err, S_NOT_A_STORE, "%s layer: %s", r->layer, why);
+    if (rc != 0)
         return fail(err, S_UNREADABLE, "%s", why);
     return S_OK;
 }

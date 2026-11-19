@@ -132,7 +132,9 @@ def to_relative(setdir):
             rec = load(p)
             if rec["plugin"]["format"] == "clap":
                 rec["binary"]["path"] = rec["binary"]["files"][0]["path"]
-                rec["hostExtensions"] = load(os.path.join(setdir, rec["probe"]["file"]))["offer"]["clapExtensions"]
+                offer = load(os.path.join(setdir, rec["probe"]["file"]))["offer"]
+                if "clapExtensions" in offer:  # a crashed or timed-out probe offered no list: the record gets none
+                    rec["hostExtensions"] = offer["clapExtensions"]
             dump(p, rec)
 
 
@@ -309,9 +311,13 @@ class DdlColumns(Base):
         self.assertEqual(self.rows("SELECT host_extensions FROM record"), [(None,)])
         self.assertEqual(self.rows("SELECT count(*) FROM record_extension"), [(0,)])
 
-    def test_24_a_clap_record_without_host_extensions_is_refused(self):
+    def test_24_a_clap_record_without_host_extensions_is_stored_without_them(self):
+        """A probe that crashed or timed out offered no list (254 records of records/): nothing is guessed, the column
+        stays NULL, and the row judge owes figures-unreadable (section 6.2)."""
         d, f = self.made(lambda r: r.pop("hostExtensions"))
-        self.refused("field-absent", f, "hostExtensions")
+        self.assertNotIn("hostExtensions", self.same(d, f))
+        self.assertEqual(self.rows("SELECT host_extensions FROM record WHERE name || '.' || offer || '.qualification.json' = ?", f),
+                         [(None,)])
 
     def test_24_an_lv2_record_with_host_extensions_is_refused(self):
         f = find(lambda r, n: r["plugin"]["format"] == "lv2", self.LV2)

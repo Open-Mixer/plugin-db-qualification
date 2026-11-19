@@ -103,10 +103,11 @@ It reads figures at start-up, never in a real-time path.
 %package -n libplugin-qualification-db-devel
 Summary: Reader of the OpenMixer qualification store, development files
 Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
+Requires: plugin-qualification-db-schema = %{version}-%{release}
 
 %description -n libplugin-qualification-db-devel
-The header, the shared library link, plugin-qualification-db.pc and the DDL of
-the store (the pkg-config variable schema names it).
+The header, the shared library link and plugin-qualification-db.pc, whose
+variable schema names the DDL of plugin-qualification-db-schema.
 
 %package -n plugin-qualification-db
 Summary: Command to query the OpenMixer qualification store
@@ -116,6 +117,30 @@ Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
 plugin-qualification-db query --json prints the results of the base database
 and the user layer, one JSON object per line; check opens both layers and the
 words they hold.
+
+%package -n plugin-qualification-db-schema
+Summary: DDL of the OpenMixer qualification store
+BuildArch: noarch
+
+%description -n plugin-qualification-db-schema
+The SQL that creates the qualification store, one copy, at
+/usr/share/plugin-qualification-db/qualification.sql. The writer creates a user
+layer from it, and test fixtures read it with no checkout.
+
+%package -n plugin-qualification-db-write
+Summary: Writer of the OpenMixer qualification store's user and system layers
+BuildArch: noarch
+Requires: python3
+Requires: python3-jsonschema
+Requires: sqlite-libs >= 3.37.0
+Requires: plugin-qualification-db-schema = %{version}-%{release}
+
+%description -n plugin-qualification-db-write
+plugin-qualification-db-write put reads one qualification record on standard
+input and replaces the record of its key in the layer of the scope; delete
+removes one. Every word is checked against the installed contract domains and
+the binary's path, file list and key against the rules of the store; a refusal
+is named on standard error and writes nothing.
 
 %prep
 %autosetup
@@ -157,11 +182,22 @@ done
 %{_includedir}/plugin-qualification-db/
 %{_libdir}/libplugin-qualification-db.so
 %{_libdir}/pkgconfig/plugin-qualification-db.pc
-%{_datadir}/plugin-qualification-db/
 
 %files -n plugin-qualification-db
 %license LICENSE
 %{_bindir}/plugin-qualification-db
 %{_mandir}/man1/plugin-qualification-db.1*
+
+%files -n plugin-qualification-db-schema
+%license LICENSE
+%dir %{_datadir}/plugin-qualification-db
+%{_datadir}/plugin-qualification-db/qualification.sql
+
+%files -n plugin-qualification-db-write
+%license LICENSE
+%{_bindir}/plugin-qualification-db-write
+%dir %{_datadir}/plugin-qualification-db
+%{_datadir}/plugin-qualification-db/qualification_db.py
+%{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog

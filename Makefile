@@ -50,7 +50,8 @@ $(BUILD)/plugin-qualification-db: src/plugin-qualification-db.c $(BUILD)/$(SONAM
 
 # the .pc is made from the template at install time, with that install's own PREFIX, LIBDIR and DATADIR: no copy
 # built earlier (a staged test install) can carry another prefix
-# the DDL is installed beside the header (-dev): writers and test fixtures read it from there, with no checkout
+# the DDL (plugin-qualification-db-schema) and the writer's module and command (-write) share one directory: the module
+# finds the DDL beside itself
 install: all
 	install -d $(DESTDIR)$(MANDIR)/man1 $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(BINDIR) $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db \
 	  $(DESTDIR)$(DATADIR)/plugin-qualification-db
@@ -60,6 +61,11 @@ install: all
 	install -m 0644 man/plugin-qualification-db.1 $(DESTDIR)$(MANDIR)/man1/
 	install -m 0644 include/plugin-qualification-db/pqdb.h $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db/
 	install -m 0644 schema/qualification.sql $(DESTDIR)$(DATADIR)/plugin-qualification-db/
+	install -m 0644 tools/qualification_db.py $(DESTDIR)$(DATADIR)/plugin-qualification-db/
+	sed -e 's|@MODULEDIR@|$(DATADIR)/plugin-qualification-db|' tools/plugin-qualification-db-write \
+	  > $(DESTDIR)$(BINDIR)/plugin-qualification-db-write
+	chmod 0755 $(DESTDIR)$(BINDIR)/plugin-qualification-db-write
+	install -m 0644 man/plugin-qualification-db-write.1 $(DESTDIR)$(MANDIR)/man1/
 	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
 	  -e 's|@DATADIR@|$(DATADIR)|' -e 's|@VERSION@|$(VERSION)|' plugin-qualification-db.pc.in \
 	  > $(DESTDIR)$(LIBDIR)/pkgconfig/plugin-qualification-db.pc

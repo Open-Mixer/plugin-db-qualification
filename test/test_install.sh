@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
-# The install: the DDL beside the header, named by the .pc's `schema` variable.
+# The install: the DDL and the writer beside each other, the DDL named by the .pc's `schema` variable.
 # Usage: test_install.sh <staging root> [libdir, default /usr/lib]
 set -u
 root=$1
@@ -20,5 +20,10 @@ for w in 'records' 'scope' 'binary\\-path' 'layer' 'counts' 'key\\-mismatch\|key
 done
 [ -x "$root/usr/bin/plugin-qualification-db" ] || note "no command"
 [ -e "$root$libdir/libplugin-qualification-db.so.0" ] && [ -L "$root$libdir/libplugin-qualification-db.so" ] || note "no library or .so link"
-if [ $fail -eq 0 ]; then echo "ok     install: DDL, header, library, command and .pc"; else echo "not ok install"; fi
+[ -f "$root/usr/share/plugin-qualification-db/qualification_db.py" ] || note "no writer module"
+[ -f "$root/usr/share/man/man1/plugin-qualification-db-write.1" ] || note "no manual page of the writer"
+w=$root/usr/bin/plugin-qualification-db-write
+[ -x "$w" ] || note "no writer command"
+! grep -q '@MODULEDIR@' "$w" && grep -q 'MODULEDIR = "/usr/share/plugin-qualification-db"' "$w" || note "the writer command names no module directory"
+if [ $fail -eq 0 ]; then echo "ok     install: DDL, header, library, commands and .pc"; else echo "not ok install"; fi
 exit $fail

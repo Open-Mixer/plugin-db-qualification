@@ -809,6 +809,21 @@ static void hosting_open(void)
     /* a column that holds hosting, probe and qualification words: only the hosting words are skipped */
     expect_refusal(fx("base-bad-deciding.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
     CHECK(strstr(e.message, "verdict.deciding") && strstr(e.message, "probe.no-such-word"), "%s", e.message);
+    /* the other mixed columns and a hosting-only one: a `hosting.` word no package holds opens, any other unknown word is
+     * refused, naming the column and the word */
+    {
+        const struct { const char *kind, *column; } cols[] = { { "not-measured", "not_measured.code" }, { "tier", "tier.deciding" },
+                                                                { "reason", "reason.code" } };
+        for (size_t i = 0; i < sizeof cols / sizeof *cols; i++) {
+            char f[80];
+            snprintf(f, sizeof f, "base-bad-%s.sqlite", cols[i].kind);
+            expect_refusal(fx(f), NULL, GOOD, "qualification-db.word-unknown", &e);
+            CHECK(strstr(e.message, cols[i].column) && strstr(e.message, "probe.no-such-word"), "%s", e.message);
+            snprintf(f, sizeof f, "base-hosting-%s.sqlite", cols[i].kind);
+            CHECK(open_ok(fx(f), NULL, GOOD, &db) == 0, "a hosting word of %s was refused", cols[i].column);
+            if (db) pqdb_close(db);
+        }
+    }
     /* (b) nothing else narrowed: a word of another column is still refused, naming the column and the word */
     expect_refusal(fx("base-bad-rating.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
     CHECK(strstr(e.message, "verdict.rating") && strstr(e.message, "excellent"), "%s", e.message);

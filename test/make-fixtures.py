@@ -45,6 +45,11 @@ WORD_CHECK = [
     ("record", "adapter_code", "qualification", "QUALIFICATION_HOST_PROFILES"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
+    # the hosting columns (section 3.4): mixed with probe words, or hosting words only
+    ("tier", "deciding", "probe", "PROBE_OUTCOMES"),
+    ("tier", "deciding", "hosting", "HOSTING_CODES"),
+    ("reason", "code", "hosting", "HOSTING_CODES"),
+    ("not_measured", "code", "hosting", "HOSTING_CODES"),
     ("adapter_cell", "code", "qualification", "QUALIFICATION_HOST_PROFILES"),
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("adapter_cell", "code", "probe", "PROBE_SIGNALS"),
@@ -240,7 +245,7 @@ def build_records(path):
     c.executemany("INSERT INTO tier_offered VALUES (1, ?, ?)", [(0, "isolated"), (1, "inProcess")])
     c.execute("INSERT INTO unmeasured VALUES (1, 0, 'memory', 'limit-exceeded', 96000, 256)")
     c.executemany("INSERT INTO feature_required VALUES (1, ?, ?)", [(0, "state"), (1, "params")])
-    c.executemany("INSERT INTO not_measured VALUES (1, ?, ?, ?)", [(0, "latency", "not-taken")])
+    c.executemany("INSERT INTO not_measured VALUES (1, ?, ?, ?)", [(0, "latency", "hosting.not-taken")])
     c.executemany("INSERT INTO memory_run_cell VALUES (1, ?, ?, ?, ?)", [(0, 48000, 256, "probe.ok")])
     c.executemany("INSERT INTO rejudged_owe VALUES (1, ?, ?, ?)", [(0, "figures-unreadable", "cost")])
     c.commit()
@@ -330,6 +335,17 @@ def main(out):
     c = sqlite3.connect(p("base-bad-deciding.sqlite"))
     c.execute("UPDATE verdict SET deciding = 'probe.no-such-word' WHERE record_id = 1 AND ord = 1")
     c.commit(); c.close()
+    # the three mixed columns and a hosting-only one: a word beginning `hosting.` that no package holds opens; any other
+    # word that no non-hosting item holds is refused
+    extra = {"not-measured": "INSERT INTO not_measured VALUES (1, 0, 'latency', '%s')",
+             "tier": "INSERT INTO tier VALUES (1, 'inProcess', 'omx-clap-host', 1, 1, 'qualified', '%s', NULL)",
+             "reason": "INSERT INTO reason (record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (1, 0, NULL, 0, 'cost', 'conditional', '%s')"}
+    for kind, sql in extra.items():
+        for word, tag in (("probe.no-such-word", "bad"), ("hosting.held-by-no-package", "hosting")):
+            build(p("base-%s-%s.sqlite" % (tag, kind)), 0, BASE)
+            c = sqlite3.connect(p("base-%s-%s.sqlite" % (tag, kind)))
+            c.execute(sql % word)
+            c.commit(); c.close()
     build(p("base-bad-rating.sqlite"), 0, BASE)
     c = sqlite3.connect(p("base-bad-rating.sqlite"))
     c.execute("UPDATE verdict SET rating = 'excellent' WHERE record_id = 1 AND ord = 0")

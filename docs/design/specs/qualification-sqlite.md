@@ -110,12 +110,12 @@ readable, and they are never part of the key.
 - A NAME is an identifier written by a program: an id, a path, a hash, a version, a time, a symbol. It is stored as
   written and is not checked against a domain.
 - A NUMBER is stored as INTEGER (counts, rates, quanta, frames, kilobytes, bytes) or REAL (figures that may be
-  fractional). Every table is `STRICT`, so a value of the wrong type is refused at insert.
+  fractional). A param's number (`reason_param.number`, `adapter_param.number`, `adapter_cell_param.number`) is column type `ANY` checked to be `integer` or `real`, so the round trip keeps an integer an integer and a fraction a fraction as the JSON had it. Every table is `STRICT`, so a value of the wrong type is refused at insert.
 - A SENTENCE, prose written for a person, is not stored. Section 3.5 lists every field of today's records and
   provenances that is one. The base database records the commit it was built from (`store_info.built_from`), where the
   text of every record stays.
 - An optional JSON object is present when at least one of its columns is not NULL. The writer refuses an empty object
-  (`{}`) by name, except a map of the always-present list of section 3.3 (`reasons[].params`).
+  (`{}`) by name, except a map of the always-present list of section 3.3 (`reasons[].params`) and the two params maps of the adapter pass (`adapter.params`, `adapter.cells[].params`), whose `{}` is data: present, no params (`record.adapter_params`, `adapter_cell.params`).
 - A boolean is INTEGER with `CHECK (c IN (0, 1))`.
 
 ### 3.3 DDL
@@ -235,6 +235,7 @@ CREATE TABLE record (
   adapter_measured INTEGER CHECK (adapter_measured IN (0, 1)),
   adapter_code     TEXT CHECK (adapter_code IS NULL OR WORD(adapter_code)),
   adapter_measured_at TEXT,
+  adapter_params   INTEGER CHECK (adapter_params IS NULL OR adapter_params IN (0, 1)),   -- NULL: no adapter object; 1: adapter.params present
   -- memory pass
   memory_run_measured_at TEXT, memory_run_id TEXT, memory_run_runner TEXT, memory_run_child TEXT,
   -- rejudgement
@@ -307,7 +308,7 @@ CREATE UNIQUE INDEX reason_of_cost    ON reason (record_id, cost_ord, ord)    WH
 CREATE TABLE reason_param (                -- reasons[].params
   reason_id INTEGER NOT NULL REFERENCES reason ON DELETE CASCADE,
   name      TEXT NOT NULL CHECK (WORD(name)),
-  number    INTEGER,
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
   word      TEXT CHECK (word IS NULL OR WORD(word)),
   CHECK ((number IS NULL) <> (word IS NULL)),
   PRIMARY KEY (reason_id, name)
@@ -437,7 +438,28 @@ CREATE TABLE adapter_cell (                -- adapter.cells[]
   admitted INTEGER NOT NULL CHECK (admitted IN (0, 1)),
   measured INTEGER NOT NULL CHECK (measured IN (0, 1)),
   code TEXT CHECK (code IS NULL OR WORD(code)),
+  params INTEGER NOT NULL CHECK (params IN (0, 1)),   -- 1 when this cell's params is present
   PRIMARY KEY (record_id, ord)
+) STRICT;
+
+CREATE TABLE adapter_param (               -- adapter.params
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  name      TEXT NOT NULL CHECK (WORD(name)),
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
+  word      TEXT CHECK (word IS NULL OR WORD(word)),
+  CHECK ((number IS NULL) <> (word IS NULL)),
+  PRIMARY KEY (record_id, name)
+) STRICT;
+
+CREATE TABLE adapter_cell_param (          -- adapter.cells[].params
+  record_id INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  name      TEXT NOT NULL CHECK (WORD(name)),
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
+  word      TEXT CHECK (word IS NULL OR WORD(word)),
+  CHECK ((number IS NULL) <> (word IS NULL)),
+  PRIMARY KEY (record_id, ord, name),
+  FOREIGN KEY (record_id, ord) REFERENCES adapter_cell (record_id, ord) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE memory_run_cell (             -- memoryRun.cells[]
@@ -531,8 +553,8 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd, plugin-qualify | `hosting`, `probe`, `qualification` | the `HOSTING_*` codes items, `PROBE_OUTCOMES`, `QUALIFICATION_MEMORY_BOUND_OUTCOMES`, and an adapter code checked in parts: today's values come from all of them | added (preconditions 1, 4 and 5) |
 | `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
 | `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
-| `reason_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...) | added |
-| `reason_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
+| `reason_param.name`, `adapter_param.name`, `adapter_cell_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...; the adapter params' keys `notes`, `peak`, `quantum`, `rate`, `resp`, `step` are in it too) | added |
+| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
 | `tier.tier` | plugin-qualify | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
 | `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
 | `cell.voices_basis`, `cell.mem_basis` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
@@ -606,7 +628,9 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `notMeasured[].dimension`, `.code` | `not_measured.*` |
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
 | `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
+| `adapter.params.<name>` | `adapter_param.name`, `.number` or `.word`; presence: `record.adapter_params` (NULL with no `adapter` object, 1 when `params` is present, 0 when absent) |
 | `adapter.cells[].rate`, `.quantum`, `.admitted`, `.measured`, `.code` | `adapter_cell.*` |
+| `adapter.cells[].params.<name>` | `adapter_cell_param.name`, `.number` or `.word`; presence: `adapter_cell.params` |
 | `memoryRun.measuredAt`, `.runId`, `.tool.runner`, `.tool.child` | `record.memory_run_measured_at`, `.memory_run_id`, `.memory_run_runner`, `.memory_run_child` |
 | `memoryRun.cells[].rate`, `.quantum`, `.outcome` | `memory_run_cell.*` |
 | `rejudged.at`, `.by` | `record.rejudged_at`, `.rejudged_by` |
@@ -890,6 +914,8 @@ makes it fail.
     writer checks the formats against a list of its own or of the `qualification` domain.
 17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string. Fails when a word list
     is written into a `CHECK`.
+18. **Fractional reason param.** A fixture reason with `params.coreFractionP95: 0.37` and another with `params.blocks: 40` read back as 0.37 and 40, the second an integer (`typeof` `integer`, `real` for the first). Fails when `reason_param.number` is `INTEGER` (the fraction is refused or rounded) or when the exporter writes 40 as 40.0.
+19. **Adapter params round trip.** A fixture record with `adapter.params: {}`, one with `adapter.params: {"resp": 3, "step": "add"}`, one without `params`, and an adapter cell with `params: {"peak": 0.5}` and one with `params: {}` read back exactly, `{}` staying `{}` and absence staying absent. Fails when presence is not stored (`record.adapter_params`, `adapter_cell.params`) or a param is dropped.
 
 ### Change 3: the reader
 

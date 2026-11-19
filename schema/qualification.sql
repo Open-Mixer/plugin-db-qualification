@@ -113,6 +113,7 @@ CREATE TABLE record (
   adapter_measured INTEGER CHECK (adapter_measured IN (0, 1)),
   adapter_code     TEXT CHECK (adapter_code IS NULL OR (length(adapter_code) > 0 AND instr(adapter_code, ' ') = 0 AND instr(adapter_code, char(9)) = 0 AND instr(adapter_code, char(10)) = 0)),
   adapter_measured_at TEXT,
+  adapter_params   INTEGER CHECK (adapter_params IS NULL OR adapter_params IN (0, 1)),   -- NULL: no adapter object; 1: adapter.params present
   -- memory pass
   memory_run_measured_at TEXT, memory_run_id TEXT, memory_run_runner TEXT, memory_run_child TEXT,
   -- rejudgement
@@ -185,7 +186,7 @@ CREATE UNIQUE INDEX reason_of_cost    ON reason (record_id, cost_ord, ord)    WH
 CREATE TABLE reason_param (                -- reasons[].params
   reason_id INTEGER NOT NULL REFERENCES reason ON DELETE CASCADE,
   name      TEXT NOT NULL CHECK ((length(name) > 0 AND instr(name, ' ') = 0 AND instr(name, char(9)) = 0 AND instr(name, char(10)) = 0)),
-  number    INTEGER,
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
   word      TEXT CHECK (word IS NULL OR (length(word) > 0 AND instr(word, ' ') = 0 AND instr(word, char(9)) = 0 AND instr(word, char(10)) = 0)),
   CHECK ((number IS NULL) <> (word IS NULL)),
   PRIMARY KEY (reason_id, name)
@@ -315,7 +316,28 @@ CREATE TABLE adapter_cell (                -- adapter.cells[]
   admitted INTEGER NOT NULL CHECK (admitted IN (0, 1)),
   measured INTEGER NOT NULL CHECK (measured IN (0, 1)),
   code TEXT CHECK (code IS NULL OR (length(code) > 0 AND instr(code, ' ') = 0 AND instr(code, char(9)) = 0 AND instr(code, char(10)) = 0)),
+  params INTEGER NOT NULL CHECK (params IN (0, 1)),   -- 1 when this cell's params is present
   PRIMARY KEY (record_id, ord)
+) STRICT;
+
+CREATE TABLE adapter_param (               -- adapter.params
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  name      TEXT NOT NULL CHECK ((length(name) > 0 AND instr(name, ' ') = 0 AND instr(name, char(9)) = 0 AND instr(name, char(10)) = 0)),
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
+  word      TEXT CHECK (word IS NULL OR (length(word) > 0 AND instr(word, ' ') = 0 AND instr(word, char(9)) = 0 AND instr(word, char(10)) = 0)),
+  CHECK ((number IS NULL) <> (word IS NULL)),
+  PRIMARY KEY (record_id, name)
+) STRICT;
+
+CREATE TABLE adapter_cell_param (          -- adapter.cells[].params
+  record_id INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  name      TEXT NOT NULL CHECK ((length(name) > 0 AND instr(name, ' ') = 0 AND instr(name, char(9)) = 0 AND instr(name, char(10)) = 0)),
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
+  word      TEXT CHECK (word IS NULL OR (length(word) > 0 AND instr(word, ' ') = 0 AND instr(word, char(9)) = 0 AND instr(word, char(10)) = 0)),
+  CHECK ((number IS NULL) <> (word IS NULL)),
+  PRIMARY KEY (record_id, ord, name),
+  FOREIGN KEY (record_id, ord) REFERENCES adapter_cell (record_id, ord) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE memory_run_cell (             -- memoryRun.cells[]

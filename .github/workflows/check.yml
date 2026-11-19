@@ -64,6 +64,13 @@ jobs:
           dnf repoquery --installed --qf '%{name} %{version} %{from_repo}\n' 'omx-*' 'libomx-*' | tee /tmp/from-repo
           if grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
       - run: make check
+      # the hosting exception of the store spec (section 3.4) ends when omx-clap-core ships a `hosting` domain: fail while
+      # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone)
+      - name: The hosting exception ends with omx-clap-core's hosting domain
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap-core
+          sh tools/hosting-skip-ends.sh /tmp/omx-clap-core src/pqdb.c
 
   # the commit messages, private references and layout every OpenMixer repository is held to
   public-sources:

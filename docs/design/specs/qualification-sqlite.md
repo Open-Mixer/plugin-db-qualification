@@ -213,6 +213,7 @@ CREATE TABLE record (
   layout_scheme  TEXT,
   layout_sha256  TEXT,
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
+  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: a CLAP record's hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record has none
   tested_version TEXT,
   measured_at    TEXT NOT NULL,
   run_id         TEXT NOT NULL,
@@ -271,6 +272,14 @@ CREATE TABLE record_file (                 -- binary.files[]: the per-file list 
   UNIQUE (record_id, path)
 ) STRICT;
 CREATE INDEX record_file_sha256 ON record_file (sha256);
+
+CREATE TABLE record_extension (            -- hostExtensions[]: the CLAP host extensions the run offered the plugin (section 6.2)
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  ord       INTEGER NOT NULL,
+  extension TEXT NOT NULL CHECK (length(extension) > 0),   -- a name as the prober wrote it, e.g. clap.log
+  PRIMARY KEY (record_id, ord),
+  UNIQUE (record_id, extension)
+) STRICT;
 
 CREATE TABLE record_version (              -- adapter.versions, rejudged.figures.adapter.versions
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
@@ -371,9 +380,12 @@ CREATE TABLE cell (                        -- measurements.grid[]
   rt_sweep_applicable INTEGER CHECK (rt_sweep_applicable IN (0, 1)),
   rt_blocks INTEGER, rt_allocations INTEGER, rt_locks INTEGER, rt_syscalls INTEGER,
   rt_thread_violations INTEGER, rt_process_errors INTEGER,
+  rt_own_threads INTEGER,                  -- threads the plugin started itself (judged under hosting.rt-safety.own-threads); NULL: not taken
+  rt_other_allocations INTEGER, rt_other_locks INTEGER, rt_other_syscalls INTEGER,   -- what threads other than the audio thread did; all three or none
   note_sweep_applicable INTEGER CHECK (note_sweep_applicable IN (0, 1)),
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR WORD(note_sweep_dialect)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
+  CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;
@@ -502,6 +514,7 @@ A present empty array or map is told from an absent one by one rule, which every
   records), `measurements.grid`, `measurements.grid[].rtSafety.events` (present with `rtSafety`, empty in 9,015
   cells), `measurements.behaviour.features.required` (present with `behaviour`, empty in 3,077 records),
   `notMeasured`, `run.steps`, `memoryRun.cells`;
+- A CLAP record's `hostExtensions` is always present (empty when the run offered none) and an LV2 record has none: `record.host_extensions` is 1 for the first and NULL for the second.
 - PRESENT ONLY WITH ROWS: `adapter.cells`, `probe.ends`, `measurements.unmeasured`, `rejudged.owes`.
 
 `binary.files` is in neither list: it is always present and never empty (section 3.7; every record of today holds at
@@ -633,7 +646,9 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.grid[].cost.voices.basis`, `.capacity`, `.held` | `cell.voices_basis`, `.voices_capacity`, `.voices_held` |
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |
 | `measurements.grid[].memoryLimit.bytes`, `.mechanism` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
-| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors` | `cell.rt_*` of the same names |
+| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`) |
+| `measurements.grid[].rtSafety.otherThreads.allocationsInRun`, `.locksInRun`, `.syscallsInRun` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` |
+| `hostExtensions[]` (a CLAP record's; the probe output's `offer.clapExtensions`, section 6.2) | `record_extension.extension`; presence: `record.host_extensions` |
 | `measurements.grid[].rtSafety.events[]` | `cell_event.event` |
 | `measurements.grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `cell.note_sweep_*` |
 | `measurements.unmeasured[].dimension`, `.code`, `.rate`, `.quantum` | `unmeasured.*` |
@@ -1035,7 +1050,7 @@ and nothing reads it back from a file.
 | `applyDistributed`, `takeDistributed` | copies the record and its probe output into `qualification_dir`, after `rejudgeRecord` of the probe bytes | the base record is read whole (`query --json --records`), judged again under today's rules, and written by `put` into the scope's layer: no copy of a probe output and no `provenance` block (the user layer has no set, section 3.3) |
 | `writeQualification`, `judgedPlugins` | writes `<stem>.<offer>.qualification.json` and the probe copy into `qualification_dir` | `put` of the record the run judged, its `binary_path` and list as section 3.7 gives them; the probe output is not kept |
 | `writeUnmeasuredRecord` | writes `<stem>.unmeasured.json` | removed: it has no table, it holds no figure, and the plugin's outcome, code and detail are in the sync state (`SyncPlugin`) |
-| `rejudgeState` (`qualify-rejudge`) | `readdirSync(qualification_dir)` for `*.qualification.json` and, per record, its probe output (`rejudgeRecord`, which refuses bytes whose SHA-256 differs from `probe.sha256`) | every record of the scope's USER layer, by `query --json --records --layer user`, one line a record; no directory and no probe output. It judges again from the record's rows (the cells and figures, `probe_*` columns and `rejudged_*` columns) and `put`s each record that changed. A record whose rows lack a figure the judge needs owes `figures-unreadable`, as a record whose probe output does not read does today. The changed-bytes test (`changedStems`) compares the state's entry with the record's key and list. Base records are not re-judged in place: the base is read only |
+| `rejudgeState` (`qualify-rejudge`) | `readdirSync(qualification_dir)` for `*.qualification.json` and, per record, its probe output (`rejudgeRecord`, which refuses bytes whose SHA-256 differs from `probe.sha256`) | every record of the scope's USER layer, by `query --json --records --layer user`, one line a record; no directory and no probe output. It judges again from the record's rows alone, by the table of section 6.2 (every field `judgeProbeOutput`, `rejudgeProfiles` and `runsOwed` read, and its column), and `put`s each record that changed. A record whose rows lack a figure the judge needs owes `figures-unreadable`, as a record whose probe output does not read does today. The changed-bytes test (`changedStems`) compares the state's entry with the record's key and list. Base records are not re-judged in place: the base is read only |
 | `memoryPass`, `isolatedPass`, `poolPass`, the adapter pass | each reads the record of a state entry by file name and writes it whole | each reads the record of the entry's shadow key (`query --json --records --layer user`) and `put`s it extended |
 | `pruneStale` | `readdirSync(qualification_dir)` for the stems of records and `readdirSync(descriptor_dir)` | the user layer's records as the reader lists them (`query --json --layer user`, deduplicated by shadow key), and the descriptor directory as today. A record is stale when the state before holds its key and the state after does not, or when its `uri` is a kept plugin's and its `sha256` is not one the state after keeps (the other bytes of a kept plugin). A stale record is removed by `delete`; a record another plugin of the state still names, two copies of one binary, is kept. The descriptor half is unchanged: a descriptor `<id>@<version>-<first 12 digits of the key>.json` is dropped by its id and those 12 digits, as `idAndHash` does. It returns the shadow keys removed, and the descriptor files removed, to log |
 | `pluginCounts` | `readdirSync(qualification_dir)`, parses each `*.qualification.json` for `plugin.format`, `plugin.id` and `tiers.offeredOn` | `counts --layer user --json` (system scope: the system layer, the sync's own records). A plugin is offered when any record of it has a `tier_offered` row, as `offeredOn` non-empty is today; the line `pluginCountsLine` prints is unchanged |
@@ -1044,6 +1059,52 @@ and nothing reads it back from a file.
 `host_class`), not a file path, and `SYNC_STATE_SCHEMA` becomes `plugin-qualify.sync-state/2`. A state of the older
 schema is moved aside as `readSyncState` already moves an unreadable one, and every plugin is qualified again: no
 conversion. The records of an older `qualification_dir` are not read, imported or removed by the sync (section 9).
+
+### 6.2 Rejudge from rows: what the judge reads, and where the store holds it
+
+`qualify-rejudge` judges from the store's rows alone. Probe bytes are never kept beside the store (section 9, ruling 11),
+so every field the judge reads has a column, and a field with none is added. Today `rejudgeRecord` of plugin-qualify's
+`src/qualify-rejudge.ts` hands the whole probe output to `judgeProbeOutput` (`src/probe-judge.ts`), to `rejudgeProfiles`
+and to `runsOwed`. This table lists EVERY probe-output field those three, and what they call, read. "Reads" names the
+function that does; a field the table says nothing decides is carried into the judge's documents and read by no reason.
+
+| probe-output field | read by | store column or rows |
+| --- | --- | --- |
+| `run.outcome` | `failedOutcome` (judge, `runsOwed`) | `record.probe_outcome` |
+| `run.id` | `rejudgeRecord` (`figures.runId`) | `record.run_id` |
+| `plugin.format`, `plugin.id` | the judge's uri and branch, `rejudgeProfiles`, `runsOwed` | `plugin.format`, `plugin.uri` |
+| `plugin.version` | the pin's `integrity` only; no reason | `record.tested_version` |
+| `offer.id` | `rejudgeProfiles` (a CLAP host joins only its own offer) | `record.offer` |
+| `offer.clapExtensions` | `rtSafetyDocument` (a profile is judged only against the extensions it offers; any other list reads `unknown`, `hosting.clap.extensions-not-covered`), as `hostExtensions` | NEW: `record_extension` rows, in order, and `record.host_extensions` = 1 for a CLAP record (an empty list is data); absent from an LV2 record. Not stored before this amendment |
+| `grid[]` (its points, in order) | every function below; `blockFrames` is the first rt point's quantum | `cell` rows in `ord`, every cell of the record (the probe's points are a subset in the same order in every record of `records/`; the cells a memory-only pass added carry a footprint and no other figure) |
+| `grid[].rate`, `.quantum`, `.outcome` | `okPoints`, `cellOf`, `costOf`, `failedOutcome`, `isOutOfMemory` | `cell.rate`, `.quantum`, `.outcome` |
+| `grid[].latency.declaredFrames`, `.measuredFrames` | the CLAP line's `latency`; no reason | `cell.latency_declared_frames`, `.latency_measured_frames` |
+| `grid[].cost.median`, `.percentile.p`, `.percentile.value` | `gridCostReadings`, `hostingCostReasons` (only `p` = 95 counts; the core fraction is computed from `value` and `rate`) | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value` |
+| `grid[].cost.voices.held`, `.basis`, `.capacity` | `costOf` (kept beside the cost) | `cell.voices_held`, `.voices_basis`, `.voices_capacity` |
+| `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` not stored, and not read |
+| `grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls` | `rtSafetyOfProbeOutput`, `rtSafetyReasons`, `processCalls` | `cell.rt_interposer`, `.rt_swept`, `.rt_sweep_applicable`, `.rt_blocks`, `.rt_allocations`, `.rt_locks`, `.rt_syscalls` |
+| `grid[].rtSafety.threadViolations`, `.processErrors` | `clapRtReasons` | `cell.rt_thread_violations`, `.rt_process_errors` |
+| `grid[].rtSafety.ownThreads`, `.otherThreads.allocationsInRun`, `.locksInRun`, `.syscallsInRun` | not read on plugin-qualify's `main`; read by the judge once plugin-qualify#119 merges (`hosting.rt-safety.own-threads` is conditional, and the other-thread counts are a figure, never the verdict) | NEW: `cell.rt_own_threads`, `.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (NULL where not taken; the three counts all or none). Records of today hold none |
+| `grid[].rtSafety.events[]` | carried into the document; no reason | `cell_event` rows |
+| `grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `noteSweepOfProbeOutput`, `noteSweepReasons` | `cell.note_sweep_applicable`, `.note_sweep_dialect`, `.note_sweep_allocations`, `.note_sweep_locks`, `.note_sweep_syscalls` |
+| `grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.notesHeldKb`, `.unmeasuredReason` | `gridMemoryReadings`, `hostingMemoryReasons` (`firstInstanceKb` and `perInstanceKb` are computed from these by `memory-budget.ts`) | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_notes_held_kb`, `.mem_unmeasured_reason` |
+| `grid[].memory.basis`, `.notesHeld`, `.unmeasuredDetail` | nothing | `cell.mem_basis`; `notesHeld` and the sentence `unmeasuredDetail` not stored, and not read |
+| `grid[].memoryLimit.bytes`, `.mechanism` | `costOf`, `memoryParams` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
+| `steps[]` (`instantiate`, `probe.non-finite-output`) | the CLAP line's `headlessOk` and `nonFinite`; no reason of the judge reads either (`clapFeatureReasons` is the descriptor path's) | not stored, and not read by a verdict |
+| `binary.path`, `.sha256`, `.files`, `.layout`, `.unpinnable` | the line's `binary` and `integrity`; no reason | `record.binary_path`, `plugin.sha256`, `record_file`, `record.layout_*`, `record.unpinnable` |
+| `machine.*`, `behaviour`, `tool`, `measuredAt` | nothing | stored as section 3.5 says |
+
+What `rejudgeRecord` reads of the RECORD itself is already rows: the verdicts and their `host`, `arm`, reasons and params
+(`rejudgeProfiles`, `admissionsOf`, `runsOwed`: `verdict`, `reason`, `reason_param`), the adapter pass
+(`record.adapter_*`, `adapter_param`), the memory pass (`memory_run_*`, whose footprints are already in the `cell` rows),
+and the tool, `measuredAt` and `rejudged_*` columns. `withMemoryRun`'s merge is therefore a no-op on rows.
+
+A record whose rows lack a figure the judge needs (a NULL where the judge reads a figure, a CLAP record without
+`host_extensions`) owes `figures-unreadable` and is not judged again. Nothing is guessed from a missing field.
+
+The grid of the judge is the record's `cell` rows in `ord` order, so `blockFrames` and the order of the interposer's
+counts are the probe's. The store's proof is section 8, change 3, case 25, which compares the row judge with today's
+probe judge over every record of `records/`.
 
 ## 7. Packaging
 
@@ -1132,6 +1193,11 @@ makes it fail.
     by locale.
 23. **Order read back.** A fixture LV2 list with an IRI-form name (`libSurge%20XT.so`) reads back as written, in `ord`
     order, byte for byte. Fails when the exporter decodes a name or orders by anything but `ord`.
+24. **The columns of the row judge.** A fixture CLAP record round-trips with `hostExtensions` `["clap.log", "clap.params"]`, one
+    with `[]`, and an LV2 record with none; a cell with `ownThreads: 2` and `otherThreads` of three counts reads back
+    exactly, one with `otherThreads` of one count only is refused by the schema, and a CLAP record without
+    `hostExtensions` is refused by name. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
+    dropped.
 
 ### Change 3: the reader
 
@@ -1206,6 +1272,9 @@ makes it fail.
     Fails when `check` skips the comparison.
 24. **Read only still.** `pqdb_files`, `pqdb_record_json`, `pqdb_counts` and `--records` leave both layers' size,
     mtime and directory listing unchanged (test 10's check). Fails when any opens a layer read-write.
+25. **The row judge, from the reader.** The case C6b, run over the reader: a base built from `records/` is read through
+    `pqdb_record_json` and judged; every record's verdicts, tiers and cost equal the probe judge's. Fails with the same
+    sabotages as C6b, and when `pqdb_record_json` drops a cell, a column of section 6.2 or the cells' order.
 
 ### The consumer switch (red-first tests of plugin-qualify's repository)
 
@@ -1227,7 +1296,16 @@ C5. **No directory is read.** With a directory of valid old `*.qualification.jso
     no read of that directory. Fails when any function falls back, or reads both.
 C6. **`qualify-rejudge` on the store.** It judges the user layer's records again with no probe output on disk, `put`s only
     the records that changed, leaves the base unchanged, and owes `figures-unreadable` for a record whose rows lack a
-    figure. Fails when it reads `probe_file`.
+    figure (a CLAP record without `host_extensions`; a NULL `cell.rt_syscalls` under an interposer). Fails when it reads
+    `probe_file`.
+C6b. **The row judge equals the probe judge, over the corpus.** For every record of `records/` (both classes), the
+    verdicts, the tiers and the cost that `rejudgeRecord` gives from the store's rows (`query --json --records` of a base
+    built from `records/`) are byte-equal, as the JSON text the record writes, to the ones it gives from the probe
+    output beside the record (the probe outputs stay in `records/` as this test's oracle; the store holds none). The
+    test names the record and the first field that differs. Sabotage, one case for each mapped column of section 6.2
+    (the builder leaves one out): dropping `cell.rt_syscalls`, `cell.note_sweep_allocations`, `cell.cost_percentile_value`,
+    `cell.mem_second_instance_kb`, `cell.mem_limit_bytes`, `cell.voices_held` or `record_extension` makes the test red on
+    a record that reads it. Fails when any mapped column is missing from the build or the export.
 C7. **`pruneStale` on the store.** A plugin gone from the state, and a kept plugin with other bytes, each lose their user
     record by `delete`; a record named by another plugin of the state, and every base record, stay; the descriptor files
     go as today. Fails when a base record is touched, or a kept key is dropped.
@@ -1268,6 +1346,8 @@ Decided by the owner (2026-11-19):
    replaces `probe.sha256` (section 3.7). The sync is the writer of its own records into the user or system layer;
    `qualify-rejudge`, `pruneStale` and `pluginCounts` read the store and not `qualification_dir`; the reader answers
    them (section 6, section 6.1). There is no dual read and no fallback.
+11. **DECIDED (%7, ruling (a)): rejudge works from rows only.** Probe bytes are never kept beside the store. Any field
+    the judge needs gets a column, including `ownThreads` and `otherThreads` (section 6.2).
 
 The records a device already holds in its `qualification_dir` are not migrated, imported or read by the switch: the
 sync measures a plugin that the base does not hold, and the old files stay on the device unread. No program converts

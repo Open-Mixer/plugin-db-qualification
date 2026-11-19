@@ -80,6 +80,7 @@ CREATE TABLE record (
   layout_scheme  TEXT,
   layout_sha256  TEXT,
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
+  host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: a CLAP record's hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record has none
   tested_version TEXT,
   measured_at    TEXT NOT NULL,
   run_id         TEXT NOT NULL,
@@ -138,6 +139,14 @@ CREATE TABLE record_file (                 -- binary.files[]: the per-file list 
   UNIQUE (record_id, path)
 ) STRICT;
 CREATE INDEX record_file_sha256 ON record_file (sha256);
+
+CREATE TABLE record_extension (            -- hostExtensions[]: the CLAP host extensions the run offered the plugin (section 6.2)
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  ord       INTEGER NOT NULL,
+  extension TEXT NOT NULL CHECK (length(extension) > 0),   -- a name as the prober wrote it, e.g. clap.log
+  PRIMARY KEY (record_id, ord),
+  UNIQUE (record_id, extension)
+) STRICT;
 
 CREATE TABLE record_version (              -- adapter.versions, rejudged.figures.adapter.versions
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
@@ -238,9 +247,12 @@ CREATE TABLE cell (                        -- measurements.grid[]
   rt_sweep_applicable INTEGER CHECK (rt_sweep_applicable IN (0, 1)),
   rt_blocks INTEGER, rt_allocations INTEGER, rt_locks INTEGER, rt_syscalls INTEGER,
   rt_thread_violations INTEGER, rt_process_errors INTEGER,
+  rt_own_threads INTEGER,                  -- threads the plugin started itself (judged under hosting.rt-safety.own-threads); NULL: not taken
+  rt_other_allocations INTEGER, rt_other_locks INTEGER, rt_other_syscalls INTEGER,   -- what threads other than the audio thread did; all three or none
   note_sweep_applicable INTEGER CHECK (note_sweep_applicable IN (0, 1)),
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR (length(note_sweep_dialect) > 0 AND instr(note_sweep_dialect, ' ') = 0 AND instr(note_sweep_dialect, char(9)) = 0 AND instr(note_sweep_dialect, char(10)) = 0)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
+  CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;

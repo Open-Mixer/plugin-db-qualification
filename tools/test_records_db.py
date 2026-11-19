@@ -467,6 +467,14 @@ class BuiltFrom(Base):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(self.rows("SELECT built_from FROM store_info"), [(commit,)])
 
+    def test_12_a_checkout_with_the_placeholder_file_takes_head(self):
+        """An unsubstituted BUILT_FROM falls back to git's HEAD inside a checkout (a build from a checkout)."""
+        make_set(self.tmp, n=2)
+        repo, commit = self.repo()
+        r = run_tool(os.path.join(repo, "records"), self.db, contract_dir(), "--built-from-file", os.path.join(repo, "BUILT_FROM"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.rows("SELECT built_from FROM store_info"), [(commit,)])
+
     def test_12_a_copied_tree_with_an_unsubstituted_file_is_refused(self):
         make_set(self.tmp, n=2)
         repo, _ = self.repo()
@@ -479,6 +487,73 @@ class BuiltFrom(Base):
         r = run_tool(os.path.join(copy_, "records"), self.db, contract_dir())
         self.assertIn("refused: built-from-unknown:", r.stderr)
         self.assertEqual(os.listdir(self.out), [])
+
+
+class MinDomain(Base):
+    """--min-domain <domain>=<version>, repeatable: a domain whose info.version is lower is refused by name."""
+
+    def version(self, dom):
+        return load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"]
+
+    def test_a_domain_older_than_its_floor_is_refused(self):
+        make_set(self.tmp, n=2)
+        self.refused("qualification-db.domain-too-old", "qualification", self.version("qualification"), "99.0.0",
+                     extra=("--min-domain", "machine=0.0.1", "--min-domain", "qualification=99.0.0"))
+
+    def test_domains_at_or_above_their_floors_build(self):
+        make_set(self.tmp, n=2)
+        build_ok(self, os.path.join(self.tmp, "records"), self.db, None,
+                 "--min-domain", f"qualification={self.version('qualification')}", "--min-domain", "plugin-db=0.0.1")
+        self.assertEqual(self.rows("SELECT count(*) FROM record"), [(2,)])
+
+    def test_a_floor_for_a_domain_the_store_does_not_check_is_refused(self):
+        make_set(self.tmp, n=2)
+        self.refused("contract.domain.absent", "nosuch", extra=("--min-domain", "nosuch=1.0.0"))
+
+    def test_a_floor_that_is_not_a_version_is_refused(self):
+        make_set(self.tmp, n=2)
+        self.refused("min-domain.invalid", "qualification=latest", extra=("--min-domain", "qualification=latest"))
+
+
+class Packaging(unittest.TestCase):
+    """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
+    CONTRACTS = ("plugin-qualify-contract", "plugin-hostd-contract", "plugin-db-contract", "omx-clap-core-contract")
+
+    def read(self, *path):
+        with open(os.path.join(REPO, *path), encoding="utf-8") as f:
+            return f.read()
+
+    def test_the_source_tarball_carries_its_commit(self):
+        self.assertEqual(self.read("BUILT_FROM"), "$Format:%H$\n")
+        self.assertIn("BUILT_FROM export-subst", self.read(".gitattributes").splitlines())
+
+    def test_debian_build_depends_hold_floors_only(self):
+        control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
+        deps = re.search(r"^Build-Depends: (.*)$", control, re.M).group(1)
+        self.assertIn("python3-jsonschema:native", deps)
+        for pkg in self.CONTRACTS:
+            self.assertRegex(deps, rf"{pkg} \(>= \d+(\.\d+)+~\)", pkg)
+        self.assertNotRegex(deps, r"\(<|<<|<=|=\s*\d")
+
+    def test_rpm_build_requires_hold_floors_only(self):
+        spec = self.read("packaging", "plugin-qualification-records.spec")
+        self.assertIn("BuildRequires: python3-jsonschema", spec)
+        for pkg in self.CONTRACTS:
+            self.assertRegex(spec, rf"(?m)^BuildRequires: {pkg} >= \d+(\.\d+)+$", pkg)
+        self.assertNotRegex(spec, r"(?m)^BuildRequires:.* (<|<=) ")
+
+    def test_both_builds_generate_the_database_into_the_package(self):
+        rules, spec = self.read("debian", "rules"), self.read("packaging", "plugin-qualification-records.spec")
+        for text in (rules, spec):
+            self.assertIn("tools/records-db.py", text)
+            self.assertIn("--built-from-file BUILT_FROM", text)
+            self.assertIn("qualification.sqlite", text)
+            self.assertIn("variable=contractdir", text)
+        self.assertRegex(spec, r"(?m)^echo .*qualification\.sqlite.* >> records\.files")
+
+    def test_the_database_is_generated_not_committed(self):
+        tracked = subprocess.run(["git", "-C", REPO, "ls-files", "*.sqlite"], capture_output=True, text=True).stdout
+        self.assertEqual(tracked.strip(), "")
 
 
 class SmallStore(Base):

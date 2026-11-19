@@ -47,7 +47,7 @@ The spec is this repository's first design spec; each is named by its date and t
 | --- | --- | --- | --- |
 | record fields and their meaning | plugin-qualify (it writes each record) | plugin-qualify, in its record format | plugin-qualify |
 | words a record holds (ratings, reasons, dimensions, bases) | plugin-qualify | plugin-qualify, in a minor of the `qualification` domain | `qualification` (plugin-qualify) |
-| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | the `hosting` domain (omx-clap-core), read directly (precondition 5) |
+| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | omx-clap-core's installed `data/hosting*.json` this pass, its `hosting` domain after it (precondition 5 and its exception) |
 | probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | the `probe` domain (plugin-hostd), read directly (precondition 4) |
 | the outcome of plugin-qualify's own memory bound (`probe.oom`) | plugin-qualify | plugin-qualify | `qualification` (plugin-qualify) |
 | adapter codes (`<host>.<kind>[-<parameter>]`) | plugin-qualify (it composes them) | plugin-qualify | `qualification`: the host profiles and the kinds; a signal parameter is a `probe` word |
@@ -612,9 +612,27 @@ their owners before change 2 merges:
 3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain (the CPU families the probe writes).
 4. **plugin-hostd: a `probe` domain** with the probe's reasons, outcomes, steps and signals, which the probe reads.
 5. **omx-clap-core: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
-   one source, in this pass: omx-contract 3.21.0 renders a domain's code strings, sentences and TypeScript module,
-   so the move keeps omx-clap-core's rendered headers and module byte-identical (owner ruling, 2026-11-19, which
-   replaces the earlier one-pass exception: the reader checks the hosting columns like every other column).
+   one source. Not in this pass: see the exception below.
+
+**The hosting exception, this pass only (owner ruling, 2026-11-19).** omx-contract's domain render emits index macros
+only, while omx-clap-core's consumers need the hosting code strings, their sentences and the TypeScript module that
+`data/hosting*.json` renders today. So this pass omx-clap-core keeps `data/hosting*.json` as the one source of the
+hosting codes, and there is no `hosting` domain:
+
+- **The writer** reads the hosting words from the installed omx-clap-core contract package (each `kind: codes` item of
+  `<contractdir>/3/omx-clap-core/hosting.json` and `hosting/*.json` (the schema major 3), as omx-contract's installer lays
+  it out; its words are the `code` of each entry), refuses a hosting word none of them holds exactly as for any other
+  column, writes the `store_domain` row `hosting` at that package's version (its `MANIFEST.json` `version`), and fills `word_check` for the hosting columns as for the others.
+- **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents
+  only. A column whose only items are `hosting` items is not checked; in a column that also has other owners' items
+  (`verdict.deciding`, `tier.deciding`, `reason.code`), only a word beginning `hosting.` is passed over, and every
+  other word must be in one of the column's other items. Every other column is checked at open as below. A store's
+  hosting words are therefore checked once, by the writer, against the package it was built with.
+- **Its end.** Right after this pass, an omx-contract change lets a domain render the code strings, sentences and
+  TypeScript module, omx-clap-core moves the hosting codes to its `hosting` domain with byte-identical rendered
+  output, and the reader checks the hosting columns like every other column; this exception is then removed. The check
+  `hosting-skip-ends` holds the end: it fails when omx-clap-core's main ships a `hosting` domain document, or a
+  contract directory the tests read holds one, while the reader still skips the hosting words.
 
 Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
 item names below are proposed; each owner's change names them.
@@ -1049,6 +1067,8 @@ int  pqdb_record_json(const pqdb *db, const pqdb_result *r, char **json, pqdb_er
    `layer` is "user", "base" or NULL (both, merged as section 4). A plugin is offered when any of its records has a
    `tier_offered` row. The strings are valid until each returns; a non-zero return stops the walk and is returned. */
 int  pqdb_counts(const pqdb *db, const char *layer, int (*each)(const char *format, long plugins, long offered, long not_offered, void *), void *ctx);
+const char *pqdb_message(const pqdb *db);     /* the last refusal of pqdb_each: layer, record, column; NULL if none */
+int  pqdb_number(double value, char *out, size_t n);   /* a number as JSON.stringify writes it, C locale; -1: not finite or too long */
 
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none). */
 typedef struct { const char *rating, *deciding; int measured, qualified; } pqdb_verdict;
@@ -1064,6 +1084,10 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
   `binary_path` and `uri` (a `.clap`: the CLAP id), then `pqdb_files` of each result, compared with the files the caller
   hashed. The merged answer shadows whole records (section 4), so the caller compares the records it gets; a result
   whose list does not equal what is installed is not the installed binary's.
+- **Numbers and non-finite values.** Every reader path (`pqdb_each`, `pqdb_record_json`, the command's `query --json`)
+  writes a REAL through `pqdb_number`: the layout of `JSON.stringify`, under the C locale whatever the program's. A
+  non-finite REAL is refused as `qualification-db.not-a-store` by every path; `pqdb_message` names the layer, the
+  record and the column of `pqdb_each`'s last refusal, and the command prints the code and message and exits 1.
 - **Every cell of a record** is one result; `pqdb_files` and `pqdb_record_json` give the same answer for each of a
   record's results. `pqdb_record_json` is the exporter of section 5 in C: its output equals the Python exporter's, byte
   for byte after JSON normalisation, for every record of the fixtures (section 8, change 3).
@@ -1073,7 +1097,8 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     layer;
   - `qualification-db.unreadable`: it exists and SQLite cannot open or read it;
   - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `user_layer` that is not the
-    file's (a user file opened as the base);
+    file's (a user file opened as the base), or a REAL column of a record holding a value that is not finite (no
+    JSON number writes it; the message names the layer, the record and the column);
   - `qualification-db.schema-mismatch`: the base and the user layer are at different `user_version`s;
   - `qualification-db.schema-other`: a file's `user_version` is not the reader's `PQDB_SCHEMA_VERSION`;
   - `qualification-db.layer-unknown`: a query's `layer` is not `user` or `base`;
@@ -1092,7 +1117,9 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     passed through when the domain cannot be opened.
 - **Word check at open.** `pqdb_open` opens each domain of `store_domain` through omx-contract's loader
   (`omx_domain_open(domain, floor)`), then for each column of `word_check` reads its distinct words and looks each up
-  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again.
+  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. This pass the
+  `hosting` row and its columns are skipped (section 3.4, the hosting exception); `hosting-skip-ends` fails once a
+  `hosting` domain exists and the skip is still there.
 - **Concurrency.** The base is opened `file:<path>?mode=ro&immutable=1`: no lock, no journal, nothing written. A package
   upgrade renames a new file over it; an open handle keeps reading the old one until it is closed. The user layer is
   opened `mode=ro` with `busy_timeout` 250 ms; it uses the rollback journal (`journal_mode` `DELETE`), not WAL, because a
@@ -1166,11 +1193,17 @@ and nothing reads it back from a file.
 | `memoryPass`, `isolatedPass`, `poolPass`, the adapter pass | each reads the record of a state entry by file name and writes it whole | each reads the record of the entry's shadow key (`query --json --records --layer user`) and `put`s it extended |
 | `pruneStale` | `readdirSync(qualification_dir)` for the stems of records and `readdirSync(descriptor_dir)` | the user layer's records as the reader lists them (`query --json --layer user`, deduplicated by shadow key), and the descriptor directory as today. A record is stale when the state before holds its key and the state after does not, or when its `uri` is a kept plugin's and its `sha256` is not one the state after keeps (the other bytes of a kept plugin). A stale record is removed by `delete`; a record another plugin of the state still names, two copies of one binary, is kept. The descriptor half is unchanged: a descriptor `<id>@<version>-<first 12 digits of the key>.json` is dropped by its id and those 12 digits, as `idAndHash` does. It returns the shadow keys removed, and the descriptor files removed, to log |
 | `pluginCounts` | `readdirSync(qualification_dir)`, parses each `*.qualification.json` for `plugin.format`, `plugin.id` and `tiers.offeredOn` | `counts --layer user --json` (system scope: the system layer, the sync's own records). A plugin is offered when any record of it has a `tier_offered` row, as `offeredOn` non-empty is today; the line `pluginCountsLine` prints is unchanged |
-| `adjust` (`adjust-cli`) | `--qualification-dir <dir>`: every `*.qualification.json` there | the records of the scope through the reader (`query --json --records`, the user layer over the base, `--scope user\|system`); `--qualification-dir` is removed with no alias, and no file is read |
+| `adjust` (`adjust-cli`) | `--qualification-dir <dir>`: every `*.qualification.json` there | the records of the scope through the reader (`query --json --records`, the user layer over the base, `--scope user\|system`); `--qualification-dir` is removed with no alias, and no file is read. History is keyed by the main binary's absolute path: adjust joins the INSTALL ROOT of the installed item that holds the record's key (`SyncItem.root`, from plugin-db's list, as the sync finds it; section 3.7) with `binary_path`. The root is never stored and never an argument; a record whose key no installed item holds is not adjusted, under a code plugin-qualify names |
 | `judge` (`judge-cli`) | `--qualification-dir <dir>`: where the judged record and the probe copy go | `put` of the judged record through the writer (`--scope user\|system`); `--qualification-dir` is removed with no alias, and no probe copy is written (section 3.7: the store keeps no probe bytes) |
-| `checkStderrKept` (`refused-stderr-kept`) | every `*.qualification.json` of a directory, refused rows only, and the probe copy beside each | the refused records of the scope through the reader (`query --json --records`); what it holds against them is the record's `probe_*` columns and `probe_end` rows, since no probe copy is kept; no directory is read |
+| `checkStderrKept` (`refused-stderr-kept`) | every `*.qualification.json` of a directory, refused rows only, the probe copy's `logs[]` byte counts and SHA-256, and the children's stderr copies | removed: it checked the probe copy and the stderr copies, and after the switch neither exists (the store keeps no probe bytes, section 9 ruling 1, and the sync writes no copy). Nothing replaces it; a refused record keeps its outcome, reason and `probe_end` rows |
 | `judged-layer` (`judged-layer`) | `<record.qualification.json>`, a file argument | the record of a shadow key (`--sha256 --format --uri --offer --host-class`, `--layer` optional) through the reader (`query --json --records`); no file argument |
 | the distributed records' documentation (`distributed-records`) | describes the copy of the distributed records into `qualification_dir` | describes the base and the user layer of this section; no copy is described |
+
+**What does not move.** The measuring run's output (`plugin-qualify --out <dir>`) and this repository's `records/`
+stay record documents in a directory: `records/` is the corpus the base is built from (section 5), reviewed and
+versioned as JSON, and `--out` is how a measuring pass adds to it. The store replaces what a DEVICE keeps (the sync's
+layer and its `qualification_dir`), not the corpus; the base is built from `records/` and nothing builds `records/` from
+a store.
 
 **The state.** `SyncPlugin.record` is the shadow key of the record (`sha256`, `format`, `uri`, `offer`,
 `host_class`), not a file path, and `SYNC_STATE_SCHEMA` becomes `plugin-qualify.sync-state/2`. A state of the older
@@ -1268,7 +1301,8 @@ makes it fail.
 7. **Sentence not stored.** No TEXT value in the database holds a field of the sentence list (search for their exact
    strings from the fixtures). Fails when a detail is written into a column.
 8. **Store info.** `user_version` = `PQDB_SCHEMA_VERSION`, `store_info.user_layer` = 0, one `store_domain` row per
-   domain at its installed `info.version`, and a `word_check` row for every word column of section 3.4. Fails when any
+   domain at its installed `info.version` (`hosting` at the installed omx-clap-core contract package's version, this
+   pass), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
    from the record's, an empty object, and a second claim on one key and cell each refuse by name and leave no output

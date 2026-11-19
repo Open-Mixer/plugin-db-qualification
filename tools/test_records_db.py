@@ -123,6 +123,19 @@ def record_files(cls, set_):
     return sorted((f for f in os.listdir(d) if f.endswith(".qualification.json")), key=os.fsencode)
 
 
+def to_relative(setdir):
+    """Section 3.7's rewrite on a fixture copy: a CLAP record's binary.path is its file's own name and its hostExtensions
+    are the probe output's offer.clapExtensions. (records/ itself gets it once, in a commit of its own.)"""
+    for f in os.listdir(setdir):
+        if f.endswith(".qualification.json"):
+            p = os.path.join(setdir, f)
+            rec = load(p)
+            if rec["plugin"]["format"] == "clap":
+                rec["binary"]["path"] = rec["binary"]["files"][0]["path"]
+                rec["hostExtensions"] = load(os.path.join(setdir, rec["probe"]["file"]))["offer"]["clapExtensions"]
+            dump(p, rec)
+
+
 def make_set(tmp, files=None, n=3, src=SRC_SET, name=None):
     """records/<class>/<set>/ in `tmp` with the provenance and `files` (or the first n) of a real set, probe outputs too."""
     cls, set_ = src
@@ -136,6 +149,7 @@ def make_set(tmp, files=None, n=3, src=SRC_SET, name=None):
     for f in files or record_files(cls, set_)[:n]:
         shutil.copy(os.path.join(RECORDS, cls, set_, f), dst)
         shutil.copy(os.path.join(RECORDS, cls, set_, load(os.path.join(dst, f))["probe"]["file"]), dst)
+    to_relative(dst)
     return dst
 
 
@@ -244,19 +258,6 @@ class Base(unittest.TestCase):
             return db.execute(sql, args).fetchall()
 
 
-def to_relative(setdir):
-    """Section 3.7's rewrite on a fixture copy: a CLAP record's binary.path is its file's own name and its hostExtensions
-    are the probe output's offer.clapExtensions. (records/ itself gets it once, in a commit of its own.)"""
-    for f in os.listdir(setdir):
-        if f.endswith(".qualification.json"):
-            p = os.path.join(setdir, f)
-            rec = load(p)
-            if rec["plugin"]["format"] == "clap":
-                rec["binary"]["path"] = rec["binary"]["files"][0]["path"]
-                rec["hostExtensions"] = load(os.path.join(setdir, rec["probe"]["file"]))["offer"]["clapExtensions"]
-            dump(p, rec)
-
-
 class DdlColumns(Base):
     """Case 24: the columns of the row judge (record_extension, record.host_extensions, cell.rt_own_threads and
     rt_other_*) are written and exported, and the DDL's own checks hold."""
@@ -264,7 +265,6 @@ class DdlColumns(Base):
 
     def made(self, fn=None, src=SRC_SET, files=None, n=2):
         d = make_set(self.tmp, files, n=n, src=src)
-        to_relative(d)
         names = sorted(f for f in os.listdir(d) if f.endswith(".qualification.json"))
         if fn:
             edit(d, names[0], fn)
@@ -423,17 +423,15 @@ class Refusals(Base):
         d = make_set(self.tmp, n=2)
         f = [x for x in record_files(*SRC_SET) if x.endswith(".default.qualification.json")][0]
         # the copy of a record under another name claims the same cell of the same key
-        shutil.copy(os.path.join(RECORDS, *SRC_SET, f), os.path.join(d, "copy-of-" + f))
+        shutil.copy(os.path.join(d, f), os.path.join(d, "copy-of-" + f))
         shutil.copy(os.path.join(RECORDS, *SRC_SET, load(os.path.join(RECORDS, *SRC_SET, f))["probe"]["file"]), d)
         self.refused("claim-duplicate", "copy-of-" + f)
 
 
 class Identity(Base):
     def test_04_two_builds_are_row_identical_and_byte_identical(self):
-        recs = os.path.join(self.tmp, "records", "x86-64")
-        os.makedirs(recs)
         for s in ("fedora44-48000-512", "fedora44-96000-64"):
-            os.symlink(os.path.join(RECORDS, "x86-64", s), os.path.join(recs, s))
+            make_set(self.tmp, n=40, src=("x86-64", s))
         out2 = os.path.join(self.tmp, "second")
         os.makedirs(out2)
         build_ok(self, os.path.join(self.tmp, "records"), self.db)

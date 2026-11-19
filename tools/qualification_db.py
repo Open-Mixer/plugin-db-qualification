@@ -75,11 +75,13 @@ class Obj:
 class Arr:
     """An array of rows of `table`, linked to the enclosing row by `by` ([(child column, parent column)]). `always`
     is the section 3.3 rule: present (maybe empty) with its parent, against present only with rows. `single` is one
-    row, found by `const` (the tiers)."""
+    row, found by `const` (the tiers). `flag` (table, column) stores the list's presence as 1, so an empty list is data
+    (hostExtensions); such a list is not required by the node: the caller says for which records it is."""
 
-    def __init__(self, table, item, by=(("record_id", "record_id"),), always=False, ord=True, const=None, single=False):
-        self.table, self.item, self.by, self.always, self.ord = table, item, tuple(by), always, ord
-        self.const, self.single = const or {}, single
+    def __init__(self, table, item, by=(("record_id", "record_id"),), always=False, ord=True, const=None, single=False,
+                 flag=None):
+        self.table, self.item, self.by, self.always, self.ord = table, item, tuple(by), always or bool(flag), ord
+        self.const, self.single, self.flag = const or {}, single, flag
         self.req = always
 
 
@@ -171,6 +173,12 @@ def _cell():
             "syscalls": L(c, "rt_syscalls", "int"),
             "threadViolations": O(c, "rt_thread_violations", "int"),
             "processErrors": O(c, "rt_process_errors", "int"),
+            "ownThreads": O(c, "rt_own_threads", "int"),
+            "otherThreads": Obj({
+                "allocationsInRun": O(c, "rt_other_allocations", "int"),
+                "locksInRun": O(c, "rt_other_locks", "int"),
+                "syscallsInRun": O(c, "rt_other_syscalls", "int"),
+            }),
             "events": Arr("cell_event", Leaf("cell_event", "event", "text", True),
                           by=(("record_id", "record_id"), ("cell_ord", "ord")), always=True),
         }, anchor=("cell", "rt_interposer")),
@@ -196,6 +204,8 @@ def _record():
             "layout": Obj({"scheme": L(r, "layout_scheme"), "sha256": L(r, "layout_sha256")}),
             "unpinnable": Present(r, "unpinnable"),
         }, req=True),
+        "hostExtensions": Arr("record_extension", Leaf("record_extension", "extension", "text", True),
+                              flag=(r, "host_extensions")),
         "testedVersion": O(r, "tested_version"),
         "measuredAt": L(r, "measured_at"),
         "run": Obj({
@@ -611,6 +621,8 @@ class Emitter:
     def arr(self, node, v, scope, path):
         if not isinstance(v, list):
             self.refuse("field-type", path, "expected an array")
+        if node.flag:
+            scope.rows[node.flag[0]][node.flag[1]] = 1
         if not v and not node.always:
             self.refuse("array-empty", path, "a present empty array is refused: this array is present only with rows")
         for i, el in enumerate(v):
@@ -795,6 +807,11 @@ class Writer:
         if rec["schema"] != RECORD_SCHEMA:
             em.refuse("field-unmapped", "schema", f"expected {RECORD_SCHEMA}")
         r, p = scope.rows["record"], scope.rows["plugin"]
+        # section 6.2: a CLAP record holds the host extensions the run offered (an empty list is data); an LV2 record none
+        if p["format"] == "clap" and "host_extensions" not in r:
+            em.refuse("field-absent", "hostExtensions", "a CLAP record holds the host extensions its run offered")
+        if p["format"] != "clap" and "host_extensions" in r:
+            em.refuse("field-unmapped", "hostExtensions", f"no column holds this field of a {p['format']} record")
         if not self.checker.ok("record", "offer", offer):
             em.refuse("word-unknown", "(file name)", f"{offer!r} is no word of {self.checker.describe('record', 'offer')}")
         # the probe output the record judged
@@ -973,6 +990,8 @@ class Exporter:
             key_cols = tuple(c for c, _ in node.by) + tuple(node.const)
             key = tuple(parent[p] for _, p in node.by) + tuple(node.const.values())
             rows = self.lookup(node.table, key_cols, key)
+            if node.flag and scope[node.flag[0]][node.flag[1]] != 1:
+                return ABSENT
             if node.single:
                 if not rows:
                     return ABSENT

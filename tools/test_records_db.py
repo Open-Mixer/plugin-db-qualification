@@ -9,8 +9,8 @@ and 8, change 2). The round trip runs over every record of records/; the refusal
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones:
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
 (plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
-PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them (<contractdir>/3/omx-clap-core/ and its MANIFEST.json). Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
+PDQ_REF (default origin/main), the hosting domain at PDQ_HOSTING_REF (default origin/lane/omx-clap-core-hosting-domain,
+omx-clap-core's #136, until it merges, then origin/main). Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
 """
 import contextlib
 import copy
@@ -34,10 +34,12 @@ TSV = os.path.join(HERE, "testdata", "field-columns.tsv")
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 SRC_SET = ("x86-64", "fedora44-48000-512")
 DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
-               "plugin-db": "plugin-db"}
+               "plugin-db": "plugin-db", "hosting": "omx-clap-core"}
 
 SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
 REF = os.environ.get("PDQ_REF", "origin/main")
+# the hosting domain is omx-clap-core's #136 until it merges; then main (the switch: delete this default)
+HOSTING_REF = os.environ.get("PDQ_HOSTING_REF", "origin/lane/omx-clap-core-hosting-domain")
 
 SENTENCE_PATHS = ("binary.unpinnable", "run.steps[].detail", "measurements.grid[].memory.unmeasuredDetail",
                   "measurements.unmeasured[].detail", "tiers.dimmed")
@@ -65,8 +67,7 @@ def git_show(clone, ref, path):
 
 def contract_dir():
     """The contract directory assembled from the sibling clones, once; skips the test when they are not given. The
-    domains are documents; the hosting words are the package omx-clap-core's data/, installed as `make install-contract`
-    does: <schema major>/omx-clap-core/ with the files as they are and a MANIFEST.json."""
+    domains are documents (<domain>/<domain>.json), the hosting one included."""
     if "dir" in _contract:
         return _contract["dir"]
     if not SIBLINGS:
@@ -78,7 +79,7 @@ def contract_dir():
         if not os.path.isdir(clone):
             raise unittest.SkipTest(f"{clone}: no such sibling clone")
         os.makedirs(os.path.join(root, dom))
-        doc = json.loads(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
+        doc = json.loads(git_show(clone, HOSTING_REF if dom == "hosting" else REF, f"contract.d/{dom}/{dom}.json"))
         if dom == "qualification":
             # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
             # in its line 3; until its domain publishes the item the fixture adds it
@@ -86,20 +87,6 @@ def contract_dir():
                 "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
         with open(os.path.join(root, dom, dom + ".json"), "w") as f:
             json.dump(doc, f)
-    core = os.path.join(SIBLINGS, "omx-clap-core")
-    if not os.path.isdir(core):
-        raise unittest.SkipTest(f"{core}: no such sibling clone")
-    names = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", REF, "data"], capture_output=True, text=True,
-                           check=True).stdout.split("\n")
-    dest = os.path.join(root, "3", "omx-clap-core")
-    for n in sorted(x for x in names if x.endswith(".json")):
-        rel = n[len("data/"):]
-        os.makedirs(os.path.join(dest, os.path.dirname(rel)), exist_ok=True)
-        with open(os.path.join(dest, rel), "wb") as f:
-            f.write(git_show(core, REF, n))
-    with open(os.path.join(dest, "MANIFEST.json"), "w") as f:
-        json.dump({"package": "omx-clap-core", "version": git_show(core, REF, "VERSION").decode().strip(),
-                   "schemaMajor": 3, "files": {}}, f)
     _contract["dir"] = root
     return root
 
@@ -669,12 +656,11 @@ class Packaging(unittest.TestCase):
         self.assertNotRegex(deps, r"\(<|<<|<=")
         self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)", "", deps), r"\(=")
 
-    def test_the_omx_clap_core_floor_is_the_first_release_that_declares_the_hosting_words_of_records(self):
-        """The 14 hosting.* words of records/ are all declared by omx-clap-core v0.25.1 (hosting.memory.* came there, the
-        cost, latency, rt-safety and stability ones in v0.24.0): the floor is that release, not the newest."""
+    def test_the_omx_clap_core_floor_is_the_release_that_publishes_the_hosting_domain(self):
+        """The hosting domain is first in omx-clap-core 0.33.1: the floor is that release."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
-        self.assertRegex(control, r"omx-clap-core-contract \(>= 0\.25\.1~\)")
-        self.assertRegex(self.read("packaging", "plugin-qualification-records.spec"), r"BuildRequires: omx-clap-core-contract >= 0\.25\.1\n")
+        self.assertRegex(control, r"omx-clap-core-contract \(>= 0\.33\.1~\)")
+        self.assertRegex(self.read("packaging", "plugin-qualification-records.spec"), r"BuildRequires: omx-clap-core-contract >= 0\.33\.1\n")
 
     def test_rpm_build_requires_hold_floors_only(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")
@@ -724,21 +710,15 @@ class SmallStore(Base):
         self.assertEqual(self.rows("PRAGMA page_size"), [(4096,)])
         self.assertEqual(self.rows("PRAGMA journal_mode"), [("delete",)])
         domains = dict(self.rows("SELECT domain, version FROM store_domain"))
-        self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["hosting"]))
+        self.assertEqual(sorted(domains), sorted(DOMAIN_REPO))
         for dom, version in domains.items():
-            if dom == "hosting":
-                self.assertEqual(version, load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))["version"])
-            else:
-                self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
+            self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
         checked = {(t, c) for t, c in self.rows("SELECT DISTINCT tbl, col FROM word_check")}
         missing = [tc for tc in schema_word_columns() if tc not in checked]
         self.assertEqual(missing, [], "word columns with no word_check row")
         for (d, i) in self.rows("SELECT DISTINCT domain, item FROM word_check"):
             self.assertIn(d, domains)
-            if d == "hosting":
-                self.assertTrue(i.startswith("HOSTING_") and i.endswith("CODES"), i)
-            else:
-                self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])
+            self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])
 
 
 class RoundTrip(unittest.TestCase):

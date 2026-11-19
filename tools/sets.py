@@ -123,12 +123,12 @@ def carried(root, kind, arch):
     return out
 
 
-def qualify_range(root, kind, arch):
+def qualify_floor(root, kind, arch):
     """The plugin-qualify floor of <arch>; refused when its classes give two."""
-    ranges = {line["from"] for line in lines_of(root, kind, arch)}
-    if len(ranges) != 1:
-        raise Refused(f"{kind} architecture {arch} has {len(ranges)} plugin-qualify floors in {ARCH_CLASSES}, not one")
-    return ranges.pop()
+    floors = {line["from"] for line in lines_of(root, kind, arch)}
+    if len(floors) != 1:
+        raise Refused(f"{kind} architecture {arch} has {len(floors)} plugin-qualify floors in {ARCH_CLASSES}, not one")
+    return floors.pop()
 
 
 def folded_names(root, cls_list):
@@ -159,7 +159,7 @@ def spec_version(root):
 
 def substvars(root, arch):
     carried(root, "deb", arch)
-    low = qualify_range(root, "deb", arch)
+    low = qualify_floor(root, "deb", arch)
     version = changelog_version(root)
     names = deb_folded(root, arch)
     return "\n".join([
@@ -198,7 +198,7 @@ def spec_block(root):
     """The spec's per-architecture block: for each architecture it builds, the Requires and the folded names."""
     out = [BLOCK_BEGIN]
     for arch in exclusive_arch(root):
-        low = qualify_range(root, "rpm", arch)
+        low = qualify_floor(root, "rpm", arch)
         out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}"]
         for n in folded_names(root, classes(root, "rpm", arch)):
             out += [f"Provides: {n} = %{{version}}-%{{release}}", f"Obsoletes: {n} < %{{version}}-%{{release}}"]
@@ -243,7 +243,7 @@ def problems(root):
     for kind in FORMATS:
         for arch in sorted({line[kind] for line in lines}):
             try:
-                qualify_range(root, kind, arch)
+                qualify_floor(root, kind, arch)
             except Refused as e:
                 out.append(str(e))
 

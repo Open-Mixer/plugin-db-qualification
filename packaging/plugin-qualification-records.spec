@@ -30,6 +30,10 @@ ExclusiveArch: x86_64 aarch64
 
 # tools/sets.py in %%install and the record check in %%check
 BuildRequires: python3
+# the reader (the Makefile): sqlite 3.37.0 is the first with STRICT tables; libomx-domain is the contract loader
+BuildRequires: gcc make pkgconfig binutils
+BuildRequires: sqlite-devel >= 3.37.0
+BuildRequires: libomx-domain-devel >= 3.20.0
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
@@ -85,11 +89,40 @@ sync reads these records once /etc/omx/qualify.conf says "host_class x86-64",
 and finds the CLAP plugins of /usr/lib64/clap once it says
 "clap_extra /usr/lib64/clap".
 
+%package -n libplugin-qualification-db
+Summary: Reader of the OpenMixer qualification store
+Requires: sqlite-libs >= 3.37.0
+Requires: libomx-domain >= 3.20.0
+
+%description -n libplugin-qualification-db
+The C library that reads the qualification store: the base database of
+plugin-qualification-records and a user layer, merged by whole record, with
+every word column checked against the contract domains that own its words.
+It reads figures at start-up, never in a real-time path.
+
+%package -n libplugin-qualification-db-devel
+Summary: Reader of the OpenMixer qualification store, development files
+Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
+
+%description -n libplugin-qualification-db-devel
+The header, the shared library link, plugin-qualification-db.pc and the DDL of
+the store (the pkg-config variable schema names it).
+
+%package -n plugin-qualification-db
+Summary: Command to query the OpenMixer qualification store
+Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
+
+%description -n plugin-qualification-db
+plugin-qualification-db query --json prints the results of the base database
+and the user layer, one JSON object per line; check opens both layers and the
+words they hold.
+
 %prep
 %autosetup
 
 %build
-# the records are data: nothing to build
+# the records are data; the reader is built with its Makefile
+%make_build PREFIX=%{_prefix} LIBDIR=%{_libdir} all
 
 %install
 # the sets of this architecture's classes, byte for byte, and a %%files line per class
@@ -97,8 +130,10 @@ python3 tools/sets.py install rpm %{_target_cpu} %{buildroot}%{qual_dir}
 for class in $(ls %{buildroot}%{qual_dir}); do
     echo "%{qual_dir}/$class/"
 done > records.files
+%make_install PREFIX=%{_prefix} LIBDIR=%{_libdir}
 
 %check
+make PREFIX=%{_prefix} LIBDIR=%{_libdir} check
 for dir in %{buildroot}%{qual_dir}/*/*/; do
     set=$(basename "$dir")
     class=$(basename "$(dirname "$dir")")
@@ -113,5 +148,20 @@ done
 %license LICENSE
 %dir %{_datadir}/omx
 %dir %{qual_dir}
+
+%files -n libplugin-qualification-db
+%license LICENSE
+%{_libdir}/libplugin-qualification-db.so.0
+
+%files -n libplugin-qualification-db-devel
+%{_includedir}/plugin-qualification-db/
+%{_libdir}/libplugin-qualification-db.so
+%{_libdir}/pkgconfig/plugin-qualification-db.pc
+%{_datadir}/plugin-qualification-db/
+
+%files -n plugin-qualification-db
+%license LICENSE
+%{_bindir}/plugin-qualification-db
+%{_mandir}/man1/plugin-qualification-db.1*
 
 %changelog

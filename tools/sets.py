@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
-"""The one records package, plugin-qualification-records, per architecture: which sets each architecture carries,
+"""The records package, plugin-qualification-records, per architecture (beside the reader's three packages): which sets each architecture carries,
 what it depends on, which older package names it takes over, and which architectures a tag releases. The workflows,
 debian/rules and the spec read all of it from here.
 
     tools/sets.py check                         packaging/arch-classes, packaging/release-arches, debian/control,
                                                 the spec and records/ agree (the check workflow)
-    tools/sets.py names deb|rpm                 the binary package name (binary-names of the builds)
+    tools/sets.py names deb|rpm                 the binary package names, space-separated (binary-names of the builds)
     tools/sets.py list deb|rpm <arch>           one line per set the package of <arch> carries: <class> <set> <cell or ->
     tools/sets.py github-output                 what release.yml's plan job needs, appended to $GITHUB_OUTPUT
     tools/sets.py substvars <deb arch>          the substvars of the Debian package of <deb arch> (debian/rules)
@@ -39,6 +39,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE = "plugin-qualification-records"
+# The source package's binary packages, exactly (this repository's qualification store spec, section 7): the records
+# package, which this tool builds the sets of, and the reader's library, its development files and its command. A
+# package, or a debian/<name>.install, .symbols or .lintian-overrides file, of any other name is refused.
+DEB_PACKAGES = [PACKAGE, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db"]
+RPM_PACKAGES = [PACKAGE, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db"]
+PACKAGE_FILES = (".install", ".symbols", ".lintian-overrides")
 SPEC = os.path.join("packaging", f"{PACKAGE}.spec")
 ARCH_CLASSES = os.path.join("packaging", "arch-classes")
 RELEASE_ARCHES = os.path.join("packaging", "release-arches")
@@ -248,10 +254,12 @@ def problems(root):
                 out.append(str(e))
 
     binaries = [s for s in control_stanzas(root) if "Package" in s]
-    if [s["Package"] for s in binaries] != [PACKAGE]:
-        out.append(f"debian/control: one binary package, {PACKAGE}, not {[s['Package'] for s in binaries]}")
-    else:
-        b = binaries[0]
+    names = [s["Package"] for s in binaries]
+    if names != DEB_PACKAGES:
+        out.append(f"debian/control: the binary packages are exactly {DEB_PACKAGES}, not {names}")
+    for b in binaries:
+        if b["Package"] != PACKAGE:
+            continue
         if sorted(b.get("Architecture", "").split()) != deb_arches:
             out.append(f"debian/control: Architecture is {b.get('Architecture')!r}, not the Debian architectures of "
                        f"{ARCH_CLASSES}: {' '.join(deb_arches)}")
@@ -260,8 +268,9 @@ def problems(root):
             if f"${{{var}}}" not in b.get(field, ""):
                 out.append(f"debian/control: {field} does not carry ${{{var}}}")
     for name in sorted(os.listdir(os.path.join(root, "debian"))):
-        if name == "install" or (name.endswith((".install", ".lintian-overrides")) and name.rsplit(".", 1)[0] != PACKAGE):
-            out.append(f"debian/{name}: a file of no package; the one binary package is {PACKAGE}")
+        stem, ext = os.path.splitext(name)
+        if name == "install" or (ext in PACKAGE_FILES and stem not in DEB_PACKAGES):
+            out.append(f"debian/{name}: a file of no package; the binary packages are {' '.join(DEB_PACKAGES)}")
 
     try:
         spec = read(root, SPEC)
@@ -269,6 +278,9 @@ def problems(root):
         return out + [f"{SPEC}: missing"]
     if not re.search(rf"^Name: *{re.escape(PACKAGE)}$", spec, re.M):
         out.append(f"{SPEC}: Name is not {PACKAGE}")
+    declared = re.findall(r"^%package +(.*?) *$", spec, re.M)
+    if declared != [f"-n {n}" for n in RPM_PACKAGES[1:]]:
+        out.append(f"{SPEC}: the %package lines are exactly {[f'-n {n}' for n in RPM_PACKAGES[1:]]}, not {declared}")
     rpm_arches = {line["rpm"] for line in lines}
     built = exclusive_arch(root)
     if not built:
@@ -369,7 +381,7 @@ def main(argv, root=os.path.dirname(HERE)):
                 print(f"this version releases: deb {' '.join(rel['deb']) or 'none'}, rpm {' '.join(rel['rpm']) or 'none'}")
             return 1 if p else 0
         if cmd == "names" and len(argv) == 2 and argv[1] in FORMATS:
-            print(PACKAGE)
+            print(" ".join(DEB_PACKAGES if argv[1] == "deb" else RPM_PACKAGES))
             return 0
         if cmd == "list" and len(argv) == 3 and argv[1] in FORMATS:
             for cls, set_ in carried(root, argv[1], argv[2]):
@@ -380,9 +392,9 @@ def main(argv, root=os.path.dirname(HERE)):
             # the install-and-sync proofs run where the records' plugins are: Debian's arm64 lv2vocoder, the
             # channel's x86_64 omx-plugins
             lines = [f"deb-arches={json.dumps(rel['deb'])}", f"deb-run={'true' if rel['deb'] else 'false'}",
-                     f"deb-names={PACKAGE}", f"deb-prove={'true' if 'arm64' in rel['deb'] else 'false'}",
+                     f"deb-names={' '.join(DEB_PACKAGES)}", f"deb-prove={'true' if 'arm64' in rel['deb'] else 'false'}",
                      f"rpm-arches={json.dumps(rel['rpm'])}", f"rpm-run={'true' if rel['rpm'] else 'false'}",
-                     f"rpm-names={PACKAGE}", f"rpm-prove={'true' if 'x86_64' in rel['rpm'] else 'false'}"]
+                     f"rpm-names={' '.join(RPM_PACKAGES)}", f"rpm-prove={'true' if 'x86_64' in rel['rpm'] else 'false'}"]
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
             print("\n".join(lines))

@@ -267,3 +267,14 @@ machine always upgrades to the newer set.
 ## License
 
 GPL-3.0-or-later, as plugin-qualify. See `LICENSE`.
+
+## The reader
+
+`libplugin-qualification-db`, its command `plugin-qualification-db` and `plugin-qualification-db.pc` are built with
+`make` and tested with `make check` (a C compiler, `sqlite3` 3.37.0 or later and `libomx-domain` from omx-contract
+3.20.0 or later, found by `pkg-config`; Python 3 builds the fixture stores from `schema/qualification.sql`).
+`make install DESTDIR=... PREFIX=/usr` installs the library, the command, the header, the `.pc` and the DDL
+(`pkg-config --variable=schema plugin-qualification-db`).
+
+`SQLITE_CFLAGS`, `SQLITE_LIBS`, `DOMAIN_CFLAGS`, `DOMAIN_LIBS` and `CONTRACTDIR` override what pkg-config says. They
+are a local convenience for a machine without the development packages installed; CI and the packages use pkg-config.

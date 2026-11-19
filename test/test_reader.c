@@ -140,9 +140,7 @@ static int collect(const pqdb_result *x, void *ctx)
 }
 static pqdb_query any(void)
 {
-    pqdb_query q;
-    memset(&q, 0, sizeof q);
-    q.rate = q.quantum = -1;
+    pqdb_query q = PQDB_QUERY_ANY;
     return q;
 }
 static int walk(pqdb *db, const pqdb_query *q, rows *o)
@@ -419,6 +417,28 @@ static void t16_hot_journal(void)
     CHECK(same_file(fx("user-hot.sqlite"), under(t, "user.sqlite")), "the layer changed");
     CHECK(same_file(j1, j2), "the journal changed or is gone");
 }
+static void t19_query_any(void)
+{
+    pqdb *db;
+    rows o;
+    pqdb_query q = PQDB_QUERY_ANY, zero;
+    memset(&zero, 0, sizeof zero);
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(walk(db, &q, &o) == 0, "walk");
+    CHECK(matches_expect(&o, fx("expect-merged.tsv")), "PQDB_QUERY_ANY does not give every row");
+    /* 0 keeps its meaning: a zeroed query asks for rate 0 and quantum 0, which no cell has */
+    CHECK(walk(db, &zero, &o) == 0 && o.n == 0, "a zeroed query matched %d rows", o.n);
+    pqdb_close(db);
+}
+static void t20_query_any_fields(void)
+{
+    pqdb_query q = PQDB_QUERY_ANY;
+    const char *s[] = { q.sha256, q.format, q.uri, q.offer, q.host_class, q.pkg_format, q.pkg_name, q.pkg_version,
+                        q.pkg_release, q.pkg_distro, q.pkg_arch };
+    for (size_t i = 0; i < sizeof s / sizeof *s; i++)
+        CHECK(s[i] == NULL, "string field %zu of PQDB_QUERY_ANY is not NULL", i);
+    CHECK(q.rate == -1 && q.quantum == -1, "rate %d quantum %d", q.rate, q.quantum);
+}
 static void t17_adapter_code(void)
 {
     pqdb_error e;
@@ -538,7 +558,7 @@ static const test TESTS[] = {
     { "08 another key is not shadowed", t08_other_key_not_shadowed, 0 }, { "09 package lookup", t09_package_lookup, 0 },
     { "10 read only", t10_read_only, 0 }, { "12 busy", t12_busy, 0 }, { "13 figures agree with qualcost", t13_figures, 0 },
     { "16 hot journal", t16_hot_journal, 0 }, { "17 adapter code in parts", t17_adapter_code, 0 },
-    { "18 verdict of a result", t18_verdict, 0 },
+    { "18 verdict of a result", t18_verdict, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

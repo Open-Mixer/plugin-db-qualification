@@ -1,0 +1,96 @@
+.\" SPDX-License-Identifier: GPL-3.0-or-later
+.\" Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+.TH PLUGIN-QUALIFICATION-DB 1 2026-11-19 plugin-db-qualification "User Commands"
+.SH NAME
+plugin-qualification-db \- query the OpenMixer qualification store
+.SH SYNOPSIS
+.B plugin-qualification-db query
+.RB [ \-\-sha256
+.IR hash ]
+.RB [ \-\-format
+.IR format ]
+.RB [ \-\-uri
+.IR uri ]
+.RB [ \-\-offer
+.IR offer ]
+.RB [ \-\-host\-class
+.IR class ]
+.RB [ \-\-rate
+.IR n ]
+.RB [ \-\-quantum
+.IR n ]
+.RB [ \-\-pkg\-format
+.IR f ]
+.RB [ \-\-pkg\-name
+.IR n ]
+.RB [ \-\-pkg\-version
+.IR v ]
+.RB [ \-\-pkg\-release
+.IR r ]
+.RB [ \-\-pkg\-distro
+.IR d ]
+.RB [ \-\-pkg\-arch
+.IR a ]
+.B \-\-json
+.RI [ common\ options ]
+.br
+.B plugin-qualification-db check
+.RI [ common\ options ]
+.SH DESCRIPTION
+Reads the qualification store with libplugin-qualification-db: the base database installed by
+plugin-qualification-records and the user layer, merged by whole record (a user record shadows every base
+record of its plugin, offer and host class). The command is the reader for programs that cannot link the library.
+.SH COMMANDS
+.TP
+.B query \-\-json
+Prints one JSON object per line for every result the filters match, user layer first: the layer, the plugin key,
+the offer, the host class, the set, the package fields (null when not known), the cell's rate, quantum and outcome,
+the cost, latency and memory figures with their has_ flags, and every verdict of the record. Words and numbers only.
+.TP
+.B check
+Opens both layers and checks every word column against the installed contract domains. Prints
+.B ok
+and exits 0, or prints the refusal code and its message and exits 1.
+.SH OPTIONS
+.TP
+.BI \-\-base " path"
+The base database. Default: the value of
+.BR PLUGIN_QUALIFICATION_DB_BASE ,
+else /usr/share/omx/qualification/qualification.sqlite.
+.TP
+.BI \-\-user " path"
+The user layer; an empty path reads none. Default: the value of
+.BR PLUGIN_QUALIFICATION_DB_USER ,
+else the layer under the home directory of the effective user,
+.IR ~/.local/share/omx/qualification/qualification.sqlite .
+An absent user layer is an empty layer.
+.TP
+.BI \-\-contract\-dir " dir"
+The contract directory the word check reads. Default: the value of
+.BR OMX_CONTRACT_PATH ,
+else the installed contract directory.
+.SH ENVIRONMENT
+.BR PLUGIN_QUALIFICATION_DB_BASE ,
+.BR PLUGIN_QUALIFICATION_DB_USER
+and
+.BR OMX_CONTRACT_PATH
+are read by this command only, and a flag beats its variable. The library reads no environment variable.
+.SH EXIT STATUS
+0 on success; 1 when the store is refused (the code is
+.B qualification-db.absent ,
+.BR qualification-db.unreadable ,
+.BR qualification-db.not-a-store ,
+.BR qualification-db.schema-mismatch ,
+.BR qualification-db.schema-other ,
+.BR qualification-db.domain-too-old ,
+.BR qualification-db.word-unknown ,
+.BR qualification-db.hot-journal ,
+.B qualification-db.busy
+or a code of the contract loader); 2 on a usage error.
+.SH FILES
+.TP
+.I /usr/share/omx/qualification/qualification.sqlite
+The base database.
+.TP
+.I /usr/share/plugin-qualification-db/qualification.sql
+The DDL of the store (the schema variable of plugin-qualification-db.pc).

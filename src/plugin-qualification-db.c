@@ -92,7 +92,7 @@ int main(int argc, char **argv)
     const char *sha = NULL, *format = NULL, *uri = NULL, *offer = NULL, *cls = NULL;
     const char *pk[6] = { NULL };
     int rate = -1, quantum = -1, json = 0, have_user = 0;
-    pqdb_query q;
+    pqdb_query q = PQDB_QUERY_ANY;
     pqdb *db = NULL;
     pqdb_error err;
     const char *verb;
@@ -162,7 +162,6 @@ int main(int argc, char **argv)
         pqdb_close(db);
         return 0;
     }
-    memset(&q, 0, sizeof q);
     q.sha256 = sha; q.format = format; q.uri = uri; q.offer = offer; q.host_class = cls;
     q.rate = rate; q.quantum = quantum;
     q.pkg_format = pk[0]; q.pkg_name = pk[1]; q.pkg_version = pk[2]; q.pkg_release = pk[3]; q.pkg_distro = pk[4]; q.pkg_arch = pk[5];

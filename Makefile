@@ -81,6 +81,9 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	rm -rf $(BUILD)/stage
 	$(MAKE) install DESTDIR=$(abspath $(BUILD)/stage) PREFIX=/usr
 	sh test/test_install.sh $(abspath $(BUILD)/stage) $(LIBDIR)
+	rm -rf $(BUILD)/stage2
+	$(MAKE) install DESTDIR=$(abspath $(BUILD)/stage2) PREFIX=/usr/local LIBDIR=/usr/local/lib DATADIR=/usr/local/share
+	sh test/test_prefix.sh $(abspath $(BUILD)/stage2)
 
 clean:
 	rm -rf $(BUILD)

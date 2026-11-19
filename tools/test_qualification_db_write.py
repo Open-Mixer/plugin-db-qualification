@@ -73,6 +73,8 @@ def contract_dir():
                 "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
             doc["components"]["schemas"].setdefault("QUALIFICATION_PIN_VERDICTS", {
                 "oneOf": [{"const": w} for w in ("in-process", "isolated", "refused")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_BLOCKERS", {
+                "oneOf": [{"const": w} for w in ("refused", "unknown", "no-deciding-reason")]})
             doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_MOVES", {
                 "oneOf": [{"const": w} for w in ("demote", "promote", "none")]})
             doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_REASONS", {
@@ -400,6 +402,23 @@ class FieldAudit(Layer):
             self.put(self.edited(f))
         self.assertEqual(cm.exception.name, "word-unknown")
         self.assertIn("not-a-code", str(cm.exception))
+
+    def test_the_blockers_of_the_history_are_words_of_their_own_item(self):
+        """blockers() of history-adjust.ts: refused, unknown, no-deciding-reason (QUALIFICATION_HISTORY_BLOCKERS)."""
+        def f(r):
+            self.full(r)
+            r["history"][0]["verdicts"][0]["blockedBy"] = ["unknown", "no-deciding-reason", "refused", "hosting.stability.unsoaked"]
+        rec = self.edited(f)
+        self.put(rec)
+        self.assertEqual(json.dumps(self.export()["history"]), json.dumps(rec["history"]))
+
+    def test_a_pin_verdict_that_is_no_blocker_is_refused(self):
+        def f(r):
+            self.full(r)
+            r["history"][0]["verdicts"][0]["blockedBy"] = ["isolated"]
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(self.edited(f))
+        self.assertEqual(cm.exception.name, "word-unknown")
 
     def test_an_empty_history_is_refused(self):
         self.refused("array-empty", "history", rec=self.edited(lambda r: r.update(history=[])))

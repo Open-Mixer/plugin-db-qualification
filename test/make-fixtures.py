@@ -325,6 +325,11 @@ def main(out):
     c = sqlite3.connect(p("base-hosting-word.sqlite"))
     c.execute("UPDATE verdict SET deciding = 'hosting.held-by-no-package' WHERE record_id = 1 AND ord = 1")
     c.commit(); c.close()
+    # a column that also holds hosting words keeps its other items: a word of them that no item holds is refused
+    build(p("base-bad-deciding.sqlite"), 0, BASE)
+    c = sqlite3.connect(p("base-bad-deciding.sqlite"))
+    c.execute("UPDATE verdict SET deciding = 'probe.no-such-word' WHERE record_id = 1 AND ord = 1")
+    c.commit(); c.close()
     build(p("base-bad-rating.sqlite"), 0, BASE)
     c = sqlite3.connect(p("base-bad-rating.sqlite"))
     c.execute("UPDATE verdict SET rating = 'excellent' WHERE record_id = 1 AND ord = 0")

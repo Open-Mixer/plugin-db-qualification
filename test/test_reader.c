@@ -806,6 +806,9 @@ static void hosting_open(void)
         CHECK(walk(db, &q, &o) == 0 && o.n > 0, "walk");
         pqdb_close(db);
     } else CHECK(0, "a hosting word was checked by the reader");
+    /* a column that holds hosting, probe and qualification words: only the hosting words are skipped */
+    expect_refusal(fx("base-bad-deciding.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
+    CHECK(strstr(e.message, "verdict.deciding") && strstr(e.message, "probe.no-such-word"), "%s", e.message);
     /* (b) nothing else narrowed: a word of another column is still refused, naming the column and the word */
     expect_refusal(fx("base-bad-rating.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
     CHECK(strstr(e.message, "verdict.rating") && strstr(e.message, "excellent"), "%s", e.message);

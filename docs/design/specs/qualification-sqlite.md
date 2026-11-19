@@ -1067,7 +1067,8 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     layer;
   - `qualification-db.unreadable`: it exists and SQLite cannot open or read it;
   - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `user_layer` that is not the
-    file's (a user file opened as the base);
+    file's (a user file opened as the base), or a REAL column of a record holding a value that is not finite (no
+    JSON number writes it; the message names the layer, the record and the column);
   - `qualification-db.schema-mismatch`: the base and the user layer are at different `user_version`s;
   - `qualification-db.schema-other`: a file's `user_version` is not the reader's `PQDB_SCHEMA_VERSION`;
   - `qualification-db.layer-unknown`: a query's `layer` is not `user` or `base`;

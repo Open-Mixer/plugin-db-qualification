@@ -54,11 +54,25 @@ The spec is this repository's first design spec; each is named by its date and t
 | the machine class of a probe (arch, core band, clock band) | plugin-hostd's probe | plugin-hostd | the `machine` domain (plugin-hostd), read directly |
 | plugin key (SHA-256, format, uri) | plugin-qualify, from the binary | nobody: it is the bytes | plugin-db: the formats are plugin-db's words, checked against plugin-db's own published item, never a copy (section 3.4) |
 | package fields (format, distro, arch words) | the measuring run (none today) | plugin-qualify's record format | `qualification`, the `package` object precondition 1 adds |
-| the binary's identity: its path relative to its install root, its per-file list and the key's SHA-256 over that list (section 3.7) | plugin-qualify-sync, from the bytes installed on the machine | this repository (the rule); plugin-qualify's record format follows it in the same pass | plugin-db-qualification |
-| which files of an LV2 bundle or a CLAP the list holds | plugin-hostd (`plugin-hostd --pin-files`, the files its add checks) | plugin-hostd | the `pin` rules of plugin-hostd, read; the store keeps the list as given |
-| the records of a device's user or system layer | plugin-qualify-sync (the only writer, through this repository's writer module, section 6.1) | plugin-qualify (what it judges) and this repository (the layout) | plugin-qualify for the words, this repository for the layout |
-| the readers of the store: `qualify-rejudge`, `pruneStale` and `pluginCounts` of plugin-qualify-sync, plugin-hostd's `qualcost` | the store (this repository) | their repositories, which only read it | each consumer's repository for what it does with the answer; this repository for the answer |
 | the database layout, `user_version`, the reader | this repository | this repository | plugin-db-qualification |
+
+### Ownership of the store, the writer and the readers
+
+Producer, changer and owner domain, for what the consumer switch adds (ruling (a), section 9):
+
+- **The store DDL, the reader, the writer and the packages `plugin-qualification-db-write` and
+  `plugin-qualification-db-schema`:** this repository produces them, changes them and owns them.
+- **The record content** (the figures, verdicts, tiers and cost of a record, the key and the binary path of
+  section 3.7): plugin-qualify (the judge and the sync) produces it, and this repository stores it. The layout of the
+  store and the rule that the key is the binary entry's SHA-256 are this repository's; what a record says is
+  plugin-qualify's.
+- **The per-file list** (the files a pin holds, section 3.7): plugin-hostd produces it (`--pin-files`), and this
+  repository stores it as given.
+- **The words:** the `plugin-db`, `machine`, `probe`, `hosting` and `qualification` domains, each its owner's, as the
+  table above says; the store checks against them and defines none.
+- **The readers:** plugin-qualify (the match, `qualify-rejudge`, `pruneStale` and `pluginCounts`), plugin-hostd's
+  `qualcost`, and omx-panel later. Each reads through `pqdb.h` or the command and is its own repository's; the answer
+  is this repository's.
 
 The database stores words and checks every word column against its owner's domain item; it never defines a word,
 and its DDL holds no list of words.
@@ -706,7 +720,9 @@ lists (section 9, ruling 1).
 - There is ONE version, `PQDB_SCHEMA_VERSION` (1), held once in `schema/qualification.sql` and compiled into the
   reader and the writer from it. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
   and 3 release with the consumer switch, section 9, ruling 8), so the DDL of section 3.7's amendment is version 1, and
-  no store of an earlier shape exists to refuse. A reader reads exactly its version; there is no range
+  no store of an earlier shape exists to refuse. This holds only if no release of this repository ships a store before
+  the code of this amendment lands (section 9, ruling 10; section 10): that code must land before this pass's
+  release of this repository, or the DDL is version 2. A reader reads exactly its version; there is no range
   and no reader of an older version.
 - The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` (`schema-other`, naming the
   file, its version and the reader's); a base and a user layer at different versions (`schema-mismatch`, naming both
@@ -790,6 +806,11 @@ matched instead, by the pin.
   nothing matches on, checks against or builds a pin from `probe.sha256` or the probe output. The columns
   `probe_file`, `probe_sha256` and `probe_bytes` stay as evidence of which output the figures came from (section 9,
   ruling 1), and no consumer reads them to decide anything;
+- the pin set's OWNER is plugin-hostd. The match is exact set equality on the list plugin-hostd's `--pin-files` names,
+  so if plugin-hostd changes which files a pin holds (a preset file, another `.ttl`), the list of every stored LV2
+  record differs from what its bundle's pin now holds, no record matches, and every LV2 plugin is qualified again:
+  that change is a requalification of everything, and plugin-hostd's change says so. A list with one file more or one
+  file fewer than the installed pin does not match, whatever else agrees;
 - the pin has no probe bytes: the store holds none (section 9, ruling 1), the sync copies none beside the store, and
   the reader (section 6) hands the list, the layout and the version, which are all the pin takes.
 
@@ -1292,8 +1313,10 @@ The sync's tests belong to the sync's repository; the contract they hold is this
 
 C1. **Install root does not decide.** One record, the same bytes installed under `/usr/lib/clap`, under `/usr/lib64/clap`
     and under a home's `.clap`: the sync takes the record for each. Fails when the lookup uses an absolute path.
-C2. **One file differs.** An LV2 bundle with the binary of the record and a changed `.ttl`; and a bundle with a file the
-    list lacks: each is measured, not taken. Fails when only the binary is compared.
+C2. **One file differs.** An LV2 bundle with the binary of the record and a changed `.ttl`; a bundle whose pin holds one
+    file MORE than the record's list; and a bundle whose pin holds one file FEWER (the list names a file the installed
+    pin lacks): each is measured, not taken. Fails when only the binary is compared, or when the match is a subset
+    either way.
 C3. **`probe.sha256` decides nothing.** The record's `probe_sha256` altered in the store, and no probe output anywhere:
     the record is still taken, and a pin is built from the list, the layout and `tested_version`. Fails when the pin or
     the match reads the probe columns or a probe file.
@@ -1356,6 +1379,10 @@ Decided by the owner (2026-11-19):
    replaces `probe.sha256` (section 3.7). The sync is the writer of its own records into the user or system layer;
    `qualify-rejudge`, `pruneStale` and `pluginCounts` read the store and not `qualification_dir`; the reader answers
    them (section 6, section 6.1). There is no dual read and no fallback.
+10. **DECIDED (%7, ruling (a)): the key is the binary entry's own SHA-256.** The key's SHA-256 is the SHA-256 of the list's
+    entry at `binary_path`, as the key is today. No re-key: no file name, descriptor name or stem changes (section 3.7).
+    Order: `user_version` stays 1 only if no release of this repository ships a store before the code of this amendment
+    lands, so that code lands before this pass's release of this repository.
 11. **DECIDED (%7, ruling (a)): rejudge works from rows only.** Probe bytes are never kept beside the store. Any field
     the judge needs gets a column, including `ownThreads` and `otherThreads` (section 6.2).
 
@@ -1370,6 +1397,8 @@ them (section 10).
   consumer (`readDistributedLayer`, `matchDistributed`, `applyDistributed`, `qualify-rejudge`, `pruneStale`,
   `pluginCounts`, the passes of the sync) reads the distributed JSON or a `qualification_dir` once the switch is made,
   and no importer turns the files of a device's `qualification_dir` into rows.
+- A release of this repository that ships a store before the code of this amendment lands: it would fix `user_version`
+  1 on a shape this amendment changes (section 3.6, section 9, ruling 10).
 - A hash over the whole list as the key's SHA-256, a store of probe outputs, and a probe-bytes pin (section 3.7).
 - Removing the old package names. The JSON files stop being installed with the consumer switch (section 5), not before.
 - An upgrade path for a user layer at another `user_version`.

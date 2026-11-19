@@ -208,5 +208,19 @@ else
     echo "skip   --scope under the shim: no shim or no PQDB_TEST_CONTRACTDIR"
 fi
 
+# a figure that is not finite is refused by name, never printed as `inf` (the library's pqdb_each says so, the command too)
+out=$("$cmd" query --json --base "$fx/nonfinite-cpu.sqlite" --user '' --contract-dir "$good" 2>"$fx/command-nonfinite.err"); rc=$?
+[ $rc -eq 1 ] || note "query --json of a store with an infinite figure exited $rc, expected 1"
+case "$out" in *inf*|*nan*) note "query --json printed a non-finite figure: $out" ;; esac
+grep -q 'qualification-db.not-a-store' "$fx/command-nonfinite.err" && grep -q 'cost_median' "$fx/command-nonfinite.err" || note "the refusal does not name not-a-store and the column: $(cat "$fx/command-nonfinite.err")"
+# the figures are written as JSON.stringify writes a number: 2, not 2.0 or 2e+00
+python3 -I - "$fx/command-query.out" <<'PY' || fail=1
+import json, sys
+bad = 0
+for l in open(sys.argv[1]).read().splitlines():
+    if l and ("e+" in l.split('"cost_median_ns":')[1].split(",")[0]):
+        print("  FAIL: a figure is written with an exponent where JSON.stringify writes none: %s" % l[:120]); bad = 1
+sys.exit(bad)
+PY
 if [ $fail -eq 0 ]; then echo "ok     14, 22 and 23 the command"; else echo "not ok 14, 22 and 23 the command"; fi
 exit $fail

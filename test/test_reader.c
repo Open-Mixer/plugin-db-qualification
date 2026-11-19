@@ -925,6 +925,37 @@ static void non_finite(void)
     }
 }
 
+/* ---- pqdb_each refuses a non-finite figure, and pqdb_number writes one as JSON.stringify does ---- */
+static int ignore_row(const pqdb_result *x, void *ctx) { (void)x; (void)ctx; return 0; }
+static void each_non_finite(void)
+{
+    pqdb *db;
+    pqdb_query q = any();
+    int rc;
+    if (open_ok(fx("nonfinite-cpu.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open"); return; }
+    rc = pqdb_each(db, &q, ignore_row, NULL);
+    CHECK(rc != 0 && pqdb_code(rc) && strcmp(pqdb_code(rc), "qualification-db.not-a-store") == 0, "pqdb_each gave %d (%s)", rc, pqdb_code(rc) ? pqdb_code(rc) : "no code");
+    CHECK(pqdb_message(db) != NULL && strstr(pqdb_message(db), "cost_median") != NULL, "message: %s", pqdb_message(db) ? pqdb_message(db) : "(none)");
+    pqdb_close(db);
+}
+static void number_writer(void)
+{
+    char t[64];
+    const struct { double v; const char *want; } c[] = { { 12.5, "12.5" }, { 2.0, "2" }, { 1e-7, "1e-7" }, { 0.1, "0.1" }, { -0.0, "0" } };
+    for (size_t i = 0; i < sizeof c / sizeof *c; i++)
+        CHECK(pqdb_number(c[i].v, t, sizeof t) == 0 && strcmp(t, c[i].want) == 0, "%g: got %s, want %s", c[i].v, t, c[i].want);
+    CHECK(pqdb_number(1e999, t, sizeof t) != 0 && pqdb_number(-1e999, t, sizeof t) != 0, "a non-finite number was written");
+    CHECK(pqdb_number(0.30000000000000004, t, 8) != 0, "a number too long for the buffer was written");
+    {   /* under a comma locale, when one is installed */
+        char old[128];
+        snprintf(old, sizeof old, "%s", setlocale(LC_NUMERIC, NULL));
+        if (setlocale(LC_NUMERIC, "ca_ES.UTF-8") || setlocale(LC_NUMERIC, "de_DE.UTF-8") || setlocale(LC_NUMERIC, "fr_FR.UTF-8")) {
+            CHECK(pqdb_number(12.5, t, sizeof t) == 0 && strcmp(t, "12.5") == 0, "under a comma locale: %s", t);
+            setlocale(LC_NUMERIC, old);
+        } else skip_reason = "no comma locale is installed on this machine";
+    }
+}
+
 /* ---- under test/shim.so ---- */
 static int has_sha(const rows *o, const char *c)
 {
@@ -1021,7 +1052,8 @@ static const test TESTS[] = {
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
     { "hosting columns checked like any other", hosting_columns, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
-    { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 },
+    { "pqdb_each refuses a non-finite figure", each_non_finite, 0 }, { "pqdb_number", number_writer, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

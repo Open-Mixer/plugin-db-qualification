@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 -- The qualification store, user_version 1 (this repository's qualification store spec, section 3.3, verbatim, with
--- WORD(c) written out as section 3.2 defines it). The writer sets PRAGMA user_version last.
+-- WORD(c) and RELPATH(c) written out as section 3.2 defines them). The writer sets PRAGMA user_version last.
 CREATE TABLE store_info (
   one            INTEGER PRIMARY KEY CHECK (one = 1),
   user_layer     INTEGER NOT NULL CHECK (user_layer IN (0, 1)),   -- 0: the base, 1: a user layer
@@ -76,7 +76,7 @@ CREATE TABLE record (
   pkg_distro  TEXT CHECK (pkg_distro IS NULL OR (length(pkg_distro) > 0 AND instr(pkg_distro, ' ') = 0 AND instr(pkg_distro, char(9)) = 0 AND instr(pkg_distro, char(10)) = 0)),   -- e.g. trixie, fc45
   pkg_arch    TEXT CHECK (pkg_arch IS NULL OR (length(pkg_arch) > 0 AND instr(pkg_arch, ' ') = 0 AND instr(pkg_arch, char(9)) = 0 AND instr(pkg_arch, char(10)) = 0)),       -- the package's own arch word: arm64, x86_64, all, noarch
   -- binary
-  binary_path    TEXT NOT NULL,
+  binary_path    TEXT NOT NULL CHECK (length(binary_path) > 0 AND binary_path NOT GLOB '/*' AND substr(binary_path, -1) <> '/' AND instr(binary_path, '//') = 0 AND instr('/' || binary_path || '/', '/./') = 0 AND instr('/' || binary_path || '/', '/../') = 0),
   layout_scheme  TEXT,
   layout_sha256  TEXT,
   unpinnable     INTEGER CHECK (unpinnable IN (0, 1)),               -- 1 when binary.unpinnable is present
@@ -127,14 +127,17 @@ CREATE TABLE record (
 ) STRICT;
 CREATE INDEX record_plugin  ON record (plugin_id, offer, host_class);
 CREATE INDEX record_package ON record (pkg_format, pkg_name, pkg_version, pkg_release, pkg_distro, pkg_arch);
+CREATE INDEX record_binary  ON record (binary_path);
 
-CREATE TABLE record_file (                 -- binary.files[]
+CREATE TABLE record_file (                 -- binary.files[]: the per-file list the pin matches on (section 3.7)
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
-  ord       INTEGER NOT NULL,
-  path      TEXT NOT NULL,
+  ord       INTEGER NOT NULL,              -- the list's order: ascending by path, bytewise (section 3.7)
+  path      TEXT NOT NULL CHECK (length(path) > 0 AND path NOT GLOB '/*' AND substr(path, -1) <> '/' AND instr(path, '//') = 0 AND instr('/' || path || '/', '/./') = 0 AND instr('/' || path || '/', '/../') = 0),   -- relative to the item's root, as the pin names it (section 3.7)
   sha256    TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
-  PRIMARY KEY (record_id, ord)
+  PRIMARY KEY (record_id, ord),
+  UNIQUE (record_id, path)
 ) STRICT;
+CREATE INDEX record_file_sha256 ON record_file (sha256);
 
 CREATE TABLE record_version (              -- adapter.versions, rejudged.figures.adapter.versions
   record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,

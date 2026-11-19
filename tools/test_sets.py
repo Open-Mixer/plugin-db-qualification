@@ -383,7 +383,7 @@ class Rules(Tree):
 
 
 class Prove(Tree):
-    def prove(self, kind, arch, extra_classes=(), image=None, **env_extra):
+    def prove(self, kind, arch, extra_classes=(), image=None, os_release=None, **env_extra):
         bin_ = os.path.join(self.tmp.name, "bin")
         os.makedirs(bin_, exist_ok=True)
         for tool in ("apt-get", "dpkg", "dpkg-query", "dnf", "rpm", "plugin-qualify-sync"):
@@ -399,8 +399,12 @@ class Prove(Tree):
         # the image's own identity: /etc/os-release under PROVE_ROOT (a Fedora 44 container, or Debian 13 for the deb)
         image = image or ("fedora", "44") if kind == "rpm" else image or ("debian", "13")
         os.makedirs(os.path.join(fake, "etc"), exist_ok=True)
-        with open(os.path.join(fake, "etc", "os-release"), "w") as f:
-            f.write(f'NAME="Test"\nID={image[0]}\nVERSION_ID="{image[1]}"\n')
+        if os_release is not None:
+            with open(os.path.join(fake, "etc", "os-release"), "w") as f:
+                f.write(os_release)
+        elif image != "none":
+            with open(os.path.join(fake, "etc", "os-release"), "w") as f:
+                f.write(f'NAME="Test"\nID={image[0]}\nVERSION_ID="{image[1]}"\n')
         os.makedirs(self.path("pkgs", "trixie"), exist_ok=True)
         log = os.path.join(self.tmp.name, "log")
         open(log, "w").close()
@@ -506,6 +510,27 @@ class Prove(Tree):
         rc, out, log = self.prove("deb", "arm64", image=("debian", "13"))
         self.assertEqual(rc, 0, out + log)
         self.assertIn("1 of 1 sets proven, 0 not proven (measured on another host class)", out)
+
+    def test_a_package_that_carries_no_set_fails_the_proof(self):
+        self.with_two_cells()
+        saved = sets.carried
+        sets.carried = lambda root, kind, arch: []
+        try:
+            rc, out, log = self.prove("rpm", "x86_64")
+        finally:
+            sets.carried = saved
+        self.assertEqual(rc, 1, out)
+        self.assertIn("::error::", out)
+        self.assertIn("carries no set", out)
+
+    def test_an_image_whose_host_class_cannot_be_read_fails_the_proof(self):
+        self.with_two_cells()
+        for text in (None, "", 'NAME="Test"\nID=fedora\n', 'NAME="Test"\nVERSION_ID="45"\n'):
+            rc, out, log = self.prove("rpm", "x86_64", image="none", os_release=text)
+            self.assertEqual(rc, 1, (text, out))
+            self.assertIn("::error::", out)
+            self.assertIn("host class of this image cannot be read", out)
+            self.assertNotIn("plugin-qualify-sync", log)
 
     def test_no_set_is_not_a_proof(self):
         os.environ["PROVE_ARCH"] = "x86_64"

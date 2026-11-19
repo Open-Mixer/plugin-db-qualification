@@ -820,6 +820,42 @@ static void hosting_columns(void)
     CHECK(strstr(e.message, "verdict.rating") && strstr(e.message, "excellent"), "%s", e.message);
 }
 
+/* ---- numbers as JSON.stringify writes them (ECMAScript Number::toString): cell.latency_ms of numbers.sqlite ---- */
+static void number_edges(void)
+{
+    static const char *const want[] = { "1e-7", "0.000001", "1.23e-18", "1e+21", "1.5e+300", "5e-324", "0", "100", "0.1",
+                                        "0.6666666666666666" };
+    pqdb *db;
+    pqdb_query q = any();
+    rows o;
+    char *json = NULL;
+    pqdb_error e;
+    const char *at;
+    if (open_ok(fx("numbers.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(walk(db, &q, &o) == 0 && o.n == 10, "%d cells", o.n);
+    if (o.n == 10) {
+        pqdb_result r;
+        memset(&r, 0, sizeof r);
+        r.layer = o.r[0].layer; r.sha256 = o.r[0].sha; r.format = o.r[0].format; r.uri = o.r[0].uri; r.offer = o.r[0].offer;
+        r.host_class = o.r[0].cls; r.rate = o.r[0].rate; r.quantum = o.r[0].quantum;
+        CHECK(pqdb_record_json(db, &r, &json, &e) == 0 && json, "%s", e.message);
+    }
+    at = json;
+    for (size_t i = 0; json && i < sizeof want / sizeof *want; i++) {
+        char got[64];
+        size_t n;
+        at = strstr(at, "\"latencyMs\":");
+        CHECK(at != NULL, "no latencyMs for cell %zu", i);
+        if (!at) break;
+        at += strlen("\"latencyMs\":");
+        n = strcspn(at, ",}");
+        snprintf(got, sizeof got, "%.*s", (int)(n < 63 ? n : 63), at);
+        CHECK(strcmp(got, want[i]) == 0, "cell %zu: got %s, JSON.stringify writes %s", i, got, want[i]);
+    }
+    free(json);
+    pqdb_close(db);
+}
+
 /* ---- under test/shim.so ---- */
 static int has_sha(const rows *o, const char *c)
 {
@@ -915,7 +951,7 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
-    { "hosting columns checked like any other", hosting_columns, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "hosting columns checked like any other", hosting_columns, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

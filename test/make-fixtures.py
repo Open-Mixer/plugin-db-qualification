@@ -214,6 +214,18 @@ def fill_nulls(c, table, where, skip=(), flags=(), bools=()):
             val = 1
         c.execute("UPDATE %s SET %s = ? WHERE %s" % (table, name, where), (val,))
 
+# numbers as JSON.stringify writes them (the cell's latencyMs, the record's latencyLineMs): what is stored, in the order of
+# the cells, and what the document must hold for each
+NUMBERS = [1e-7, 0.000001, 123e-20, 1e21, 1.5e300, 5e-324, -0.0, 100.0, 0.1, 2 / 3]
+
+def build_numbers(path):
+    build(path, 0, [rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256",
+                        cells=[cell(48000, 64 + i, (1.0, 95, 2.0), (1, 2), (3, 4)) for i in range(len(NUMBERS))])])
+    c = sqlite3.connect(path)
+    for i, v in enumerate(NUMBERS):
+        c.execute("UPDATE cell SET latency_ms = ? WHERE record_id = 1 AND ord = ?", (v, i))
+    c.commit(); c.close()
+
 def build_records(path):
     build(path, 0, RICH)
     c = sqlite3.connect(path)
@@ -361,6 +373,7 @@ def main(out):
     build(p("scope-home.sqlite"), 1, [rec((HOME_SHA, "clap", "urn:home"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))])])
     build(p("scope-xdg.sqlite"), 1, [rec((XDG_SHA, "clap", "urn:xdg"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))])])
     build_records(p("records.sqlite"))
+    build_numbers(p("numbers.sqlite"))
     write_expect(p("expect-base.tsv"), reference([("base", BASE)]))
     write_expect(p("expect-merged.tsv"), reference([("user", USER), ("base", BASE)]))
     write_expect(p("expect-user.tsv"), reference([("user", USER)]))

@@ -70,10 +70,11 @@ jobs:
       binary-names: ${{ needs.plan.outputs.deb-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
       # the arm64 records are for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
-      # bookworm images before it); no build dependency beyond debhelper and python3 (tools/sets.py)
+      # bookworm images before it); the reader builds with sqlite, pkgconf and the channel's libomx-domain-dev, the records with python3 (tools/sets.py)
       dependencies: ''
       requires: ''
-      channel-deps: false
+      # the reader's Build-Depends libomx-domain-dev comes from the channel; sqlite and pkgconf are Debian's
+      channel-deps: true
       build-packages: python3
       # trixie only: the channel has no bookworm suite to install plugin-qualify from, so a bookworm package could not
       # pass its install check; ZynthianOS Vangelis is trixie
@@ -134,10 +135,11 @@ jobs:
       package-name: plugin-qualification-records
       binary-names: ${{ needs.plan.outputs.rpm-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
-      # data, built per architecture; no mod-host, no channel BuildRequires
+      # the records are data, built per architecture; no mod-host
       arch-matrix: ${{ needs.plan.outputs.rpm-arches }}
       needs-mod-host: false
-      channel-deps: false
+      # the reader's BuildRequires libomx-domain-devel comes from the channel
+      channel-deps: true
     secrets: inherit
 
   # The x86_64 RPM installed where it is used, each set in turn: Fedora 45 x86_64 with plugin-qualify and the

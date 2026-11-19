@@ -10,8 +10,8 @@ Status: SPEC. Nothing here is built. Three changes follow it, in this repository
    its preconditions (section 3.4): the owners publish the words it checks;
 3. the reader: a C library and its command, `plugin-qualification-db`, with red-first tests.
 
-No consumer reads the database during the current release pass. The consumers switch in one change right after the
-console's 0.2.1 release; that change is not specified here.
+The consumers switch to the database in one change in the same release pass as changes 2 and 3, before the console's
+0.2.1 release (section 9, ruling 8); that change is made in the consumers' repositories and is not specified here.
 
 ## 1. Owner, and where this spec lives
 
@@ -63,7 +63,7 @@ and its DDL holds no list of words.
 | base database | `/usr/share/omx/qualification/qualification.sqlite` | the package `plugin-qualification-records`, one per architecture, built at package build from `records/` | read only, immutable |
 | user layer, user scope | `<home>/.local/share/omx/qualification/qualification.sqlite`: the XDG data directory's default, `<home>` from `getpwuid(geteuid())`; `XDG_DATA_HOME` is not read | plugin-qualify-sync of that user, after the consumer switch; nobody before it | read only by readers; read-write by the writer only |
 | user layer, system scope | `/var/lib/omx/qualification/qualification.sqlite` (the system sync's `qualification_dir`) | `plugin-qualify-sync --system`, after the consumer switch | the same |
-| the DDL | `schema/qualification.sql` in this repository | read by the writer at build and when it creates a user layer | |
+| the DDL | `schema/qualification.sql` in this repository; installed as `<datadir>/plugin-qualification-db/qualification.sql` by `libplugin-qualification-db-dev`, named by the `schema` variable of `plugin-qualification-db.pc` (`pkg-config --variable=schema plugin-qualification-db`) | read by the writer at build and when it creates a user layer, and by test fixtures, from the installed file, with no checkout | |
 
 The base database sits beside today's `<host class>/<set>/` directories, which stay as they are (section 5). A
 database file in that directory is no `<host class>` directory, so `plugin-qualify-sync`'s distributed reader, which
@@ -110,12 +110,12 @@ readable, and they are never part of the key.
 - A NAME is an identifier written by a program: an id, a path, a hash, a version, a time, a symbol. It is stored as
   written and is not checked against a domain.
 - A NUMBER is stored as INTEGER (counts, rates, quanta, frames, kilobytes, bytes) or REAL (figures that may be
-  fractional). Every table is `STRICT`, so a value of the wrong type is refused at insert.
+  fractional). A param's number (`reason_param.number`, `adapter_param.number`, `adapter_cell_param.number`) is column type `ANY` checked to be `integer` or `real`, so the round trip keeps an integer an integer and a fraction a fraction as the JSON had it. Every table is `STRICT`, so a value of the wrong type is refused at insert.
 - A SENTENCE, prose written for a person, is not stored. Section 3.5 lists every field of today's records and
   provenances that is one. The base database records the commit it was built from (`store_info.built_from`), where the
   text of every record stays.
 - An optional JSON object is present when at least one of its columns is not NULL. The writer refuses an empty object
-  (`{}`) by name, except a map of the always-present list of section 3.3 (`reasons[].params`).
+  (`{}`) by name, except a map of the always-present list of section 3.3 (`reasons[].params`) and the two params maps of the adapter pass (`adapter.params`, `adapter.cells[].params`), whose `{}` is data: present, no params (`record.adapter_params`, `adapter_cell.params`).
 - A boolean is INTEGER with `CHECK (c IN (0, 1))`.
 
 ### 3.3 DDL
@@ -235,6 +235,7 @@ CREATE TABLE record (
   adapter_measured INTEGER CHECK (adapter_measured IN (0, 1)),
   adapter_code     TEXT CHECK (adapter_code IS NULL OR WORD(adapter_code)),
   adapter_measured_at TEXT,
+  adapter_params   INTEGER CHECK (adapter_params IS NULL OR adapter_params IN (0, 1)),   -- NULL: no adapter object; 1: adapter.params present
   -- memory pass
   memory_run_measured_at TEXT, memory_run_id TEXT, memory_run_runner TEXT, memory_run_child TEXT,
   -- rejudgement
@@ -307,7 +308,7 @@ CREATE UNIQUE INDEX reason_of_cost    ON reason (record_id, cost_ord, ord)    WH
 CREATE TABLE reason_param (                -- reasons[].params
   reason_id INTEGER NOT NULL REFERENCES reason ON DELETE CASCADE,
   name      TEXT NOT NULL CHECK (WORD(name)),
-  number    INTEGER,
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
   word      TEXT CHECK (word IS NULL OR WORD(word)),
   CHECK ((number IS NULL) <> (word IS NULL)),
   PRIMARY KEY (reason_id, name)
@@ -437,7 +438,28 @@ CREATE TABLE adapter_cell (                -- adapter.cells[]
   admitted INTEGER NOT NULL CHECK (admitted IN (0, 1)),
   measured INTEGER NOT NULL CHECK (measured IN (0, 1)),
   code TEXT CHECK (code IS NULL OR WORD(code)),
+  params INTEGER NOT NULL CHECK (params IN (0, 1)),   -- 1 when this cell's params is present
   PRIMARY KEY (record_id, ord)
+) STRICT;
+
+CREATE TABLE adapter_param (               -- adapter.params
+  record_id INTEGER NOT NULL REFERENCES record ON DELETE CASCADE,
+  name      TEXT NOT NULL CHECK (WORD(name)),
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
+  word      TEXT CHECK (word IS NULL OR WORD(word)),
+  CHECK ((number IS NULL) <> (word IS NULL)),
+  PRIMARY KEY (record_id, name)
+) STRICT;
+
+CREATE TABLE adapter_cell_param (          -- adapter.cells[].params
+  record_id INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  name      TEXT NOT NULL CHECK (WORD(name)),
+  number    ANY CHECK (number IS NULL OR typeof(number) IN ('integer', 'real')),
+  word      TEXT CHECK (word IS NULL OR WORD(word)),
+  CHECK ((number IS NULL) <> (word IS NULL)),
+  PRIMARY KEY (record_id, ord, name),
+  FOREIGN KEY (record_id, ord) REFERENCES adapter_cell (record_id, ord) ON DELETE CASCADE
 ) STRICT;
 
 CREATE TABLE memory_run_cell (             -- memoryRun.cells[]
@@ -531,8 +553,8 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd, plugin-qualify | `hosting`, `probe`, `qualification` | the `HOSTING_*` codes items, `PROBE_OUTCOMES`, `QUALIFICATION_MEMORY_BOUND_OUTCOMES`, and an adapter code checked in parts: today's values come from all of them | added (preconditions 1, 4 and 5) |
 | `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
 | `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
-| `reason_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...) | added |
-| `reason_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
+| `reason_param.name`, `adapter_param.name`, `adapter_cell_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...; the adapter params' keys `notes`, `peak`, `quantum`, `rate`, `resp`, `step` are in it too) | added |
+| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
 | `tier.tier` | plugin-qualify | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
 | `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
 | `cell.voices_basis`, `cell.mem_basis` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
@@ -606,7 +628,9 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `notMeasured[].dimension`, `.code` | `not_measured.*` |
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
 | `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
+| `adapter.params.<name>` | `adapter_param.name`, `.number` or `.word`; presence: `record.adapter_params` (NULL with no `adapter` object, 1 when `params` is present, 0 when absent) |
 | `adapter.cells[].rate`, `.quantum`, `.admitted`, `.measured`, `.code` | `adapter_cell.*` |
+| `adapter.cells[].params.<name>` | `adapter_cell_param.name`, `.number` or `.word`; presence: `adapter_cell.params` |
 | `memoryRun.measuredAt`, `.runId`, `.tool.runner`, `.tool.child` | `record.memory_run_measured_at`, `.memory_run_id`, `.memory_run_runner`, `.memory_run_child` |
 | `memoryRun.cells[].rate`, `.quantum`, `.outcome` | `memory_run_cell.*` |
 | `rejudged.at`, `.by` | `record.rejudged_at`, `.rejudged_by` |
@@ -718,11 +742,12 @@ lists (section 9, ruling 1).
     hold every leaf at least once, the test reads each path's value from the JSON and the column's value with its own
     SQL, and compares them. A mapping that is wrong in both directions (two columns swapped by the writer and the
     exporter alike) passes the round trip and fails this check.
-- **The old package and files.** Nothing is removed in this pass. `plugin-qualification-records` keeps installing
-  every `<class>/<set>/` file byte for byte, and adds `qualification.sqlite` beside them. The package's name, its
-  Provides, Replaces and Breaks, and its dependencies stay as they are. This follows the owner's sequencing: no
-  consumer switches until after the console's 0.2.1 release, and the switch is one change. That change, the consumer
-  switch, is the one that stops installing the JSON files: in the same change the consumers read the database and the
+- **The old package and files.** Changes 1 to 3 remove nothing: `plugin-qualification-records` keeps installing every
+  `<class>/<set>/` file byte for byte, and adds `qualification.sqlite` beside them, until the consumer switch, later in
+  this pass, stops installing them. The package's name, its
+  Provides, Replaces and Breaks, and its dependencies stay as they are. The switch is one change, made in the same
+  release pass as this one, before the console's 0.2.1 release (section 9, ruling 8). That change, the consumer switch,
+  is the one that stops installing the JSON files: in the same change the consumers read the database and the
   package ships only `qualification.sqlite`. `records/` stays in this repository as the source the database is built
   from.
 
@@ -741,7 +766,7 @@ lists (section 9, ruling 1).
 One implementation, in C, so the two consumers cannot answer differently.
 
 **Header** `<plugin-qualification-db/pqdb.h>`, library `libplugin-qualification-db.so.0`, pkg-config
-`plugin-qualification-db`:
+`plugin-qualification-db`, whose `schema` variable names the installed DDL (`<datadir>/plugin-qualification-db/qualification.sql`, section 2). Errors are strings by name: `pqdb_error.code` and `pqdb_code(status)` give `qualification-db.*`; the header defines no numeric error constants, the names are the contract. `pqdb_verdicts` walks every verdict of a result's record (the command prints them):
 
 ```c
 typedef struct pqdb pqdb;                          /* an opened base and user layer; opaque */
@@ -756,7 +781,9 @@ int  pqdb_open_at(const char *base, const char *user, const char *contract_dir, 
 void pqdb_close(pqdb *db);
 const char *pqdb_code(int status);                 /* "qualification-db.absent" ... */
 
-typedef struct {                                    /* every field optional: NULL or -1 is "any" */
+/* every field optional: a string of NULL, and a rate or quantum of -1, is "any"; 0 is not. Start from PQDB_QUERY_ANY. */
+#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL }
+typedef struct {
     const char *sha256, *format, *uri, *offer, *host_class;
     int rate, quantum;
     const char *pkg_format, *pkg_name, *pkg_version, *pkg_release, *pkg_distro, *pkg_arch;
@@ -780,6 +807,8 @@ int  pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_resul
 /* The verdict of a result's record under one host profile: rating word, measured, qualified, deciding (NULL: none). */
 typedef struct { const char *rating, *deciding; int measured, qualified; } pqdb_verdict;
 int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_verdict *out);
+/* Every verdict of the result's record, in the record's order. */
+int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char *host, const pqdb_verdict *, void *), void *ctx);
 ```
 
 - **From an installed package to its results:** `pqdb_each` with the `pkg_*` fields of the query set (format, name,
@@ -829,7 +858,7 @@ int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqd
 | --- | --- | --- | --- |
 | `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same three contract floors. Run time: none |
 | `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
-| `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` | | `libplugin-qualification-db0 (= ${binary:Version})` |
+| `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc`, and the DDL at `<datadir>/plugin-qualification-db/qualification.sql` (the `.pc`'s `schema` variable) | | `libplugin-qualification-db0 (= ${binary:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
 
 **Generated, not committed.** Today's records are text (JSON, 248 MB unpacked), reviewed as text and never rewritten.
@@ -890,6 +919,8 @@ makes it fail.
     writer checks the formats against a list of its own or of the `qualification` domain.
 17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string. Fails when a word list
     is written into a `CHECK`.
+18. **Fractional reason param.** A fixture reason with `params.coreFractionP95: 0.37` and another with `params.blocks: 40` read back as 0.37 and 40, the second an integer (`typeof` `integer`, `real` for the first). Fails when `reason_param.number` is `INTEGER` (the fraction is refused or rounded) or when the exporter writes 40 as 40.0.
+19. **Adapter params round trip.** A fixture record with `adapter.params: {}`, one with `adapter.params: {"resp": 3, "step": "add"}`, one without `params`, and an adapter cell with `params: {"peak": 0.5}` and one with `params: {}` read back exactly, `{}` staying `{}` and absence staying absent. Fails when presence is not stored (`record.adapter_params`, `adapter_cell.params`) or a param is dropped.
 
 ### Change 3: the reader
 
@@ -954,16 +985,17 @@ Decided by the owner (2026-11-19):
    precondition 2).
 7. **DECIDED (#17): whole-record shadowing.** A newer user record shadows the whole base record, at every cell, and the
    base is never deleted (section 4).
+8. **DECIDED (2026-11-19 17:10Z): the consumer switch is in this pass.** plugin-qualify-sync, plugin-hostd and any other
+   reader move to the database in one change, in the same release pass as changes 2 and 3, before the console's 0.2.1
+   release. plugin-qualify's release line and plugin-hostd's wait for it and tag once, with it.
 
 The records a device already holds in its `qualification_dir` are not migrated by this work; the consumer switch
 decides whether the device re-measures them or runs the same writer over that directory.
 
 ## 10. Out of scope
 
-- The consumer switch: plugin-qualify-sync, plugin-hostd and any other reader move to the database in one change right
-  after the console's 0.2.1 release. Until then no consumer opens it.
 - Any compatibility mechanism: no dual read of the old files and the database, no fallback from one to the other, no
   alias, no shim, no second format. If the switch seems to need one, it stops and asks the owner.
-- Removing the old files or the old package names: nothing is removed in this pass.
+- Removing the old package names. The JSON files stop being installed with the consumer switch (section 5), not before.
 - An upgrade path for a user layer at another `user_version`.
 - plugin-db's store and its judged and reference layers.

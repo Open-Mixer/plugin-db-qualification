@@ -31,6 +31,9 @@ sets = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sets)
 
 PKG = "plugin-qualification-records"
+# the reader's packages beside the records package (this repository's qualification store spec, section 7)
+DEB_NAMES = [PKG, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db"]
+RPM_NAMES = [PKG, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db"]
 SPEC = os.path.join("packaging", f"{PKG}.spec")
 CELLS = ("fedora44-48000-512", "fedora44-96000-256")
 with open(os.path.join(ROOT, "debian", "changelog"), encoding="utf-8") as _f:
@@ -121,8 +124,8 @@ class Check(Tree):
         self.assertEqual(sets.problems(self.root), [])
 
     def test_one_binary_name_on_every_format(self):
-        self.assertEqual(self.run_main("names", "deb"), (0, PKG + "\n"))
-        self.assertEqual(self.run_main("names", "rpm"), (0, PKG + "\n"))
+        self.assertEqual(self.run_main("names", "deb"), (0, " ".join(DEB_NAMES) + "\n"))
+        self.assertEqual(self.run_main("names", "rpm"), (0, " ".join(RPM_NAMES) + "\n"))
 
     def test_each_architecture_lists_its_classes_sets(self):
         self.with_two_cells()
@@ -177,6 +180,55 @@ class Check(Tree):
         self.edit("debian/control", "Breaks: ${records:Breaks}", "Breaks: foo")
         self.assertIn("Breaks does not carry ${records:Breaks}", self.problems())
 
+    def layout(self, deb=None, rpm=None):
+        """The tree's debian/control and spec with the records package and the reader's three, or the given names."""
+        deb = DEB_NAMES[1:] if deb is None else deb
+        rpm = RPM_NAMES[1:] if rpm is None else rpm
+        control = self.read_file("debian/control")
+        stanzas = control.strip().split("\n\n")
+        keep = [x for x in stanzas if not re.search(r"^Package: ", x, re.M) or re.search(rf"^Package: {PKG}$", x, re.M)]
+        extra = ["Package: %s\nArchitecture: any\nDepends: ${misc:Depends}\nDescription: the reader\n The reader." % n for n in deb]
+        with open(self.path("debian", "control"), "w") as f:
+            f.write("\n\n".join(keep + extra) + "\n")
+        text = re.sub(r"^%package .*\n", "", self.read_file(SPEC), flags=re.M)
+        with open(self.path(*SPEC.split(os.sep)), "w") as f:
+            f.write(text.replace("\n%prep\n", "\n" + "".join("%package -n " + n + "\n" for n in rpm) + "\n%prep\n", 1))
+        for n in DEB_NAMES[1:]:
+            for ext in ("install", "symbols", "lintian-overrides"):
+                if os.path.exists(self.path("debian", f"{n}.{ext}")):
+                    os.remove(self.path("debian", f"{n}.{ext}"))
+
+    def test_the_four_package_layout_passes(self):
+        self.layout()
+        self.assertEqual(sets.problems(self.root), [])
+        for n in DEB_NAMES[1:]:
+            for ext in ("install", "symbols", "lintian-overrides"):
+                with open(self.path("debian", f"{n}.{ext}"), "w") as f:
+                    f.write("x\n")
+        self.assertEqual(sets.problems(self.root), [])
+
+    def test_a_fifth_binary_package_is_refused(self):
+        self.layout(deb=DEB_NAMES[1:] + ["libplugin-qualification-db-extra"])
+        self.assertIn("debian/control: the binary packages are exactly", self.problems())
+
+    def test_a_missing_binary_package_is_refused(self):
+        self.layout(deb=["libplugin-qualification-db-dev", "plugin-qualification-db"])
+        self.assertIn("debian/control: the binary packages are exactly", self.problems())
+
+    def test_a_fifth_rpm_package_or_a_missing_one_is_refused(self):
+        self.layout(rpm=RPM_NAMES[1:] + ["libplugin-qualification-db-extra"])
+        self.assertIn("the %package lines are exactly", self.problems())
+        self.layout(rpm=RPM_NAMES[2:])
+        self.assertIn("the %package lines are exactly", self.problems())
+
+    def test_a_file_of_no_package_is_refused_for_every_kind(self):
+        self.layout()
+        for ext in ("install", "symbols", "lintian-overrides"):
+            with open(self.path("debian", f"libplugin-qualification-db-other.{ext}"), "w") as f:
+                f.write("x\n")
+            self.assertIn(f"debian/libplugin-qualification-db-other.{ext}: a file of no package", self.problems())
+            os.remove(self.path("debian", f"libplugin-qualification-db-other.{ext}"))
+
     def test_an_old_per_set_file_is_refused(self):
         with open(self.path("debian", "plugin-db-qualification-rpi5-zynthian-vangelis.install"), "w") as f:
             f.write("records/rpi5/zynthian-vangelis usr/share/omx/qualification/rpi5\n")
@@ -197,8 +249,8 @@ class Check(Tree):
             self.assertEqual(self.run_main("github-output")[0], 0)
             with open(out) as f:
                 self.assertEqual(f.read().splitlines(), [
-                    'deb-arches=["arm64"]', "deb-run=true", f"deb-names={PKG}", "deb-prove=true",
-                    "rpm-arches=[]", "rpm-run=false", f"rpm-names={PKG}", "rpm-prove=false"])
+                    'deb-arches=["arm64"]', "deb-run=true", f"deb-names={' '.join(DEB_NAMES)}", "deb-prove=true",
+                    "rpm-arches=[]", "rpm-run=false", f"rpm-names={' '.join(RPM_NAMES)}", "rpm-prove=false"])
             os.remove(out)
             # the later version: the amd64 deb and the x86_64 rpm join
             self.with_two_cells()
@@ -262,7 +314,7 @@ class Substvars(Tree):
                                       capture_output=True, text=True, check=True).stdout
             self.assertIn("plugin-qualify >= 0.20.1", q("--requires"))
             self.assertIn("plugin-db-qualification-x86-64-fedora44-48000-512 <", q("--obsoletes"))
-            self.assertEqual(q("--qf", "%{name}\n"), PKG + "\n")
+            self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
     def test_an_architecture_with_no_class_or_no_set_is_refused(self):
         self.assertEqual(self.run_main("substvars", "i386")[0], 1)
@@ -280,6 +332,10 @@ class Rules(Tree):
         with open(os.path.join(bin_, "dh_gencontrol"), "w") as f:
             f.write(f"#!/bin/sh\ncp debian/{PKG}.substvars \"$GENCONTROL_SAW\"\n")
         os.chmod(os.path.join(bin_, "dh_gencontrol"), 0o755)
+        # the reader's files are split by dh_install from the .install lists: not this test's concern
+        with open(os.path.join(bin_, "dh_install"), "w") as f:
+            f.write("#!/bin/sh\n")
+        os.chmod(os.path.join(bin_, "dh_install"), 0o755)
         saw = os.path.join(self.tmp.name, "substvars")
         env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"], GENCONTROL_SAW=saw)
         r = subprocess.run(["make", "-f", "debian/rules", target, f"DEB_HOST_ARCH={arch}"], cwd=self.root,

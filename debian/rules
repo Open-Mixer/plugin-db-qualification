@@ -29,9 +29,16 @@ endif
 override_dh_auto_install:
 	$(MAKE) $(READER) install DESTDIR=$(CURDIR)/debian/tmp
 
-# the sets of this architecture's classes, byte for byte, then the reader's files by their .install lists
+# the sets of this architecture's classes, byte for byte; beside them the base database built from the same sets, its
+# words checked against the contract directory's domains (the contract packages of Build-Depends) and its commit
+# BUILT_FROM's (a checkout: git's); then the reader's files by their .install lists
+CLASSES := $(shell python3 tools/sets.py list deb $(DEB_HOST_ARCH) | cut -d' ' -f1 | sort -u)
+CONTRACTDIR := $(shell pkg-config --variable=contractdir libomx-domain)
+
 override_dh_install:
 	python3 tools/sets.py install deb $(DEB_HOST_ARCH) debian/$(PKG)/usr/share/omx/qualification
+	python3 tools/records-db.py --records records $(addprefix --class ,$(CLASSES)) --contract-dir $(CONTRACTDIR) \
+	  --built-from-file BUILT_FROM --out debian/$(PKG)/usr/share/omx/qualification/qualification.sqlite
 	dh_install --sourcedir=debian/tmp
 
 # the plugin-qualify range of this architecture and the older package names it takes over

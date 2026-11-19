@@ -34,6 +34,12 @@ BuildRequires: python3
 BuildRequires: gcc make pkgconfig binutils
 BuildRequires: sqlite-devel >= 3.37.0
 BuildRequires: libomx-domain-devel >= 3.20.0
+# tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
+BuildRequires: python3-jsonschema
+BuildRequires: plugin-qualify-contract >= 0.20.7
+BuildRequires: plugin-hostd-contract >= 0.20.8
+BuildRequires: plugin-db-contract >= 0.4.7
+BuildRequires: omx-clap-core-contract >= 0.33.1
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
@@ -130,9 +136,16 @@ python3 tools/sets.py install rpm %{_target_cpu} %{buildroot}%{qual_dir}
 for class in $(ls %{buildroot}%{qual_dir}); do
     echo "%{qual_dir}/$class/"
 done > records.files
+# the base database of the same sets, beside them: its words are checked against the contract directory's domains
+# (the contract packages of BuildRequires) and its commit is BUILT_FROM's (git archive substituted it)
+classes=$(python3 tools/sets.py list rpm %{_target_cpu} | cut -d' ' -f1 | sort -u | sed 's/^/--class /')
+python3 tools/records-db.py --records records $classes --contract-dir "$(pkg-config --variable=contractdir libomx-domain)" \
+    --built-from-file BUILT_FROM --out %{buildroot}%{qual_dir}/qualification.sqlite
+echo "%{qual_dir}/qualification.sqlite" >> records.files
 %make_install PREFIX=%{_prefix} LIBDIR=%{_libdir}
 
 %check
+test -s %{buildroot}%{qual_dir}/qualification.sqlite
 make PREFIX=%{_prefix} LIBDIR=%{_libdir} check
 for dir in %{buildroot}%{qual_dir}/*/*/; do
     set=$(basename "$dir")

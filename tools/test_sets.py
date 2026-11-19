@@ -336,11 +336,22 @@ class Rules(Tree):
         with open(os.path.join(bin_, "dh_install"), "w") as f:
             f.write("#!/bin/sh\n")
         os.chmod(os.path.join(bin_, "dh_install"), 0o755)
+        # the base database's builder and the contract directory's path: this test is about what the rules pass them
+        with open(os.path.join(bin_, "pkg-config"), "w") as f:
+            f.write("#!/bin/sh\necho /contract/dir\n")
+        os.chmod(os.path.join(bin_, "pkg-config"), 0o755)
+        with open(self.path("tools", "records-db.py"), "w") as f:
+            f.write("import sys\nopen('records-db.args', 'w').write(' '.join(sys.argv[1:]))\n"
+                    "open(sys.argv[sys.argv.index('--out') + 1], 'w').write('database')\n")
         saw = os.path.join(self.tmp.name, "substvars")
         env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"], GENCONTROL_SAW=saw)
         r = subprocess.run(["make", "-f", "debian/rules", target, f"DEB_HOST_ARCH={arch}"], cwd=self.root,
                            capture_output=True, text=True, env=env)
         return r, saw
+
+    def read_args(self):
+        with open(self.path("records-db.args")) as f:
+            return f.read().split()
 
     def installed(self):
         base = self.path("debian", PKG, "usr", "share", "omx", "qualification")
@@ -350,7 +361,11 @@ class Rules(Tree):
         self.with_two_cells()
         r, _ = self.make("override_dh_install", "arm64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.installed(), ["rpi5/zynthian-vangelis/a.qualification.json", "rpi5/zynthian-vangelis/provenance.json"])
+        self.assertEqual(self.installed(), ["qualification.sqlite", "rpi5/zynthian-vangelis/a.qualification.json",
+                                            "rpi5/zynthian-vangelis/provenance.json"])
+        self.assertEqual(self.read_args(), ["--records", "records", "--class", "rpi5", "--contract-dir", "/contract/dir",
+                                            "--built-from-file", "BUILT_FROM", "--out",
+                                            f"debian/{PKG}/usr/share/omx/qualification/qualification.sqlite"])
         base = self.path("debian", PKG, "usr", "share", "omx", "qualification")
         self.assertTrue(filecmp.cmp(os.path.join(base, "rpi5", "zynthian-vangelis", "provenance.json"),
                                     self.path("records", "rpi5", "zynthian-vangelis", "provenance.json"), shallow=False))
@@ -359,7 +374,10 @@ class Rules(Tree):
         self.with_two_cells()
         r, _ = self.make("override_dh_install", "amd64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.installed(), [f"x86-64/{s}/{f}" for s in CELLS for f in ("a.qualification.json", "provenance.json")])
+        self.assertEqual(self.installed(), ["qualification.sqlite"] + [f"x86-64/{s}/{f}" for s in CELLS
+                                                                       for f in ("a.qualification.json", "provenance.json")])
+        self.assertIn("--class x86-64 ", " ".join(self.read_args()) + " ")
+        self.assertNotIn("rpi5", self.read_args())
 
     def test_gencontrol_gets_the_architectures_substvars(self):
         self.with_two_cells()

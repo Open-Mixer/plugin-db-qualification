@@ -533,7 +533,8 @@ class Packaging(unittest.TestCase):
         self.assertIn("python3-jsonschema:native", deps)
         for pkg in self.CONTRACTS:
             self.assertRegex(deps, rf"{pkg} \(>= \d+(\.\d+)+~\)", pkg)
-        self.assertNotRegex(deps, r"\(<|<<|<=|=\s*\d")
+        self.assertNotRegex(deps, r"\(<|<<|<=")
+        self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)", "", deps), r"\(=")
 
     def test_rpm_build_requires_hold_floors_only(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")

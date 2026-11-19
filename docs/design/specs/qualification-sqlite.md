@@ -781,7 +781,7 @@ void pqdb_close(pqdb *db);
 const char *pqdb_code(int status);                 /* "qualification-db.absent" ... */
 
 /* every field optional: a string of NULL, and a rate or quantum of -1, is "any"; 0 is not. Start from PQDB_QUERY_ANY. */
-#define PQDB_QUERY_ANY { .rate = -1, .quantum = -1 }
+#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL }
 typedef struct {
     const char *sha256, *format, *uri, *offer, *host_class;
     int rate, quantum;

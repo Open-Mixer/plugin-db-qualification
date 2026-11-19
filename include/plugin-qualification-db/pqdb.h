@@ -39,7 +39,8 @@ const char *pqdb_code(int status);                 /* the name of a refusal: "qu
 /* A query with every field optional: a string of NULL, and a rate or quantum of -1, is "any". 0 is not "any": a zeroed
    query asks for rate 0 and quantum 0 and matches nothing. Start from PQDB_QUERY_ANY and set the fields you filter on:
    pqdb_query q = PQDB_QUERY_ANY; q.sha256 = ...; */
-#define PQDB_QUERY_ANY { .rate = -1, .quantum = -1 }
+/* positional, in the struct's order: valid C and C++11 (designated initializers are C++20); tests check the fields */
+#define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL }
 typedef struct {
     const char *sha256, *format, *uri, *offer, *host_class;
     int rate, quantum;

@@ -10,6 +10,7 @@ builder (tools/records-db.py) imports.
 The module reads no environment variable and knows no list of words: the words come from the contract directory the
 caller passes.
 """
+import glob
 import json
 import os
 import pwd
@@ -25,7 +26,11 @@ SCHEMA_SQL = os.path.join(HERE, "qualification.sql")
 if not os.path.exists(SCHEMA_SQL):
     SCHEMA_SQL = os.path.join(ROOT, "schema", "qualification.sql")
 RECORD_SCHEMA = "plugin-qualify.qualification-record/1"
-DOMAINS = ("qualification", "machine", "probe", "plugin-db", "hosting")
+DOMAINS = ("qualification", "machine", "probe", "plugin-db")   # domain documents: <contractdir>/<domain>/<domain>.json
+# the hosting words are no domain document: they are the codes of the package omx-clap-core (its data/hosting.json and
+# data/hosting/*.json, items of kind codes), installed by `make install-contract` as <contractdir>/<schema major>/omx-clap-core/
+HOSTING_PACKAGE = "omx-clap-core"
+STORE_DOMAINS = DOMAINS + (HOSTING_PACKAGE,)
 
 
 class Refusal(Exception):
@@ -377,7 +382,7 @@ def _q(name):
 
 
 _ADAPTER_PARTS = [_q("HOST_PROFILES"), _q("ADAPTER_CODE_KINDS"), ("probe", "PROBE_SIGNALS")]
-_HOSTING = ("hosting", "HOSTING_*CODES")  # every item of the hosting domain named HOSTING_<group>_CODES
+_HOSTING = (HOSTING_PACKAGE, "HOSTING_*CODES")  # every item of the package named HOSTING_<group>_CODES
 _PROBE_OUT = [("probe", "PROBE_OUTCOMES"), _q("MEMORY_BOUND_OUTCOMES")]
 _RATING = [_q("MEASUREMENT_VERDICT_RATINGS")]
 _DIM = [_q("MEASUREMENT_DIMENSIONS")]
@@ -449,7 +454,8 @@ _ADAPTER_COLUMNS = {(t, c) for (t, c), items in WORDS.items() if _ADAPTER_PARTS[
 
 
 class Domains:
-    """The domain documents of a contract directory, validated; items resolved to their words."""
+    """The words of a contract directory: the domain documents, validated, and the hosting codes of the package
+    omx-clap-core; items resolved to their words. `version` holds each domain's version, the package's too."""
 
     def __init__(self, contract_dir):
         if not contract_dir or not os.path.isdir(contract_dir):
@@ -470,6 +476,30 @@ class Domains:
                 raise Refusal("contract.domain.invalid", f"{path}: {e}") from e
             for name, item in schemas.items():
                 self.items[(dom, name)] = [o["const"] for o in item.get("oneOf", []) if "const" in o]
+        self._hosting(contract_dir)
+
+    def _hosting(self, contract_dir):
+        """The package's own files: <contractdir>/<schema major>/omx-clap-core/{hosting.json, hosting/*.json, MANIFEST.json}.
+        An item of kind codes holds its words as the `code` of each of its `codes`; its version is the MANIFEST's."""
+        found = sorted(glob.glob(os.path.join(glob.escape(contract_dir), "[0-9]*", HOSTING_PACKAGE, "MANIFEST.json")))
+        if not found:
+            raise Refusal("contract.domain.absent", f"{contract_dir}: the package {HOSTING_PACKAGE} is not in the contract "
+                          f"directory (<schema major>/{HOSTING_PACKAGE}/MANIFEST.json): the hosting words are its codes")
+        if len(found) > 1:
+            raise Refusal("contract.domain.invalid", f"{found[0]} and {found[1]}: the package {HOSTING_PACKAGE} is installed twice")
+        pkg = os.path.dirname(found[0])
+        try:
+            with open(found[0], encoding="utf-8") as f:
+                self.version[HOSTING_PACKAGE] = json.load(f)["version"]
+            files = [os.path.join(pkg, "hosting.json")] + sorted(glob.glob(os.path.join(glob.escape(pkg), "hosting", "*.json")))
+            for path in files:
+                with open(path, encoding="utf-8") as f:
+                    doc = json.load(f)
+                for name, item in doc.items():
+                    if isinstance(item, dict) and item.get("kind") == "codes":
+                        self.items[(HOSTING_PACKAGE, name)] = [c["code"] for c in item["codes"].values()]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise Refusal("contract.domain.invalid", f"{pkg}: {e}") from e
 
     def resolve(self, column_items):
         """[(domain, item)] of a column, the hosting pattern expanded; refused when an item is not in its domain."""

@@ -267,7 +267,7 @@ class Put(Layer):
                          [(1, q.RECORD_SCHEMA, None)])
         self.assertEqual(self.rows("SELECT set_id, host_class, offer FROM record"), [(None, self.cls, self.offer)])
         self.assertEqual(self.rows("SELECT count(*) FROM record_set"), [(0,)])
-        self.assertEqual(sorted(d for (d,) in self.rows("SELECT domain FROM store_domain")), sorted(q.DOMAINS))
+        self.assertEqual(sorted(d for (d,) in self.rows("SELECT domain FROM store_domain")), sorted(q.STORE_DOMAINS))
         self.assertGreater(self.rows("SELECT count(*) FROM word_check")[0][0], 50)
 
     def test_the_record_reads_back_equal(self):

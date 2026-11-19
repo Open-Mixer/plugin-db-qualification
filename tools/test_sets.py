@@ -48,7 +48,7 @@ case $(basename "$0") in
         conf=$PROVE_ROOT/etc/omx/qualify.conf
         cat "$conf" >> "$STUB_LOG"
         grid=$(sed -n 's/^grid //p' "$conf")
-        if [ -n "$grid" ]; then set_=fedora44-${grid%/*}-${grid#*/}; else set_=zynthian-vangelis; fi
+        if [ -n "$grid" ]; then set_=${STUB_HOST:-fedora44}-${grid%/*}-${grid#*/}; else set_=zynthian-vangelis; fi
         if [ "$grid" = "${BAD_GRID:-none}" ]; then
             echo "plugin-qualify-sync: distributed: urn:a: binary differs"
         else
@@ -468,7 +468,7 @@ class Prove(Tree):
         self.with_two_cells()
         self.add_set("x86-64", "fedora45-48000-64")
         self.respec()
-        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), STUB_HOST="fedora45")
         self.assertEqual(rc, 0, out + log)
         for s in CELLS:
             self.assertIn(f"::notice::x86-64/{s}: measured on fedora44, not proven in fedora45", out)
@@ -488,7 +488,7 @@ class Prove(Tree):
         self.with_two_cells()
         self.add_set("x86-64", "fedora45-48000-64")
         self.respec()
-        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), BAD_GRID="48000/64")
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), BAD_GRID="48000/64", STUB_HOST="fedora45")
         self.assertEqual(rc, 1, out)
         self.assertIn("0 of 1 sets proven; failed: fedora45-48000-64", out)
 

@@ -32,7 +32,7 @@ INC     := -Iinclude
 
 lib: $(BUILD)/$(SONAME)
 cmd: $(BUILD)/plugin-qualification-db
-all: lib cmd $(BUILD)/plugin-qualification-db.pc
+all: lib cmd
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -47,10 +47,8 @@ $(BUILD)/plugin-qualification-db: src/plugin-qualification-db.c $(BUILD)/$(SONAM
 	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) $(INC) $(LDFLAGS) src/plugin-qualification-db.c -o $@ \
 	  -L$(BUILD) -lplugin-qualification-db -Wl,-rpath,'$$ORIGIN'
 
-$(BUILD)/plugin-qualification-db.pc: plugin-qualification-db.pc.in
-	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
-	  -e 's|@DATADIR@|$(DATADIR)|' -e 's|@VERSION@|$(VERSION)|' $< > $@
-
+# the .pc is made from the template at install time, with that install's own PREFIX, LIBDIR and DATADIR: no copy
+# built earlier (a staged test install) can carry another prefix
 # the DDL is installed beside the header (-dev): writers and test fixtures read it from there, with no checkout
 install: all
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(BINDIR) $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db \
@@ -60,7 +58,10 @@ install: all
 	install -m 0755 $(BUILD)/plugin-qualification-db $(DESTDIR)$(BINDIR)/
 	install -m 0644 include/plugin-qualification-db/pqdb.h $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db/
 	install -m 0644 schema/qualification.sql $(DESTDIR)$(DATADIR)/plugin-qualification-db/
-	install -m 0644 $(BUILD)/plugin-qualification-db.pc $(DESTDIR)$(LIBDIR)/pkgconfig/
+	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
+	  -e 's|@DATADIR@|$(DATADIR)|' -e 's|@VERSION@|$(VERSION)|' plugin-qualification-db.pc.in \
+	  > $(DESTDIR)$(LIBDIR)/pkgconfig/plugin-qualification-db.pc
+	chmod 0644 $(DESTDIR)$(LIBDIR)/pkgconfig/plugin-qualification-db.pc
 
 # ---- tests ----
 $(BUILD)/test_reader: test/test_reader.c $(BUILD)/$(SONAME)

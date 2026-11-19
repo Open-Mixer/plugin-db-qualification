@@ -567,7 +567,7 @@ only, while omx-clap-core's consumers need the hosting code strings, their sente
 hosting codes, and there is no `hosting` domain:
 
 - **The writer** reads the hosting words from the installed omx-clap-core contract package (each `kind: codes` item of
-  `<contractdir>/<schema major>/omx-clap-core/hosting.json` and `hosting/*.json`, as omx-contract's installer lays
+  `<contractdir>/3/omx-clap-core/hosting.json` and `hosting/*.json` (the schema major 3), as omx-contract's installer lays
   it out; its words are the `code` of each entry), refuses a hosting word none of them holds exactly as for any other
   column, writes the `store_domain` row `hosting` at that package's version (its `MANIFEST.json` `version`), and fills `word_check` for the hosting columns as for the others.
 - **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents

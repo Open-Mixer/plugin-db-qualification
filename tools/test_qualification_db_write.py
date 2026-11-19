@@ -63,8 +63,14 @@ def contract_dir():
         if not os.path.isdir(clone):
             raise unittest.SkipTest(f"{clone}: no such sibling clone")
         os.makedirs(os.path.join(root, dom))
-        with open(os.path.join(root, dom, dom + ".json"), "wb") as f:
-            f.write(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
+        doc = json.loads(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
+        if dom == "qualification":
+            # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
+            # in its line 3; until its domain publishes the item the fixture adds it
+            doc["components"]["schemas"].setdefault("QUALIFICATION_ADAPTER_HOSTS", {
+                "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
+        with open(os.path.join(root, dom, dom + ".json"), "w") as f:
+            json.dump(doc, f)
     core = os.path.join(SIBLINGS, "omx-clap-core")
     if not os.path.isdir(core):
         raise unittest.SkipTest(f"{core}: no such sibling clone")
@@ -257,6 +263,66 @@ class Columns(Layer):
         def put(r):
             r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locksInRun": 1}
         self.refused("schema-refused", rec=self.edited(put))
+
+
+class LatencyAndRules(Layer):
+    """Latency and rules (spec section 3.5): latencyLineMs, rules and a cell's latencyMs, NULL when absent, and the
+    adapter's hosts (QUALIFICATION_ADAPTER_HOSTS), not the judge's profiles."""
+
+    def with_fields(self, r):
+        r["latencyLineMs"] = 12.5
+        r["rules"] = "plugin-qualify-rules/1.2"
+        for i, c in enumerate(r["measurements"]["grid"]):
+            c["latencyMs"] = [5.333333333333333, 10.666666666666666, 3][i % 3]
+
+    def test_the_three_fields_are_stored_and_exported_as_written(self):
+        rec = self.edited(self.with_fields)
+        self.put(rec)
+        self.assertEqual(self.rows("SELECT latency_line_ms, rules FROM record"), [(12.5, "plugin-qualify-rules/1.2")])
+        self.assertEqual([v for (v,) in self.rows("SELECT latency_ms FROM cell ORDER BY ord")][:2], [5.333333333333333, 10.666666666666666])
+        got = self.export()
+        self.assertIsNone(first_difference(without_sentences(rec), got))
+        # the shortest decimal that gives the same double, as JSON.stringify writes it
+        self.assertEqual([repr(c["latencyMs"]) for c in got["measurements"]["grid"]][:2], ["5.333333333333333", "10.666666666666666"])
+        self.assertEqual((got["latencyLineMs"], got["rules"]), (12.5, "plugin-qualify-rules/1.2"))
+
+    def test_absent_they_are_null_and_read_back_absent(self):
+        self.put()
+        self.assertEqual(self.rows("SELECT latency_line_ms, rules FROM record"), [(None, None)])
+        self.assertEqual(self.rows("SELECT count(*) FROM cell WHERE latency_ms IS NOT NULL"), [(0,)])
+        got = self.export()
+        self.assertNotIn("latencyLineMs", got)
+        self.assertNotIn("rules", got)
+        self.assertTrue(all("latencyMs" not in c for c in got["measurements"]["grid"]))
+
+    def test_rules_is_a_name_of_the_rules_family(self):
+        self.refused("schema-refused", rec=self.edited(lambda r: r.update(rules="v1")))
+        self.refused("schema-refused", rec=self.edited(lambda r: r.update(rules="plugin-qualify-rules/x")))
+
+    def test_the_adapter_host_is_a_word_of_the_adapter_hosts(self):
+        rec, offer, cls = first_record(LV2, lambda r: "adapter" in r)
+        rec["adapter"]["host"] = "mod-host"
+        self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(self.rows("SELECT adapter_host FROM record"), [("mod-host",)])
+        self.assertEqual(self.export()["adapter"]["host"], "mod-host")
+
+    def test_an_adapter_code_of_an_adapter_host(self):
+        rec, offer, cls = first_record(LV2, lambda r: "adapter" in r)
+        rec["adapter"]["host"] = "jalv"
+        rec["adapter"]["code"] = "jalv.no-jack-client"
+        self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(self.rows("SELECT adapter_code FROM record"), [("jalv.no-jack-client",)])
+
+    def test_a_judge_profile_is_no_adapter_host(self):
+        profiles = q.Domains(contract_dir()).items[("qualification", "QUALIFICATION_HOST_PROFILES")]
+        other = [p for p in profiles if p not in ("omx-clap-host", "mod-host", "jalv")]
+        self.assertTrue(other, "the fixture has a profile that is no adapter host")
+        rec, offer, cls = first_record(LV2, lambda r: "adapter" in r)
+        rec["adapter"]["host"] = other[0]
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(cm.exception.name, "word-unknown")
+        self.assertIn("adapter.host", str(cm.exception))
 
 
 class Put(Layer):

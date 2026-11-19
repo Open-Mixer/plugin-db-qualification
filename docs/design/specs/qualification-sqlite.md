@@ -44,8 +44,10 @@ The spec is this repository's first design spec; each is named by its date and t
 | --- | --- | --- | --- |
 | record fields and their meaning | plugin-qualify (it writes each record) | plugin-qualify, in its record format | plugin-qualify |
 | words a record holds (ratings, reasons, dimensions, bases) | plugin-qualify | plugin-qualify, in a minor of the `qualification` domain | `qualification` (plugin-qualify) |
-| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | omx-clap-core; read through an `x-from` item of `qualification` that precondition 1 adds (section 3.4) |
-| probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | plugin-hostd; the same, through `x-from` items of `qualification` |
+| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | the `hosting` domain (omx-clap-core), read directly (precondition 5) |
+| probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | the `probe` domain (plugin-hostd), read directly (precondition 4) |
+| the outcome of plugin-qualify's own memory bound (`probe.oom`) | plugin-qualify | plugin-qualify | `qualification` (plugin-qualify) |
+| adapter codes (`<host>.<kind>[-<parameter>]`) | plugin-qualify (it composes them) | plugin-qualify | `qualification`: the host profiles and the kinds; a signal parameter is a `probe` word |
 | the machine class of a probe (arch, core band, clock band) | plugin-hostd's probe | plugin-hostd | the `machine` domain (plugin-hostd), read directly |
 | plugin key (SHA-256, format, uri) | plugin-qualify, from the binary | nobody: it is the bytes | plugin-db: the formats are plugin-db's words, checked against plugin-db's own published item, never a copy (section 3.4) |
 | package fields (format, distro, arch words) | the measuring run (none today) | plugin-qualify's record format | `qualification`, the `package` object precondition 1 adds |
@@ -483,17 +485,17 @@ BEGIN SELECT RAISE(ABORT, 'record.set_id: NULL exactly in the user layer'); END;
 **Preconditions of change 2.** The words of section 3.3 that no readable domain item holds today are published by
 their owners before change 2 merges:
 
-1. **plugin-qualify: one minor of the `qualification` domain** that adds every `qualification` item marked "added"
-   below: the missing qualification words, and the words of the record's `package` object (package format `deb` and
-   `rpm`, distro, arch). Each item whose words another repository owns carries `x-from` to that owner
-   (consumer-move.md, step 1).
-2. **plugin-db: a small change that publishes its address formats as a domain item.** The formats `clap` and `lv2`
-   stay plugin-db's words and never move into plugin-qualify; the store checks them against plugin-db's own published
-   list, never a copy. plugin-db has no domain document today: its repository has no `contract.d/`; the formats are
-   `PLUGIN_DB_ADDRESS_FORMATS` of `data/db.json`, which `plugin-db-contract` installs into the older rendered contract
-   layout (`contract.d/3/plugin-db`), not as a domain the loader opens. The change exposes that item in a `plugin-db`
-   domain document (proposed: domain `plugin-db`, item `PLUGIN_DB_ADDRESS_FORMATS`).
-3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain, in the same wave.
+1. **plugin-qualify: the `qualification` domain's minors** that add every `qualification` item marked "added" below:
+   the missing qualification words, the words of the record's `package` object (package format `deb` and `rpm`,
+   distro, arch), the kinds of an adapter code and the outcome its own memory bound writes. Each item holds only
+   plugin-qualify's own words; another owner's words are checked against that owner's domain, never a copy.
+2. **plugin-db: its address formats as a domain item.** The formats `clap` and `lv2` stay plugin-db's words; the store
+   checks them against plugin-db's own published list. `PLUGIN_DB_ADDRESS_FORMATS` moves from `data/db.json` (the
+   older rendered layout, `contract.d/3/plugin-db`) to a `plugin-db` domain, its one source, which the loader opens.
+3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain (the CPU families the probe writes).
+4. **plugin-hostd: a `probe` domain** with the probe's reasons, outcomes, steps and signals, which the probe reads.
+5. **omx-clap-core: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
+   one source.
 
 Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
 item names below are proposed; each owner's change names them.
@@ -518,16 +520,16 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `record.mc_core_band` | plugin-hostd | `machine` | `MACHINE_CORE_BANDS` | exists |
 | `record.mc_clock_band` | plugin-hostd | `machine` | `MACHINE_CLOCK_BANDS` | exists |
 | `record.mc_family` | plugin-hostd | `machine` | `MACHINE_FAMILIES` | added by plugin-hostd in the same wave |
-| `record.probe_reason` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_REASONS`, `x-from` plugin-hostd's probe output (`on-request`) | added |
-| `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_OUTCOMES`, `x-from` plugin-hostd (`probe.ok`, `probe.crashed`, ...) | added |
-| `probe_end.step` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_STEPS`, `x-from` plugin-hostd | added |
-| `probe_end.signal` | plugin-hostd | `qualification` | `QUALIFICATION_PROBE_SIGNALS`, `x-from` plugin-hostd (`SIGSEGV`, `SIGABRT`) | added |
-| `record.adapter_code`, `adapter_cell.code` | omx-clap-core | `qualification` | `QUALIFICATION_ADAPTER_CODES`, `x-from` omx-clap-core's `omx-clap-host.*` codes | added |
+| `record.probe_reason` | plugin-hostd | `probe` | `PROBE_REASONS` (`on-request`, ...) | added (precondition 4) |
+| `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd, plugin-qualify | `probe`, `qualification` | `PROBE_OUTCOMES` (the probe's: `probe.ok`, `probe.crashed`, `probe.memory-limit`, ...) and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (`probe.oom`, which plugin-qualify writes when its own RLIMIT_DATA bound ends a run) | added (preconditions 4 and 1) |
+| `probe_end.step` | plugin-hostd | `probe` | `PROBE_STEPS` | added (precondition 4) |
+| `probe_end.signal` | plugin-hostd | `probe` | `PROBE_SIGNALS` (`SIGSEGV`, `SIGABRT`, ...) | added (precondition 4) |
+| `record.adapter_code`, `adapter_cell.code` | plugin-qualify | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_HOST_PROFILES`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
 | `verdict.rating`, `tier.rating`, `reason.rating` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
 | `verdict.hosting`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`, `in-process`: the hosting paths, as `verdict.hosting` and `tiers.offeredOn[]` write them) | added |
 | `verdict.arm` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
-| `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd | `qualification` | `QUALIFICATION_HOSTING_CODES` (`x-from` omx-clap-core's hosting tables), `QUALIFICATION_PROBE_OUTCOMES`, `QUALIFICATION_ADAPTER_CODES`: today's values come from all three | added |
-| `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `qualification` | `QUALIFICATION_HOSTING_CODES` | added |
+| `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd, plugin-qualify | `hosting`, `probe`, `qualification` | the `HOSTING_*` codes items, `PROBE_OUTCOMES`, `QUALIFICATION_MEMORY_BOUND_OUTCOMES`, and an adapter code checked in parts: today's values come from all of them | added (preconditions 1, 4 and 5) |
+| `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
 | `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
 | `reason_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...) | added |
 | `reason_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
@@ -537,10 +539,15 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `cell.mem_limit_mechanism` | plugin-qualify | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
 | `cell.note_sweep_dialect` | plugin-qualify | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
 | `run_step.step` | plugin-qualify | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
-| `run_step.result` | plugin-qualify, plugin-hostd | `qualification` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...) and `QUALIFICATION_PROBE_OUTCOMES` | added |
+| `run_step.result` | plugin-qualify, plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...) and `PROBE_OUTCOMES` | added |
 | `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
 | `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
+
+An adapter code is written `<host>.<kind>` or `<host>.<kind>-<parameter>` and stored as written. Its check splits it:
+`<host>` is a word of `QUALIFICATION_HOST_PROFILES`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
+parameter is what the kind takes: a decimal integer for `resp` and `exit`, a word of `PROBE_SIGNALS` for `signal`,
+none for the others. A code that does not split this way is refused like any other word, naming the part.
 
 `claim.offer` and `claim.host_class` are not checked on their own: their foreign key ties them to the record's. The
 columns this table does not name are names or numbers (section 3.2). The words in parentheses are today's values, given

@@ -125,7 +125,7 @@ run; `--force` measures everything.
 
 The channel is `https://www.openmixer.org/deb/debian/trixie/`; add it with the `openmixer-release` package.
 
-On Fedora 44 x86_64, once the x86_64 package is released:
+On Fedora 45 x86_64, once the x86_64 package is released:
 
 ```
 dnf install https://www.openmixer.org/rpm/openmixer-release.noarch.rpm

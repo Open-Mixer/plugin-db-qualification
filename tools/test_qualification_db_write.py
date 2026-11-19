@@ -67,9 +67,17 @@ def contract_dir():
         doc = json.loads(git_show(clone, HOSTING_REF if dom == "hosting" else REF, f"contract.d/{dom}/{dom}.json"))
         if dom == "qualification":
             # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
-            # in its line 3; until its domain publishes the item the fixture adds it
+            # in its line 3, and the words of the pin verdicts and the history (QUALIFICATION_PIN_VERDICTS, _HISTORY_MOVES, _HISTORY_REASONS,
+            # from plugin-qualify's pins-file.ts and history-adjust.ts); until its domain publishes the items the fixture adds them
             doc["components"]["schemas"].setdefault("QUALIFICATION_ADAPTER_HOSTS", {
                 "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_PIN_VERDICTS", {
+                "oneOf": [{"const": w} for w in ("in-process", "isolated", "refused")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_MOVES", {
+                "oneOf": [{"const": w} for w in ("demote", "promote", "none")]})
+            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_REASONS", {
+                "oneOf": [{"const": "history." + w} for w in ("crashed", "xruns-grouped", "crashed-alone", "steady", "no-record",
+                                                              "no-change", "not-liftable")]})
         with open(os.path.join(root, dom, dom + ".json"), "w") as f:
             json.dump(doc, f)
     _contract["dir"] = root
@@ -310,6 +318,91 @@ class LatencyAndRules(Layer):
             self.put(rec, offer=offer, cls=cls)
         self.assertEqual(cm.exception.name, "word-unknown")
         self.assertIn("adapter.host", str(cm.exception))
+
+
+class FieldAudit(Layer):
+    """The seven fields today's records carry that the first writer refused (spec section 3.5): plugin.name, the pool step's
+    dspLoadOff/On and xrunsOff/On, and history[] with its unknownKeys and blockedBy; provenance stays refused."""
+
+    def history(self):
+        host = "omx-clap-host"
+        return [
+            {"hostClass": "x86_64/8/3000", "file": "history.tsv", "at": "2026-11-19T10:00:00.000Z",
+             "key": {"uri": "clap:example", "digest": "ab" * 32}, "found": True, "windows": {"solo": 3, "grouped": 2},
+             "summary": {"crashed": False, "raisesXruns": True}, "unknownKeys": {"zz": "1", "extra": "x y"},
+             "verdicts": [
+                 {"host": host, "measured": "isolated", "adjusted": "isolated", "move": "none", "reason": "history.not-liftable",
+                  "blockedBy": ["refused", "hosting.rt-safety.violations-in-run"]},
+                 {"host": host, "measured": None, "adjusted": None, "move": "none", "reason": "history.no-record"},
+                 {"host": host, "measured": "in-process", "adjusted": "isolated", "move": "demote", "reason": "history.crashed",
+                  "blockedBy": []}]},
+            {"hostClass": "aarch64/4/2400", "file": "other.tsv", "at": "2026-11-19T11:00:00.000Z", "found": False,
+             "unknownKeys": {}, "verdicts": [{"host": host, "measured": "isolated", "adjusted": "in-process", "move": "promote",
+                                              "reason": "history.steady"}]}]
+
+    def full(self, r):
+        r["plugin"]["name"] = "Example Synth"
+        step = r["run"]["steps"][0]
+        step["pool"] = {"allocationsOn": 1, "dspLoadOff": 0.125, "dspLoadOn": 0.375, "xrunsOff": 0, "xrunsOn": 2}
+        r["history"] = self.history()
+
+    def test_a_record_with_all_of_them_is_stored_and_read_back(self):
+        rec = self.edited(self.full)
+        self.put(rec)
+        got = self.export()
+        self.assertIsNone(first_difference(without_sentences(rec), got))
+        self.assertEqual(json.dumps(got["history"]), json.dumps(rec["history"]))   # plugin-qualify's key order
+        self.assertEqual(got["plugin"]["name"], "Example Synth")
+        self.assertEqual(self.rows("SELECT plugin_name FROM record"), [("Example Synth",)])
+        self.assertEqual(self.rows("SELECT pool_dsp_load_off, pool_dsp_load_on, pool_xruns_off, pool_xruns_on FROM run_step "
+                                   "WHERE pool_dsp_load_on IS NOT NULL"), [(0.125, 0.375, 0, 2)])
+
+    def test_the_history_rows(self):
+        self.put(self.edited(self.full))
+        self.assertEqual(self.rows("SELECT ord, host_class, found, windows_solo, summary_raises_xruns, unknown_keys FROM record_history ORDER BY ord"),
+                         [(0, "x86_64/8/3000", 1, 3, 1, 1), (1, "aarch64/4/2400", 0, None, None, 1)])
+        self.assertEqual(self.rows("SELECT name, value FROM history_unknown_key ORDER BY name"), [("extra", "x y"), ("zz", "1")])
+        self.assertEqual(self.rows("SELECT history_ord, ord, measured, adjusted, blocked_by FROM history_verdict ORDER BY history_ord, ord"),
+                         [(0, 0, "isolated", "isolated", 1), (0, 1, None, None, None), (0, 2, "in-process", "isolated", 1),
+                          (1, 0, "isolated", "in-process", None)])
+        self.assertEqual(self.rows("SELECT verdict_ord, ord, code FROM history_blocked ORDER BY ord"),
+                         [(0, 0, "refused"), (0, 1, "hosting.rt-safety.violations-in-run")])
+
+    def test_absent_they_are_null_and_read_back_absent(self):
+        self.put()
+        self.assertEqual(self.rows("SELECT plugin_name FROM record"), [(None,)])
+        self.assertEqual(self.rows("SELECT count(*) FROM record_history"), [(0,)])
+        got = self.export()
+        self.assertNotIn("name", got["plugin"])
+        self.assertNotIn("history", got)
+
+    def test_provenance_is_still_refused(self):
+        rec = self.edited(lambda r: r.update(provenance={"set": "x"}))
+        self.refused("field-unmapped", "provenance", rec=rec)
+
+    def test_a_history_word_outside_its_item_is_refused(self):
+        for path, fn in (("measured", lambda v: v.update(measured="running")), ("move", lambda v: v.update(move="sideways")),
+                         ("reason", lambda v: v.update(reason="history.because")), ("host", lambda v: v.update(host="no-such-host"))):
+            def f(r, fn=fn):
+                self.full(r)
+                fn(r["history"][0]["verdicts"][0])
+            with self.subTest(path):
+                with self.assertRaises(q.Refusal) as cm:
+                    self.put(self.edited(f))
+                self.assertEqual(cm.exception.name, "word-unknown")
+                self.assertIn(f"history[0].verdicts[0].{path}", str(cm.exception))
+
+    def test_a_blocked_code_is_a_pin_verdict_or_a_reason_code(self):
+        def f(r):
+            self.full(r)
+            r["history"][0]["verdicts"][0]["blockedBy"] = ["not-a-code"]
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(self.edited(f))
+        self.assertEqual(cm.exception.name, "word-unknown")
+        self.assertIn("not-a-code", str(cm.exception))
+
+    def test_an_empty_history_is_refused(self):
+        self.refused("array-empty", "history", rec=self.edited(lambda r: r.update(history=[])))
 
 
 class Put(Layer):

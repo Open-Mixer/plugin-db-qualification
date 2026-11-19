@@ -355,6 +355,13 @@ def prove(root, kind, pkgs):
     sets = carried(root, kind, arch)
     script = os.path.join(HERE, "prove-set.sh")
     print(f"{PACKAGE} for {kind} {arch}: {len(sets)} sets", flush=True)
+    if not sets:
+        print(f"::error::{PACKAGE} ({arch}) carries no set: nothing to prove", flush=True)
+        return 1
+    here = image_host_class()
+    if here is None:
+        print("::error::the host class of this image cannot be read: /etc/os-release has no ID and VERSION_ID", flush=True)
+        return 1
     if subprocess.run(["bash", script, "install", kind, pkgs, arch], cwd=root).returncode != 0:
         print(f"::error::{PACKAGE} ({arch}) did not install", flush=True)
         subprocess.run(["bash", script, "remove", kind], cwd=root)
@@ -377,7 +384,6 @@ def prove(root, kind, pkgs):
                 return 1
         # a set is proven where it was measured: a set measured on another host class is named, not proven, and does
         # not fail; a set whose name carries no host class is proven everywhere
-        here = image_host_class()
         unmatched = [(c, s) for c, s in sets if measured_on(s) not in (None, here)]
         for cls, set_ in unmatched:
             print(f"::notice::{cls}/{set_}: measured on {measured_on(set_)}, not proven in {here}", flush=True)

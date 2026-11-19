@@ -9,6 +9,7 @@
 #include <plugin-qualification-db/pqdb.h>
 
 #include <dirent.h>
+#include <locale.h>
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -880,6 +881,50 @@ static void number_edges(void)
     pqdb_close(db);
 }
 
+/* ---- the document does not depend on the host's locale: a program that called setlocale(LC_ALL, "") under a comma
+ * locale gets the same bytes ---- */
+static const char *skip_reason;
+static void comma_locale(void)
+{
+    static const char *const cands[] = { "ca_ES.UTF-8", "ca_ES.utf8", "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8" };
+    char old[128], probe[16];
+    int set = 0;
+    snprintf(old, sizeof old, "%s", setlocale(LC_NUMERIC, NULL));
+    for (size_t i = 0; i < sizeof cands / sizeof *cands && !set; i++)
+        set = setlocale(LC_NUMERIC, cands[i]) != NULL;
+    if (!set) { skip_reason = "no comma locale (ca_ES, de_DE or fr_FR, UTF-8) is installed on this machine"; return; }
+    snprintf(probe, sizeof probe, "%.1f", 2.5);
+    if (probe[1] != ',') { setlocale(LC_NUMERIC, old); skip_reason = "the locale found has no decimal comma"; return; }
+    spec21_record_json();
+    number_edges();
+    setlocale(LC_NUMERIC, old);
+}
+
+/* ---- a REAL that is not finite (SQLite keeps 1e999 as Infinity) is refused by name, never written and never a crash ---- */
+static void non_finite(void)
+{
+    static const struct { const char *file, *column; } stores[] = { { "nonfinite-pos.sqlite", "latency_ms" },
+        { "nonfinite-neg.sqlite", "latency_ms" }, { "nonfinite-line.sqlite", "latency_line_ms" }, { "nonfinite-cpu.sqlite", "cost_median" } };
+    for (size_t i = 0; i < sizeof stores / sizeof *stores; i++) {
+        pqdb *db;
+        rows o;
+        pqdb_query q = any();
+        pqdb_result r;
+        pqdb_error e;
+        char *json = (char *)1;
+        if (open_ok(fx(stores[i].file), NULL, GOOD, &db)) { CHECK(0, "open"); continue; }
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1, "walk");
+        memset(&r, 0, sizeof r);
+        r.layer = o.r[0].layer; r.sha256 = o.r[0].sha; r.format = o.r[0].format; r.uri = o.r[0].uri; r.offer = o.r[0].offer;
+        r.host_class = o.r[0].cls; r.rate = o.r[0].rate; r.quantum = o.r[0].quantum;
+        memset(&e, 0, sizeof e);
+        CHECK(pqdb_record_json(db, &r, &json, &e) != 0 && json == NULL, "%s: a document was written", stores[i].file);
+        CHECK(e.code && strcmp(e.code, "qualification-db.not-a-store") == 0 && strstr(e.message, stores[i].column), "%s: %s %s",
+              stores[i].file, e.code ? e.code : "(no code)", e.message);
+        pqdb_close(db);
+    }
+}
+
 /* ---- under test/shim.so ---- */
 static int has_sha(const rows *o, const char *c)
 {
@@ -975,7 +1020,8 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
-    { "hosting columns checked like any other", hosting_columns, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "hosting columns checked like any other", hosting_columns, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
+    { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 
@@ -988,6 +1034,7 @@ int main(int argc, char **argv)
         int before = failures;
         if (TESTS[i].scoped != scoped) continue;
         TESTS[i].fn();
+        if (skip_reason) { printf("skip   %s: %s\n", TESTS[i].name, skip_reason); skip_reason = NULL; continue; }
         printf("%s %s\n", failures == before ? "ok    " : "not ok", TESTS[i].name);
         ran++; bad += failures != before;
     }

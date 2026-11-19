@@ -235,6 +235,14 @@ def build_numbers(path):
         c.execute("UPDATE cell SET latency_ms = ? WHERE record_id = 1 AND ord = ?", (v, i))
     c.commit(); c.close()
 
+def build_nonfinite(path, table_sql):
+    """A store holding a REAL that is not finite (SQLite keeps 1e999 as Infinity): the reader must refuse it by name."""
+    build(path, 0, [rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256",
+                        cells=[cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))])])
+    c = sqlite3.connect(path)
+    c.execute(table_sql)
+    c.commit(); c.close()
+
 def build_records(path):
     build(path, 0, RICH)
     c = sqlite3.connect(path)
@@ -393,6 +401,10 @@ def main(out):
     build(p("scope-xdg.sqlite"), 1, [rec((XDG_SHA, "clap", "urn:xdg"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))])])
     build_records(p("records.sqlite"))
     build_numbers(p("numbers.sqlite"))
+    build_nonfinite(p("nonfinite-pos.sqlite"), "UPDATE cell SET latency_ms = 1e999")
+    build_nonfinite(p("nonfinite-neg.sqlite"), "UPDATE cell SET latency_ms = -1e999")
+    build_nonfinite(p("nonfinite-line.sqlite"), "UPDATE record SET latency_line_ms = 1e999")
+    build_nonfinite(p("nonfinite-cpu.sqlite"), "UPDATE cell SET cost_median = -1e999, cost_percentile_value = 1e999")
     write_expect(p("expect-base.tsv"), reference([("base", BASE)]))
     write_expect(p("expect-merged.tsv"), reference([("user", USER), ("base", BASE)]))
     write_expect(p("expect-user.tsv"), reference([("user", USER)]))

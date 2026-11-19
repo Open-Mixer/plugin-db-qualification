@@ -169,6 +169,14 @@ static int check_store(sqlite3 *db, const char *path, int want_user, pqdb_error 
     return S_OK;
 }
 
+/* The hosting exception (section 3.4, this pass only): there is no `hosting` domain. The reader does not open its
+ * store_domain row and does not check the columns of word_check that have an item of it; the writer checked those words
+ * against omx-clap-core's package. Removing the exception is this one function's removal (and its two calls). */
+static int hosting_exception(const char *domain)
+{
+    return strcmp(domain, "hosting") == 0;
+}
+
 /* ---- the word check ---- */
 typedef struct { omx_domain *d[16]; char name[16][64]; int n; } domains;
 
@@ -197,6 +205,8 @@ static int open_domains(sqlite3 *db, const char *path, const char *cdir, domains
         const char *name = (const char *)sqlite3_column_text(st, 0), *ver = (const char *)sqlite3_column_text(st, 1);
         omx_domain_error e;
         int lrc;
+        if (hosting_exception(name))
+            continue;
         if (ds->n >= 16 || strlen(name) >= 64) {
             domains_close(ds); sqlite3_finalize(st);
             return fail(err, S_NOT_A_STORE, "%s: store_domain holds too many or too long domains", path);
@@ -307,11 +317,34 @@ static int ident_ok(const char *s)
     return 1;
 }
 
+/* the distinct words of one column, each looked up in the column's items */
+static int check_column(sqlite3 *db, const char *path, const char *tbl, const char *col, const item_set *set, pqdb_error *err)
+{
+    sqlite3_stmt *words;
+    char sql[300];
+    int wrc, status = S_OK;
+    snprintf(sql, sizeof sql, "SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL", col, tbl, col);
+    if (sqlite3_prepare_v2(db, sql, -1, &words, NULL) != SQLITE_OK)
+        return fail(err, S_NOT_A_STORE, "%s: word_check names %s.%s, which is no column of the store", path, tbl, col);
+    while ((wrc = sqlite3_step(words)) == SQLITE_ROW) {
+        const char *w = (const char *)sqlite3_column_text(words, 0);
+        if (!in_items(set, w, NULL) && !adapter_code_ok(set, w)) {
+            status = fail(err, S_WORD_UNKNOWN, "%s: %s.%s holds the word %s, which none of its items in the "
+                          "installed domains holds", path, tbl, col, w);
+            break;
+        }
+    }
+    if (status == S_OK && wrc != SQLITE_DONE)
+        status = fail_sql(err, db, path, "cannot read the words");
+    sqlite3_finalize(words);
+    return status;
+}
+
 static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_error *err)
 {
-    sqlite3_stmt *wc, *words;
+    sqlite3_stmt *wc;
     int rc = sqlite3_prepare_v2(db, "SELECT tbl, col, domain, item FROM word_check ORDER BY tbl, col, domain, item", -1, &wc, NULL);
-    int pending = 0, status = S_OK;
+    int pending = 0, status = S_OK, skip = 0;
     char tbl[64] = "", col[64] = "";
     item_set set;
     if (rc != SQLITE_OK)
@@ -328,26 +361,11 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
             break;
         }
         if (pending && (rc == SQLITE_DONE || strcmp(t, tbl) != 0 || strcmp(c, col) != 0)) {
-            char sql[300];
-            int wrc;
-            snprintf(sql, sizeof sql, "SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL", col, tbl, col);
-            if (sqlite3_prepare_v2(db, sql, -1, &words, NULL) != SQLITE_OK) {
-                status = fail(err, S_NOT_A_STORE, "%s: word_check names %s.%s, which is no column of the store", path, tbl, col);
-                break;
-            }
-            while ((wrc = sqlite3_step(words)) == SQLITE_ROW) {
-                const char *w = (const char *)sqlite3_column_text(words, 0);
-                if (!in_items(&set, w, NULL) && !adapter_code_ok(&set, w)) {
-                    status = fail(err, S_WORD_UNKNOWN, "%s: %s.%s holds the word %s, which none of its items in the "
-                                  "installed domains holds", path, tbl, col, w);
-                    break;
-                }
-            }
-            if (status == S_OK && wrc != SQLITE_DONE)
-                status = fail_sql(err, db, path, "cannot read the words");
-            sqlite3_finalize(words);
+            if (!skip)     /* a column with an item of the hosting domain is checked by the writer only */
+                status = check_column(db, path, tbl, col, &set, err);
             if (status != S_OK)
                 break;
+            skip = 0;
             set.n = 0;
             pending = 0;
         }
@@ -359,6 +377,13 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
         }
         {
             omx_domain *d = domain_named(ds, (const char *)sqlite3_column_text(wc, 2));
+            if (hosting_exception((const char *)sqlite3_column_text(wc, 2))) {
+                snprintf(tbl, sizeof tbl, "%s", t);
+                snprintf(col, sizeof col, "%s", c);
+                skip = 1;
+                pending = 1;
+                continue;
+            }
             if (!d) {
                 status = fail(err, S_NOT_A_STORE, "%s: word_check names the domain %s, which store_domain does not list",
                               path, sqlite3_column_text(wc, 2));

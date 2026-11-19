@@ -230,6 +230,8 @@ CREATE TABLE record (
   host_extensions INTEGER CHECK (host_extensions IS NULL OR host_extensions = 1),   -- 1: the hostExtensions list is present (record_extension, possibly empty); NULL: an LV2 record, or a CLAP probe that ended before the offer
   tested_version TEXT,
   measured_at    TEXT NOT NULL,
+  latency_line_ms REAL,                    -- latencyLineMs: the line the cells' latency_ms stand against; NULL: absent (a record from before it)
+  rules          TEXT CHECK (rules IS NULL OR rules GLOB 'plugin-qualify-rules/[0-9]*.[0-9]*'),   -- the rules the verdicts were judged by, a name; NULL: absent
   run_id         TEXT NOT NULL,
   tool_runner    TEXT NOT NULL,
   tool_child     TEXT NOT NULL,
@@ -377,6 +379,7 @@ CREATE TABLE cell (                        -- measurements.grid[]
   quantum   INTEGER NOT NULL,
   outcome   TEXT NOT NULL CHECK (WORD(outcome)),
   latency_declared_frames INTEGER, latency_measured_frames INTEGER,
+  latency_ms REAL,                          -- latencyMs: the measured latency in ms at the cell's rate, as written; NULL: absent
   latency_code TEXT CHECK (latency_code IS NULL OR WORD(latency_code)),
   latency_unmeasured_reason TEXT CHECK (latency_unmeasured_reason IS NULL OR WORD(latency_unmeasured_reason)),
   cost_median REAL, cost_percentile_p INTEGER, cost_percentile_value REAL,
@@ -567,17 +570,19 @@ only, while omx-clap-core's consumers need the hosting code strings, their sente
 hosting codes, and there is no `hosting` domain:
 
 - **The writer** reads the hosting words from the installed omx-clap-core contract package (each `kind: codes` item of
-  `<contractdir>/omx-clap-core/hosting.json` and `hosting/*.json`; its words are the `code` of each entry), refuses a
-  hosting word none of them holds exactly as for any other column, writes the `store_domain` row `hosting` at that
-  package's version, and fills `word_check` for the hosting columns as for the others.
-- **The C reader** does not open `hosting` and does not check the words of the `word_check` columns whose domain is
-  `hosting`: libomx-domain opens domain documents only. Every other column is checked at open as below. A store's
+  `<contractdir>/3/omx-clap-core/hosting.json` and `hosting/*.json` (the schema major 3), as omx-contract's installer lays
+  it out; its words are the `code` of each entry), refuses a hosting word none of them holds exactly as for any other
+  column, writes the `store_domain` row `hosting` at that package's version (its `MANIFEST.json` `version`), and fills `word_check` for the hosting columns as for the others.
+- **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents
+  only. A column whose only items are `hosting` items is not checked; in a column that also has other owners' items
+  (`verdict.deciding`, `tier.deciding`, `reason.code`), only a word beginning `hosting.` is passed over, and every
+  other word must be in one of the column's other items. Every other column is checked at open as below. A store's
   hosting words are therefore checked once, by the writer, against the package it was built with.
 - **Its end.** Right after this pass, an omx-contract change lets a domain render the code strings, sentences and
   TypeScript module, omx-clap-core moves the hosting codes to its `hosting` domain with byte-identical rendered
-  output, and the reader checks the hosting columns like every other column; this exception is then removed. The C
-  test `hosting-skip-ends` holds the end: it fails when the contract directory the tests read holds a `hosting` domain
-  document while the reader still skips the hosting columns.
+  output, and the reader checks the hosting columns like every other column; this exception is then removed. The check
+  `hosting-skip-ends` holds the end: it fails when omx-clap-core's main ships a `hosting` domain document, or a
+  contract directory the tests read holds one, while the reader still skips the hosting words.
 
 Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
 item names below are proposed; each owner's change names them.
@@ -592,7 +597,8 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `plugin.format` | plugin-db | `plugin-db` | `PLUGIN_DB_ADDRESS_FORMATS` (`clap`, `lv2`) | published by the plugin-db precondition; today only in `data/db.json` |
 | `record_set.host_class`, `record.host_class` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_CLASSES` (`rpi5`, `x86-64`) | added; the existing `QUALIFICATION_MACHINE_CLASSES` holds `desk`, `raspberry-pi-4`, `raspberry-pi-5`, words no record holds |
 | `record_set.tier` | plugin-qualify | `qualification` | `QUALIFICATION_SET_TIERS` (`reference`, `provisional`, `hardware`) | added |
-| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host`, `record.adapter_host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
+| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
+| `record.adapter_host` | plugin-qualify | `qualification` | `QUALIFICATION_ADAPTER_HOSTS`: the hosts an adapter runs a plugin under (`omx-clap-host`, `mod-host`, `jalv`), not the judge's profiles; plugin-qualify names its words | added |
 | `set_setting.key` | plugin-qualify | `qualification` | `QUALIFICATION_SYNC_SETTINGS` (plugin-qualify-sync's setting keys) | added |
 | `record.offer` | plugin-qualify | `qualification` | `QUALIFICATION_OFFERS` (`default`, `custom`) | added |
 | `record.pkg_format` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_FORMATS` (`deb`, `rpm`) | added (the `package` object) |
@@ -606,7 +612,7 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd, plugin-qualify | `probe`, `qualification` | `PROBE_OUTCOMES` (the probe's: `probe.ok`, `probe.crashed`, `probe.memory-limit`, ...) and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (`probe.oom`, which plugin-qualify writes when its own RLIMIT_DATA bound ends a run) | added (preconditions 4 and 1) |
 | `probe_end.step` | plugin-hostd | `probe` | `PROBE_STEPS` | added (precondition 4) |
 | `probe_end.signal` | plugin-hostd | `probe` | `PROBE_SIGNALS` (`SIGSEGV`, `SIGABRT`, ...) | added (precondition 4) |
-| `record.adapter_code`, `adapter_cell.code` | plugin-qualify | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_HOST_PROFILES`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
+| `record.adapter_code`, `adapter_cell.code` | plugin-qualify | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_ADAPTER_HOSTS`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
 | `verdict.rating`, `tier.rating`, `reason.rating` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
 | `verdict.hosting`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`, `in-process`: the hosting paths, as `verdict.hosting` and `tiers.offeredOn[]` write them) | added |
 | `verdict.arm` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
@@ -627,7 +633,7 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
 
 An adapter code is written `<host>.<kind>` or `<host>.<kind>-<parameter>` and stored as written. Its check splits it:
-`<host>` is a word of `QUALIFICATION_HOST_PROFILES`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
+`<host>` is a word of `QUALIFICATION_ADAPTER_HOSTS`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
 parameter is what the kind takes: a decimal integer for `resp` and `exit`, a word of `PROBE_SIGNALS` for `signal`,
 none for the others. A code that does not split this way is refused like any other word, naming the part.
 
@@ -654,6 +660,8 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `binary.unpinnable` | `record.unpinnable` = 1 (its sentence: see below) |
 | `testedVersion` | `record.tested_version` |
 | `measuredAt` | `record.measured_at` |
+| `latencyLineMs` | `record.latency_line_ms` (NULL when absent) |
+| `rules` | `record.rules` (NULL when absent); a name, `plugin-qualify-rules/<major>.<minor>`, not a word |
 | `run.id` | `record.run_id` |
 | `run.steps[].step`, `.result`, `.code` | `run_step.step`, `.result`, `.code` |
 | `run.steps[].figures.cpuPercent`, `.latencyFrames`, `.midiInputsLinked`, `.xruns` | `run_step.cpu_percent`, `.latency_frames`, `.midi_inputs_linked`, `.xruns` |
@@ -674,6 +682,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `tiers.offeredOn[]` | `tier_offered.tier` |
 | `measurements.grid[].rate`, `.quantum`, `.outcome` | `cell.rate`, `.quantum`, `.outcome`; and one `claim` row |
 | `measurements.grid[].latency.declaredFrames`, `.measuredFrames`, `.code`, `.unmeasuredReason` | `cell.latency_declared_frames`, `.latency_measured_frames`, `.latency_code`, `.latency_unmeasured_reason` |
+| `measurements.grid[].latencyMs` | `cell.latency_ms` (NULL when absent): stored as written, never recomputed from the frames, and read back as the shortest decimal that gives the same double (as `JSON.stringify` writes it) |
 | `measurements.grid[].cost.median`, `.percentile.p`, `.percentile.value`, `.blocks`, `.warmupBlocks` | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value`, `.cost_blocks`, `.cost_warmup_blocks` |
 | `measurements.grid[].cost.voices.basis`, `.capacity`, `.held` | `cell.voices_basis`, `.voices_capacity`, `.voices_held` |
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |

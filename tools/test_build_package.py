@@ -101,7 +101,7 @@ class BuildPackage(unittest.TestCase):
         self.assertEqual(prov["hostClass"], cls)
         self.assertEqual(prov["package"], {"name": f"plugin-db-qualification-{cls}-{name}", "version": VERSION})
         self.assertEqual(prov["grid"], cell)
-        self.assertEqual(prov["hostProfile"], "openmixer-console")
+        self.assertEqual(prov["hostProfile"], "omx-clap-host")
         # the records are the device's bytes, the unmeasured plugin stays out
         q = os.path.join(RUN, base, "qualification")
         shipped = sorted(f for f in os.listdir(d) if f != "provenance.json")

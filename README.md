@@ -34,6 +34,10 @@ A set measured by an older plugin-qualify is dropped, not kept: the class ships 
 | --- | --- | --- | --- | --- | --- | --- |
 | arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 or later | deb, Debian trixie |
 | amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify 0.20.1 or later, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
+| amd64, x86_64 | `x86-64` | the OpenMixer worker image, measured with real-time priority (SCHED_FIFO granted) | `fedora44-rt-<rate>-<quantum>`, 22 cells (44100, 48000, 88200 and 96000 at 64 to 512; 176400 and 192000 at 128 to 512), 1109 records a set (plugin-qualify 0.20.1) | reference | plugin-qualify 0.20.1 or later | the same package |
+
+Where a `fedora44-rt-` set and a `fedora44-` set hold one plugin at one cell, both are kept and the reader answers
+with the reference tier (the store spec, `docs/design/specs/qualification-sqlite.md`, section 4).
 
 `packaging/arch-classes` is the one map of architectures to classes and plugin-qualify floors: `debian/rules`, the
 spec and `tools/sets.py` read it. There is no aarch64 RPM: no Fedora machine of an arm64 class is measured.

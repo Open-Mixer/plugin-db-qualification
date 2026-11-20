@@ -18,6 +18,10 @@ Without arguments every set under records/ is checked. A set passes when:
   comparison-summary.json, a publishable plugin-qualify.comparison-summary/1 of exactly those records, in which mod-host
   and jalv ran: a comparison without its references is never shipped;
 - nothing else is in the directory (no *.unmeasured.json: an unmeasured record never applies);
+- it is no dry run and not the console key (issue #5's ruling): a set named dry-*, a provenance source naming a
+  records/*/dry-* branch, a clap_path or lv2_path setting under /work/dry/, or a record whose binary or a file of its
+  list is under /work/dry/ is a dry run (tools/fedora44/measure.sh with DRY); a set measured for the
+  openmixer-console profile (provenance hostProfile) is the console key, which waits for its desk run;
 - a set of one cell, named <set>-<rate>-<quantum> (fedora44-48000-512), holds only records whose measurement grid
   holds that cell, and its provenance's grid names it: a set is per machine class, per sample rate and per quantum.
 
@@ -44,6 +48,10 @@ FIGURES = {"cpu", "latency"}
 CHECK_RESULTS = {"pass", "fail", "not-observable", "not-run"}
 FIGURE_RESULTS = {"measured", "not-observable", "not-run"}
 CELL_SET = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
+# issue #5's ruling: what stays out of records/
+DRY_DIR = "/work/dry/"
+DRY_BRANCH = re.compile(r"records/[^ ]*/dry-")
+CONSOLE_PROFILE = "openmixer-console"
 COUNTS = ("loads", "instantiates", "output", "runsClean", "rtSafe", "rtObserved", "crashes")
 
 
@@ -176,6 +184,17 @@ def check_set(path):
     host = prov.get("hostProfile")
     if not isinstance(host, str) or not host:
         bad("provenance.json", "names no hostProfile")
+    if host == CONSOLE_PROFILE:
+        bad("provenance.json", f"is of the {CONSOLE_PROFILE} profile: the console key stays out until its desk run")
+    if set_name.startswith("dry-"):
+        bad("provenance.json", f"the set {set_name} is a dry run (dry-*): a dry run stays out")
+    for src in (prov.get("sources") or {}):
+        if DRY_BRANCH.search(str(src)):
+            bad("provenance.json", f"its source {src!r} is a dry run's records branch: a dry run stays out")
+    for key in ("clap_path", "lv2_path"):
+        v = (prov.get("settings") or {}).get(key) if isinstance(prov.get("settings"), dict) else None
+        if isinstance(v, str) and v.startswith(DRY_DIR):
+            bad("provenance.json", f"its setting {key} {v} is a dry run's: a dry run stays out")
     cell = set_cell(set_name)
     if cell is not None and cell not in grid_cells(prov.get("grid")):
         bad("provenance.json", f"its grid {prov.get('grid')!r} does not name {cell[0]}/{cell[1]}, the cell of the set's name")
@@ -222,6 +241,8 @@ def check_set(path):
             bad(name, "names no binary with its files")
         elif any(not isinstance(x.get("path"), str) or len(str(x.get("sha256", ""))) != 64 for x in files):
             bad(name, "a file of its binary has no path or no SHA-256")
+        elif any(p.startswith(DRY_DIR) for p in [binary["path"]] + [x["path"] for x in files]):
+            bad(name, f"its binary is under {DRY_DIR}: a record of a dry run stays out")
         if isinstance(host, str) and not any(v.get("host") == host for v in rec.get("verdicts") or []):
             without_verdict += 1
         probe = rec.get("probe") or {}

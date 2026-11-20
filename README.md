@@ -1,284 +1,162 @@
 # plugin-db-qualification
 
-The qualification layer of plugin-db: plugin-qualify's records of the plugin sets of each machine class, as one
-Debian and RPM package per architecture, `plugin-qualification-records`.
+The qualification layer of plugin-db. It holds what plugin-qualify measured about plugins, as a SQLite store, and the
+tools that read and write it.
 
-plugin-db keeps the plugin database in layers; plugin-qualify writes this one, and plugin-hostd only hosts.
 [plugin-qualify](https://github.com/Open-Mixer/plugin-qualify) measures every LV2 and CLAP plugin of a machine before
-the machine hosts it. A Raspberry Pi 5 takes hours to measure a full Zynthian image. A machine of the same class and
-the same plugin set does not need to measure it again: this repository holds the records one such machine wrote, and
-publishes them as `plugin-qualification-records`, which `plugin-qualify-sync` reads before it measures anything.
+the machine hosts it. That takes hours on a small board. A machine of the same class with the same plugin files does
+not need to measure again. This repository ships the records of the qualification runs, so `plugin-qualify-sync` can
+take a plugin from them and measure only what they do not hold.
 
-A record set is per machine class, per sample rate and per quantum. A run that measured several cells gives one set
-per cell, named `<set>-<rate>-<quantum>`: `fedora44-48000-512` and `fedora44-96000-256` are two sets. All the sets of
-a class go into the one package of that class's architecture, and `plugin-qualify-sync` chooses the set of the
-machine's class and cell.
-
-Every set names its tier in its provenance (`tier`, `tierNote`), and the package description names the tier of each
-architecture's sets:
-
-- **reference**: measured in a container on JACK's dummy driver with real-time priority (SCHED_FIFO, memory
-  locked). Every figure is comparable across machines and classes.
-- **provisional**: measured on JACK's dummy driver without real-time priority. The crash, hang and unmeasured
-  verdicts hold; the cost, latency and xrun figures are not reference figures. A newer reference set supersedes it.
-- **hardware**: measured on the machine's own audio interface. The verdicts hold; its figures describe that
-  interface and are not compared with the reference tier.
+The design is this repository's qualification store spec. Read it for every rule below.
 
 ## What is offered
 
-One package, `plugin-qualification-records`, the same name on every platform, built per architecture. Each
-architecture carries every current set of its machine classes, one per cell measured, by the latest plugin-qualify.
-A set measured by an older plugin-qualify is dropped, not kept: the class ships nothing until it is measured again.
+These binary packages come from this source. The names are the Debian ones; the RPM names differ only where noted.
 
-| architecture | host class | machine | sets | tier | depends on | released as |
-| --- | --- | --- | --- | --- | --- | --- |
-| arm64 | `rpi5` | Raspberry Pi 5 (ZynthianOS Vangelis) | `zynthian-vangelis`, 1863 records (measured by plugin-qualify 0.19.0, the adapter, isolated, pool and memory steps under 0.19.1) | hardware | plugin-qualify 0.20.0 or later | deb, Debian trixie |
-| amd64, x86_64 | `x86-64` | the OpenMixer worker image, and a desk | `fedora44-<rate>-<quantum>`, ten cells, 1109 records a set (plugin-qualify 0.19.1 and 0.20.0, each set's provenance) | provisional | plugin-qualify 0.20.1 or later, which takes a set by its cell | rpm, Fedora 44 x86_64, and deb amd64, once that plugin-qualify is in the channel |
-| amd64, x86_64 | `x86-64` | the OpenMixer worker image, measured with real-time priority (SCHED_FIFO granted) | `fedora44-rt-<rate>-<quantum>`, 22 cells (44100, 48000, 88200 and 96000 at 64 to 512; 176400 and 192000 at 128 to 512), 1109 records a set (plugin-qualify 0.20.1) | reference | plugin-qualify 0.20.1 or later | the same package |
+| package | what it ships |
+| --- | --- |
+| `plugin-qualification-records` | The base layer: `/usr/share/omx/qualification/qualification.sqlite`. It is built from `records/` when the package is built, one per architecture. It also installs the records as files, until the consumers have switched to the store. |
+| `libplugin-qualification-db0` | The reader library, `libplugin-qualification-db.so.0`. It reads the base layer and a user layer and merges them. |
+| `libplugin-qualification-db-dev` (RPM: `-devel`) | The header, the `.so` link and `plugin-qualification-db.pc`. The `.pc` variable `schema` names the DDL. |
+| `plugin-qualification-db` | The command. `plugin-qualification-db query --json` prints results; `check` opens both layers and the words they hold. |
+| `plugin-qualification-db-write` | The writer: `plugin-qualification-db-write put` and `delete`, and the Python module behind them. It writes the user layer and the system layer. |
+| `plugin-qualification-db-schema` | The DDL, once, at `/usr/share/plugin-qualification-db/qualification.sql`. The writer and test fixtures read it from there. |
 
-Where a `fedora44-rt-` set and a `fedora44-` set hold one plugin at one cell, both are kept and the reader answers
-with the reference tier (the store spec, `docs/design/specs/qualification-sqlite.md`, section 4).
+The records package is per architecture. The library, the command and `-dev` are built for each. The writer and the
+schema package are the same on every architecture. Every package is versioned together.
 
-`packaging/arch-classes` is the one map of architectures to classes and plugin-qualify floors: `debian/rules`, the
-spec and `tools/sets.py` read it. There is no aarch64 RPM: no Fedora machine of an arm64 class is measured.
+`packaging/arch-classes` maps each architecture to a machine class and to the plugin-qualify version its package needs.
+`tools/sets.py check` holds the packaging to it.
 
-The package takes over the names the sets were published under before, one package per set. On Debian it Provides
-them (at this version), Replaces and Breaks them (below this version): `plugin-db-qualification-rpi5-zynthian-vangelis`
-and `omx-qualification-rpi5-zynthian-vangelis` on every architecture, and on amd64 also
-`plugin-db-qualification-x86-64-fedora44`, `omx-qualification-x86-64-fedora44` and every per-cell
-`plugin-db-qualification-x86-64-fedora44-<rate>-<quantum>`. The x86_64 RPM Provides and Obsoletes the x86-64 names.
-The list is derived from `records/` when the package is built (`tools/sets.py substvars` for Debian, the spec block
-`tools/sets.py spec` writes for the RPM), never kept by hand.
+## The store
 
-The rpi5 set `zynthian-vangelis` is older than the rule of one set per cell: each of its records holds the several
-cells it was measured at (48000/256 and 96000/256), and it stays so until the class is measured again, when it
-becomes `zynthian-vangelis-48000-256` and `zynthian-vangelis-96000-256`. A record or probe file is never rewritten:
-they are the bytes the device wrote.
+One SQLite file format, two kinds of file.
 
-plugin-qualify knows a class by the board's device tree (`rpi5` on a Raspberry Pi 5) or by `host_class` in
-`/etc/omx/qualify.conf`; it does not tell machines apart by CPU or kernel. The worker image and a desk are both
-`x86-64`. The class's set is the worker image's, because it is measured in the cluster from the channel's packages
-and no live machine is touched; a desk that wants it sets `host_class x86-64`, and takes the records whose plugins it
-has with the same bytes.
+| layer | path | written by |
+| --- | --- | --- |
+| base | `/usr/share/omx/qualification/qualification.sqlite` | the records package; read only |
+| user, user scope | `~/.local/share/omx/qualification/qualification.sqlite` | `plugin-qualify-sync` of that user, through the writer |
+| user, system scope | `/var/lib/omx/qualification/qualification.sqlite` | `plugin-qualify-sync --system`, through the writer |
 
-### How a class is measured again
+A reader opens the base and one user layer. A record in the user layer shadows the whole base record of the same key.
+The base is never changed. A scope reads its own layer and not the other's. The command and the tests may name other
+places; the library's `pqdb_open(scope)` does not.
 
-| class | where | command | time |
-| --- | --- | --- | --- |
-| `rpi5` | a Raspberry Pi 5 with the ZynthianOS image, plugin-qualify from the channel | one `plugin-qualify-sync --system --force --no-distributed --grid <rate>/<quantum>` per cell (48000/256, 96000/256), each with its own `qualification_dir` under `<run>/b<rate>-<quantum>/qualification`, then the build below | about 6 hours per cell at 48 kHz |
-| `x86-64` | the cluster, a Job (`tools/fedora44/job.yaml`, a fedora:44 pod on an AMD Ryzen 7 PRO 8700GE node) | `kubectl -n omx-qualify-rt create configmap omx-qualify-fedora44-script --from-file=tools/fedora44/measure.sh && kubectl apply -f tools/fedora44/job.yaml`; it measures 48000/512 and 96000/256 and delivers `<SET>/b48000-512/qualification` and `<SET>/b96000-256/qualification` to a `records/fedora44/<SET>` branch | hours; the Job stops at 14 h (`activeDeadlineSeconds`) |
+Qualification results are stable. They are stored once and never measured again per release or per operating system.
+The base is built from the existing records under `records/`, every set with its provenance: the x86-64 sets, which are
+named for the Fedora 44 image they were measured on, and the rpi5 sets. A set stays valid on later releases: x86-64 is a
+host class, not an operating system. Each record keeps the plugin's verdicts, its cost and latency figures, memory, real-time
+safety, and the name and hash of the probe output it judged. It keeps codes, never sentences.
 
-Each cell measured is a set of its own: the build below packages every `b<rate>-<quantum>/qualification` of a run as
-`<set>-<rate>-<quantum>`.
+### The record key
 
-A desk can measure the class too (`plugin-qualify-sync --system --force --no-distributed` with `host_class x86-64`),
-but only when nothing else runs on it: the measurement plays every plugin on the audio server.
+A record is the judgement of one plugin binary under one offer on one machine class. Its key is:
 
-## Install path
+- the SHA-256 of the main binary, the plugin format (`clap` or `lv2`) and the plugin id (the CLAP id or the LV2 uri);
+- the offer, `default` or `custom`;
+- the host class, such as `rpi5` or `x86-64`.
 
-```
-/usr/share/omx/qualification/<host class>/<set>/          # <set> is <set>-<rate>-<quantum> for a set of one cell
-    <plugin>@<version>-<sha256 first 12>.<offer>.qualification.json   # the record
-    <same name>.probe.json                                              # the probe output the record judged, byte for byte
-    provenance.json                                                     # where the set comes from
-```
+The SHA-256 is the identity. The package fields beside it say which installed package the binary came from. They help to
+find results and are never part of the key.
 
-plugin-db's store (`/var/lib/plugin-db`) holds a machine's own layers and names no place for shipped records, so the
-records stay where plugin-qualify-sync reads them (`distributed_dir`, `/usr/share/omx/qualification`). The package of
-an architecture holds `<host class>/` for each class of that architecture, every set of the class beside the others,
-and depends on the plugin-qualify floor of that architecture and no ceiling: on arm64
-`plugin-qualify (>= 0.20.0~)`, on amd64 `plugin-qualify (>= 0.20.1~)`, on x86_64 `plugin-qualify >= 0.20.1`.
+A plugin matches a record when its files are exactly the record's file list, by relative path and SHA-256. The record
+keeps the binary's path relative to the plugin's install root. The same record therefore matches the same bytes under
+`/usr/lib/clap`, `/usr/lib64/clap` or a home directory.
 
-Each record is held with its probe output. Both are the files the measuring machine wrote, unchanged. The plugins
-that could not be measured (`*.unmeasured.json`) are not here: an unmeasured record never applies.
+### Where the words come from
 
-## The matching rule
+The store owns no words. A word is a rating, a reason, a dimension, a code. The writer and the reader check every word
+column against the owner's installed domain. Nothing is copied into this repository.
 
-A record is found by the plugin's name (an LV2 uri, a CLAP path). The name only finds it. It applies to a plugin
-on the device when, and only when:
+- `qualification`: plugin-qualify.
+- `machine` and `probe`: plugin-hostd.
+- plugin-db's own domain: the plugin formats.
 
-- every file of the record's `binary.files` is installed at that path relative to the plugin's root, with that
-  SHA-256, computed on the device at the time of the sync;
-- the probe output beside the record is intact (its SHA-256 is the one the record names) and one this plugin-qualify
-  reads;
-- the record holds a verdict for the sync's `host_profile` that ended `qualified`, `refused`, `crashed` or `hung`.
+The hosting words are the one exception, until omx-clap-core publishes a `hosting` domain.
+They are the codes of the installed omx-clap-core contract package
+(`hosting.json` and `hosting/*.json` under its contract directory). The writer reads them from there and refuses a hosting
+word that package does not hold. The store records them as the domain `hosting`, at that package's version. The reader
+passes over the hosting columns this pass.
 
-Anything else is measured on the device as before, and the sync says so (`distributed: <uri>: binary differs`).
-A package version that ships different bytes, a plugin the user added, or a plugin built for another
-architecture therefore never takes a measurement that is not its own.
+The contract directory is the one omx-contract installs. The writer takes `--contract-dir`, then `OMX_CONTRACT_PATH`,
+then the `contractdir` of `libomx-domain.pc`.
 
-## Use on a device
+## Writing the user layer
 
 ```
-apt install plugin-qualification-records      # from the OpenMixer channel
-plugin-qualify-sync --system
+plugin-qualification-db-write put --scope user --offer default --host-class x86-64 < record.json
+plugin-qualification-db-write delete --scope user --sha256 <hash> --format clap --uri <id> --offer default --host-class x86-64
 ```
 
-The package holds every set of the machine's class; the sync takes the one of the cell it runs at (its sample rate
-and quantum).
+`put` takes one record on standard input and replaces the layer's record of the same key. It creates the layer when
+there is none. A refusal is named on standard error, nothing is written, and the exit code is 1. The names are in the
+spec: `path-absolute`, `binary-not-in-files`, `key-not-the-binary`, `files-unordered`, `files-duplicate`, `files-empty`,
+`word-unknown`, `field-unmapped`, and others.
+
+## Building
+
+The reader is built with `make` and tested with `make check`. It needs a C compiler, `sqlite3` 3.37.0 or later and
+`libomx-domain` from omx-contract 3.20.0 or later, found by `pkg-config`. `make install DESTDIR=... PREFIX=/usr`
+installs the library, the command, the header, the `.pc`, the DDL and the writer.
+
+The base is built by `tools/records-db.py --records records --out qualification.sqlite --contract-dir <dir>`. The
+packages run it. It needs Python 3, its `sqlite3` module and `python3-jsonschema`. Building the same records twice gives
+the same database.
+
+`records/` holds the sets. A set is per machine class, per sample rate and per quantum, named
+`<set>-<rate>-<quantum>`. `tools/check-records.py` checks every set the way `plugin-qualify-sync` reads it, and refuses
+an absolute `binary.path`. The records are rewritten once to the relative form, by `tools/rewrite-records.py`.
+
+The x86-64 sets are of two tiers. `fedora44-<rate>-<quantum>` (tier `provisional`) were measured without real-time
+priority; `fedora44-rt-<rate>-<quantum>` (tier `reference`) were measured with SCHED_FIFO granted. Both are kept. Where
+both hold one plugin at one cell, the base gives the claim to the reference tier and the reader answers with it (the
+store spec, section 4). A set is marked `rt` only when it is of the reference tier.
+
+The console key waits for its desk run (issue #5's ruling): a set of the `openmixer-console` profile is refused, and
+the base holds no openmixer-console verdict. The record files keep them; the base build leaves them out.
+
+## Packaging rules
+
+- A package states its dependencies as floors. No upper limit is set anywhere.
+- No package of this source has Provides, Replaces, Breaks, Conflicts or Obsoletes. Not on another package of this
+  source, and not on the older per-set package names. Those names are pruned from the channel. `tools/sets.py check` and
+  `tools/test_no_relations.py` refuse a relation.
+- The writer package does not depend on a contract package. It reads the installed contract directory when it runs.
+
+## Release
+
+A tag `v<version>` runs `.github/workflows/release.yml`. It builds the packages for the architectures
+`packaging/release-arches` names and publishes them into the OpenMixer channel. The version is the date and the day's
+serial, `YYYYMMDDXX`, for example `2026103001`. A number is never used twice. The tag, the spec's `Version` and the top
+`debian/changelog` entry are the same number, and `tools/sets.py check` holds them together.
+
+A manual run with `publish=false` builds everything and publishes nothing.
+
+## Adding measurements
+
+The records change only when new measurements are added, never per release. A new measurement is a new set. Import a
+`plugin-qualify --out` directory (its `*.qualification.json` and `*.probe.json` files) with its provenance:
 
 ```
-plugin-qualify-sync: distributed: http://distrho.sf.net/plugins/3BandEQ: applied (zynthian-vangelis)
+tools/sets.py import <class> <set> <out-dir> --provenance <file>
 ```
 
-The host class is the board's own, read from the device tree (`rpi5` on a Raspberry Pi 5), or `host_class` in
-`/etc/omx/qualify.conf`. A plugin taken from the records is not measured; the sync copies the record into the
-device's `qualification_dir` with this set's `provenance` added, and treats it afterwards like one it measured
-(skipped while its files are unchanged, measured when they change). `--no-distributed` keeps the layer out of a
-run; `--force` measures everything.
+The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. It refuses a set that already exists
+(`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then run
+`tools/sets.py spec`, and release the records package under a new date version.
 
-The channel is `https://www.openmixer.org/deb/debian/trixie/`; add it with the `openmixer-release` package.
-
-On Fedora 45 x86_64, once the x86_64 package is released:
-
-```
-dnf install https://www.openmixer.org/rpm/openmixer-release.noarch.rpm
-dnf install plugin-qualification-records          # every x86-64 set; the sync takes the one of the machine's cell
-printf 'host_class x86-64\nclap_extra /usr/lib64/clap\n' >> /etc/omx/qualify.conf
-plugin-qualify-sync --system
-```
-
-An x86_64 machine has no device tree, so it has no class of its own: plugin-qualify-sync reads no distributed record
-until `host_class` names one. Fedora's CLAP packages (and the audinux ones) install into `/usr/lib64/clap`, which
-the sync's default CLAP path (`~/.clap`, `/usr/lib/clap`) leaves out; `clap_extra` adds it, as on the machine that
-measures the set.
-
-## Rebuild from a device run
-
-A run measures one or more cells, each into its own qualification directory, `<run>/b<rate>-<quantum>/qualification`
-(the layout of `tools/fedora44/measure.sh`; on a device, run `plugin-qualify-sync --system --force --grid
-<rate>/<quantum>` once per cell with `qualification_dir` set to that cell's directory, or `plugin-qualify --all
---isolate --out <dir>`). Copy the run here and:
+`tools/build-package.sh` builds such a set from a run's qualification directories:
 
 ```
 tools/build-package.sh --from-run <run> --provenance provenance.json \
     --version <YYYYMMDDXX> --host-class <class> --set <set>
-git diff --stat
 ```
 
-Every `b<rate>-<quantum>/qualification` of the run becomes the set `<set>-<rate>-<quantum>`, and its provenance's
-`grid` is that cell. One cell alone is `--from <qualification dir> --cell <rate>/<quantum>`; `--from <qualification
-dir>` without `--cell` keeps the set name as given. For each set, `plugin-qualify-records-package` judges which
-records go in, and the script replaces `records/<class>/<set>/` with what it holds. No other set, of the class or of
-another, is touched. Nothing is written per set: the set goes into the package of its class's architecture (the class
-must have a line in `packaging/arch-classes`). The spec's `Version` and the top `debian/changelog` entry take the
-version, and the spec's per-architecture block is written again (`tools/sets.py spec`), so the older names the
-package takes over follow `records/`; write the changelog entry.
-
-`provenance.json` is a JSON file of what the tool cannot know: the image, the board, the package versions and the
-source revisions of the device; the tool adds the schema, the set, the host class, the package and the date. Commit,
-then tag `v<version>`: the tag must equal the spec's `Version` and the `debian/changelog` version (`tools/sets.py
-check` holds them together, and every class of `records/` to an architecture).
-
-`tools/build-package.sh` without arguments builds the tool's own package of every set of `records/`, to compare its
-judgement with what `debian/` ships.
-
-The x86-64 sets are measured in a pod, not on a desk: `tools/fedora44/job.yaml` is a Job in the cluster's
-`omx-qualify-rt` namespace (privileged, so the container adds SYS_NICE and IPC_LOCK and jackd runs at SCHED_FIFO 70 with memory locked; a base whose server is not SCHED_FIFO is refused), and `tools/fedora44/measure.sh` installs the channel's plugin-qualify, plugin-hostd and
-omx-clap-host with the worker image's plugin set (platform `baked-versions.yml`) in `fedora:44`, starts a JACK
-server of the pod's own (dummy driver) at each cell and runs `plugin-qualify-sync --system` there. It delivers the
-run to a `records/fedora44/<SET>` branch; take it from there and:
-
-```
-git archive origin/records/fedora44/<SET> <SET> | tar -x -C /tmp
-tools/build-package.sh --from-run /tmp/<SET> --provenance provenance.json \
-    --version <YYYYMMDDXX> --host-class x86-64 --set fedora44
-```
-
-`tools/check-records.py` reads every set as plugin-qualify-sync will: the provenance names its set and class, every
-record has its probe output beside it with the size and SHA-256 it names, a set named `<set>-<rate>-<quantum>`
-holds only records whose measurement grid holds that cell and names the cell in its provenance's `grid`, and nothing
-else is shipped. The `check` workflow runs it on every pull request, and the RPM's `%check` runs it on the installed
-tree.
-
-## The host comparison
-
-A set can also hold how its plugins fare under four hosts: our two (omx-clap-host, with the LV2 adapter, and
-plugin-hostd) and the two references, mod-host and jalv. `plugin-qualify compare` runs every plugin through each host
-with the same checks (it loads, it instantiates, it gives output under a tone or notes, it survives the load cycles and
-the soak, its audio thread allocates, locks or makes a system call or not, its CPU and the latency the host reports) on
-one private JACK server at one rate and quantum, and writes one `<plugin>-<format>-<hash>.comparison.json` per plugin
-(`plugin-qualify.comparison-record/1`, a row per host, each with its version) and `comparison-summary.json`
-(`plugin-qualify.comparison-summary/1`: per host the plugins it loads, runs clean, runs real-time safe and crashes on,
-and the plugins where each host does better than the others). A check a host does not let us observe is
-`not-observable`, never a failure; a host that is not installed is a `skipped` row with its reason.
-
-On a machine of the set's class, with mod-host and jalv installed (`--publish` refuses to run without them, naming
-what is missing):
-
-```
-plugin-qualify compare --all --publish --host-class <class> --set <set> --out <dir>
-cp <dir>/*.comparison.json <dir>/comparison-summary.json records/<class>/<set>/
-python3 tools/check-records.py records/<class>/<set>
-```
-
-`tools/check-records.py` holds a set's comparison to the rules: every record is one, a set with comparison records has
-their summary, the summary is publishable, mod-host and jalv ran, and its counts are the ones its records give. The
-packages ship the files; plugin-qualify-sync reads only the qualification records. The comparison is not bound to the
-plugins' bytes as a record is, so a rebuild of the set from a device run drops it (`tools/build-package.sh` says so),
-and the new set's comparison is added after. The site's plugin pages show it per machine class.
-
-## Release
-
-A tag `v*` runs `.github/workflows/release.yml`. It builds `plugin-qualification-records` for the architectures
-`packaging/release-arches` names, each on a runner of its own architecture, and nothing else:
-
-- a Debian architecture: the package from `debian/`, for trixie, linted (warnings fail), signed and
-  published into the channel. The arm64 package is then installed in Debian trixie on arm64 with plugin-qualify from
-  the channel and Debian's own arm64 lv2vocoder (its bytes are the set's), and for every set it carries
-  `plugin-qualify-sync --system` must take plugins from that set's records (`distributed: ... applied (<set>)`) and
-  measure none of them. The amd64 package carries the Fedora sets, whose plugins no Debian machine holds, so it is
-  built, linted and published without an install proof; its sets are proven by the x86_64 RPM.
-- an RPM architecture: the package from `packaging/plugin-qualification-records.spec` through Open-Mixer/.github's
-  `build-rpm.yml` (its `%check` runs `tools/check-records.py` over every installed set), signed, published into the
-  channel's `rpm/` tree and attached to the same GitHub release; then installed in Fedora 45 with plugin-qualify from
-  the channel, and for every set, with the omx-plugins version that set measured, the sync must take it from the
-  records.
-
-`tools/sets.py prove` runs the proofs (`tools/prove-set.sh`: the package installed once, then each set in turn with its
-class and cell in `/etc/omx/qualify.conf` and the sync's state cleared between sets). The spec's `Version` and the top
-`debian/changelog` entry are the same number, and the tag must equal both (the `check` workflow holds them together).
-A manual run (`workflow_dispatch`) does everything except publishing.
-
-### Release order
-
-arm64 goes first. This version's `packaging/release-arches` names `deb arm64` and no RPM architecture, so its tag
-builds and publishes the arm64 deb alone, whose plugin-qualify range the channel already serves. Once plugin-qualify
-0.20.1 is in the channel, the next dated version adds `amd64` to the `deb` line and `x86_64` to the `rpm` line
-(`deb arm64 amd64`, `rpm x86_64`), gets its own `debian/changelog` entry and spec `Version`, and is tagged: that tag
-builds the RPM first and the debs after it, and proves the x86_64 package in Fedora 45. `tools/sets.py check` refuses
-a release architecture whose classes hold no set.
-
-## Versions
-
-A records package is versioned by the date its records are published: `YYYYMMDDXX`, the year, month and day
-followed by the day's serial, `01` for the first release of the day. A number is never used twice, even for a
-release that did not publish: the next one takes the next serial. No dots or other separators: `2026103001`.
-The tag is `v` and the version (`v2026103001`). These numbers sort in time order for both dpkg and rpm, so a
-machine always upgrades to the newer set.
-
-## Provenance of the Zynthian set
-
-| | |
-| --- | --- |
-| Image | ZynthianOS Vangelis-2610.1, built 2026-10-15 from Raspberry Pi OS Trixie (aarch64) |
-| Board | Raspberry Pi 5 Model B Rev 1.0, a real board |
-| Measured | host profile `omx-clap-host`, at 48000/256 and 96000/256; the adapter, isolated, pool and memory steps at 48000/128 and 48000/256 |
-| zynthian-ui | `76e325ea9ddfee20c84aa6a9d17782cb9b4c86b1` |
-| zynthian-sys | `31e8524328103ed0ab0ad61924431d477bdd448c` |
-| Packages | plugin-qualify 0.19.0, plugin-hostd 0.18.0, omx-clap-host 0.29.0, omx-plugins 0.18.0, omx-contract-data 3.9.1, omx-panel 0.10.1, distrho-plugin-ports-lv2 5:20210315; the steps under plugin-qualify 0.19.1, plugin-hostd 0.19.0, omx-clap-host 0.30.0 (the full list is in `provenance.json`) |
+Every `b<rate>-<quantum>/qualification` of the run becomes the set `<set>-<rate>-<quantum>`. `provenance.json` holds what
+the tool cannot know: the image, the board, the package versions. A record file and a probe file are never edited; they
+are the bytes the device wrote.
 
 ## License
 
 GPL-3.0-or-later, as plugin-qualify. See `LICENSE`.
-
-## The reader
-
-`libplugin-qualification-db`, its command `plugin-qualification-db` and `plugin-qualification-db.pc` are built with
-`make` and tested with `make check` (a C compiler, `sqlite3` 3.37.0 or later and `libomx-domain` from omx-contract
-3.20.0 or later, found by `pkg-config`; Python 3 builds the fixture stores from `schema/qualification.sql`).
-`make install DESTDIR=... PREFIX=/usr` installs the library, the command, the header, the `.pc` and the DDL
-(`pkg-config --variable=schema plugin-qualification-db`).
-
-`SQLITE_CFLAGS`, `SQLITE_LIBS`, `DOMAIN_CFLAGS`, `DOMAIN_LIBS` and `CONTRACTDIR` override what pkg-config says. They
-are a local convenience for a machine without the development packages installed; CI and the packages use pkg-config.

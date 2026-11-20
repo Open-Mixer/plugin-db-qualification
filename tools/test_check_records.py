@@ -91,6 +91,16 @@ class ComparisonRecords(unittest.TestCase):
     def test_a_whole_set_passes(self):
         self.assertEqual(self.problems(), [])
 
+    def test_an_absolute_binary_path_is_refused_by_name(self):
+        """Section 3.7: a record names its binary relative to the item's install root; no record of the old form is added."""
+        rec = json.load(open(os.path.join(self.set, "a.default.qualification.json")))
+        rec["binary"]["path"] = "/usr/lib/clap/a.clap/Contents/x86_64-linux/a.so"
+        self.write("a.default.qualification.json", rec)
+        found = [p for p in self.problems() if "path-absolute" in p]
+        self.assertEqual(len(found), 1, self.problems())
+        self.assertIn("a.default.qualification.json", found[0])
+        self.assertIn("/usr/lib/clap/a.clap/Contents/x86_64-linux/a.so", found[0])
+
     def test_comparison_records_need_their_summary(self):
         os.remove(os.path.join(self.set, check.SUMMARY))
         self.assertTrue(any("is missing, and the set holds 2 comparison records" in p for p in self.problems()))

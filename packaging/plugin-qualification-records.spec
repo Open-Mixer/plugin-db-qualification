@@ -34,89 +34,19 @@ BuildRequires: python3
 BuildRequires: gcc make pkgconfig binutils
 BuildRequires: sqlite-devel >= 3.37.0
 BuildRequires: libomx-domain-devel >= 3.20.0
+# tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
+BuildRequires: python3-jsonschema
+BuildRequires: plugin-qualify-contract >= 0.20.7
+BuildRequires: plugin-hostd-contract >= 0.20.8
+BuildRequires: plugin-db-contract >= 0.4.7
+BuildRequires: omx-clap-core-contract >= 0.33.1
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
 Requires: plugin-qualify >= 0.20.1
-Provides: omx-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: omx-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: omx-qualification-x86-64-fedora44-rt = %{version}-%{release}
-Obsoletes: omx-qualification-x86-64-fedora44-rt < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-176400-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-176400-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-176400-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-176400-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-176400-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-176400-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-192000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-192000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-192000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-192000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-192000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-192000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-44100-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-44100-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-44100-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-44100-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-44100-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-44100-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-44100-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-44100-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-48000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-48000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-48000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-48000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-48000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-48000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-48000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-48000-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-88200-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-88200-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-88200-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-88200-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-88200-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-88200-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-88200-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-88200-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-96000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-96000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-96000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-96000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-96000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-96000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-rt-96000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-rt-96000-64 < %{version}-%{release}
 %endif
 %ifarch aarch64
 Requires: plugin-qualify >= 0.20.0
-Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
 %endif
 # END per-architecture
 
@@ -205,9 +135,16 @@ python3 tools/sets.py install rpm %{_target_cpu} %{buildroot}%{qual_dir}
 for class in $(ls %{buildroot}%{qual_dir}); do
     echo "%{qual_dir}/$class/"
 done > records.files
+# the base database of the same sets, beside them: its words are checked against the contract directory's domains
+# (the contract packages of BuildRequires) and its commit is BUILT_FROM's (git archive substituted it)
+classes=$(python3 tools/sets.py list rpm %{_target_cpu} | cut -d' ' -f1 | sort -u | sed 's/^/--class /')
+python3 tools/records-db.py --records records $classes --contract-dir "$(pkg-config --variable=contractdir libomx-domain)" \
+    --built-from-file BUILT_FROM --out %{buildroot}%{qual_dir}/qualification.sqlite
+echo "%{qual_dir}/qualification.sqlite" >> records.files
 %make_install PREFIX=%{_prefix} LIBDIR=%{_libdir}
 
 %check
+test -s %{buildroot}%{qual_dir}/qualification.sqlite
 make PREFIX=%{_prefix} LIBDIR=%{_libdir} check
 for dir in %{buildroot}%{qual_dir}/*/*/; do
     set=$(basename "$dir")

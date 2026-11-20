@@ -239,6 +239,8 @@ def check_set(path):
         files = binary.get("files")
         if not isinstance(binary.get("path"), str) or not isinstance(files, list) or not files:
             bad(name, "names no binary with its files")
+        elif binary["path"].startswith("/"):
+            bad(name, f"path-absolute: binary.path {binary['path']!r} is not relative to the item's install root (section 3.7)")
         elif any(not isinstance(x.get("path"), str) or len(str(x.get("sha256", ""))) != 64 for x in files):
             bad(name, "a file of its binary has no path or no SHA-256")
         elif any(p.startswith(DRY_DIR) for p in [binary["path"]] + [x["path"] for x in files]):

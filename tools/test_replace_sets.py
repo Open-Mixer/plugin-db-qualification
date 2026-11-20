@@ -77,13 +77,15 @@ class ReplaceSets(unittest.TestCase):
 
     def test_a_missing_set_directory_stops_it_before_anything_is_removed(self):
         r = self.run_script("x86-64", self.out, "fedora45-96000-256")
-        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn(f"replace-sets: {self.out}/fedora45-96000-256: no such directory", r.stderr)
         self.assertEqual(sorted(os.listdir(os.path.join(self.tree, "records", "x86-64"))), ["fedora44-48000-512", "fedora44-96000-256"])
         self.assertEqual(git(self.tree, "status", "--short"), "")
 
     def test_an_unknown_class_stops_it(self):
         r = self.run_script("pi4", self.out, "fedora45-48000-512")
-        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("replace-sets: pi4 is no class of packaging/arch-classes", r.stderr)
         self.assertEqual(git(self.tree, "status", "--short"), "")
 
 

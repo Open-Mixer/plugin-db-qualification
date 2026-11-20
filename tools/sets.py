@@ -55,6 +55,7 @@ SPEC = os.path.join("packaging", f"{PACKAGE}.spec")
 ARCH_CLASSES = os.path.join("packaging", "arch-classes")
 RELEASE_ARCHES = os.path.join("packaging", "release-arches")
 QUALIFICATION = os.path.join("usr", "share", "omx", "qualification")
+BASE_DB = "qualification.sqlite"
 RECORD = ".qualification.json"
 PROBE = ".probe.json"
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
@@ -383,8 +384,13 @@ def prove(root, kind, pkgs):
     try:
         # the package holds the classes of its architecture, each with the sets of the tree, and nothing else
         installed = os.path.join(os.environ.get("PROVE_ROOT") or "/", QUALIFICATION)
+        # beside the classes, the base database the package builds from them (the spec, debian/rules): it is no class
+        base = os.path.join(installed, BASE_DB)
+        if not os.path.isfile(base) or os.path.getsize(base) == 0:
+            print(f"::error::{PACKAGE} ({arch}) installs no base database {BASE_DB} in {installed}", flush=True)
+            return 1
         want = sorted({c for c, _ in sets})
-        have = sorted(os.listdir(installed)) if os.path.isdir(installed) else []
+        have = sorted(e for e in os.listdir(installed) if e != BASE_DB) if os.path.isdir(installed) else []
         if have != want:
             print(f"::error::{PACKAGE} ({arch}) installs the classes {have}, not {want}", flush=True)
             return 1

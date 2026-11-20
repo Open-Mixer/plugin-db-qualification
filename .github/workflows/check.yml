@@ -36,6 +36,12 @@ jobs:
       - run: python3 -m unittest tools/test_sets.py
       - run: python3 -m unittest tools/test_fedora44_rt.py
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
+      # Fedora 45 only: a workflow that builds or runs Fedora 44 is refused; fedora44, the name of the sets measured
+      # there, is data and stays
+      - name: No Fedora 44 build or container in the workflows
+        run: |
+          tools/test/workflow-fedora-check.sh --self-test
+          tools/test/workflow-fedora-check.sh .
       # every class under records/ is carried by an architecture of the one package, debian/control and the spec's
       # per-architecture block are what packaging/arch-classes and records/ give, and the spec's Version is
       # debian/changelog's: a tag must equal both

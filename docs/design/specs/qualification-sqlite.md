@@ -932,8 +932,16 @@ and no key changes. After that commit:
 - **No tombstone.** A user cannot hide a base record except by measuring the same key, which shadows it. Removing a
   user record brings the base records back. Hiding without measuring would need a new word and a new
   rule; nothing asks for it today.
-- **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell. In the
-  base, the migration refuses a second claim, naming both files (no current set has one). In the user layer, a newer
+- **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell, and a layer
+  answers for a cell with the record that claims it.
+- **Two tiers at one cell: the reference tier answers** (ruling 2026-11-20). In the base, a set of the reference tier
+  (`record_set.tier` `reference`: measured with real-time priority) and a set of another tier (`provisional`, measured
+  without it) may hold one key, offer and class at one cell: the x86-64 sets `fedora44-rt-<rate>-<quantum>` beside
+  `fedora44-<rate>-<quantum>`. The migration gives the claim to the record of the reference tier, whichever set comes
+  first in byte order, and keeps the other record whole in the base, without the claim at that cell: nothing is dropped
+  and no record changes, and every read that follows the claim answers with the reference tier. No column is added. A
+  second claim at one key and cell from two sets of one tier, or of two tiers neither of which is `reference`, is
+  refused, naming both files. In the user layer, a newer
   user record for a shadow key replaces the user's earlier record for that key, whole, in one transaction, even when it
   holds fewer cells. Decided (#17): a newer user record shadows the whole base record (the user-first merge), and the
   base is never deleted. Across layers there is no conflict: the user's record wins and each result says its `layer`.
@@ -1317,8 +1325,9 @@ makes it fail.
    pass), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
-   from the record's, an empty object, and a second claim on one key and cell each refuse by name and leave no output
-   file. Fails when a partial file is left at `--out`.
+   from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by
+   name and leave no output file. A reference-tier set and a provisional set at one key and cell give the claim to the
+   reference record, in either byte order of the sets (section 4). Fails when a partial file is left at `--out`.
 10. **Key constraints.** A record with a 63-character SHA-256 or a format `vst3` is refused by the schema. Fails when
     the `CHECK`s are dropped.
 11. **Package contents.** The built `plugin-qualification-records` (deb and rpm) holds `qualification.sqlite` and every

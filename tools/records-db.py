@@ -29,6 +29,8 @@ from qualification_db import (  # noqa: E402
     _insert_tree, parse_record, schema_version)
 
 PROVENANCE_SCHEMA = "plugin-qualify.distributed-provenance/1"
+# the set tier whose record claims a cell another tier's set also holds (section 4, ruling 2026-11-20)
+REFERENCE = "reference"
 
 
 def _provenance():
@@ -130,6 +132,7 @@ class Writer:
         if prov["schema"] != PROVENANCE_SCHEMA:
             em.refuse("field-unmapped", "schema", f"expected {PROVENANCE_SCHEMA}")
         sid = _insert(cur, "record_set", s)
+        tier = s["tier"]
         for k, v in settings.items():
             if k == "note":
                 if not isinstance(v, str):
@@ -144,9 +147,9 @@ class Writer:
             _insert_tree(cur, r, {"set_id": sid}, None)
         files = sorted((f for f in os.listdir(d) if f.endswith(".qualification.json")), key=os.fsencode)
         for f in files:
-            self._record(cur, cls, name, d, sid, f, plugins, claims)
+            self._record(cur, cls, name, d, sid, tier, f, plugins, claims)
 
-    def _record(self, cur, cls, setname, d, sid, fname, plugins, claims):
+    def _record(self, cur, cls, setname, d, sid, tier, fname, plugins, claims):
         label = f"{cls}/{setname}/{fname}"
         stem = fname[: -len(".qualification.json")]
         recname, dot, offer = stem.rpartition(".")
@@ -173,10 +176,22 @@ class Writer:
             rid = _insert_record(cur, scope, pid, dict(set_id=sid, host_class=cls, offer=offer, name=recname))
             for cell in (k for k in scope.kids if k.table == "cell"):
                 ck = (pid, offer, cls, cell.cols["rate"], cell.cols["quantum"])
+                # one claim per key, offer, class and cell (section 4). Ruling 2026-11-20: where a set of the reference
+                # tier and a set of another tier hold one, the reference tier's record claims it, whichever set comes
+                # first; the other record stays whole, without the claim. Two of one tier, or two of which neither is
+                # of the reference tier, are refused.
                 if ck in claims:
+                    held, held_tier = claims[ck]
+                    if tier == REFERENCE and held_tier != REFERENCE:
+                        cur.execute("UPDATE claim SET record_id = ? WHERE plugin_id = ? AND offer = ? AND host_class = ? "
+                                    "AND rate = ? AND quantum = ?", (rid,) + ck)
+                        claims[ck] = (label, tier)
+                        continue
+                    if held_tier == REFERENCE and tier != REFERENCE:
+                        continue
                     raise Refusal("claim-duplicate", f"{label}: the cell {cell.cols['rate']}/{cell.cols['quantum']} of this key, "
-                                  f"offer and class is already claimed by {claims[ck]}")
-                claims[ck] = label
+                                  f"offer and class is already claimed by {held}")
+                claims[ck] = (label, tier)
                 cur.execute("INSERT INTO claim (record_id, plugin_id, offer, host_class, rate, quantum) VALUES (?, ?, ?, ?, ?, ?)",
                             (rid,) + ck)
         except sqlite3.IntegrityError as e:

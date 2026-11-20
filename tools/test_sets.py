@@ -212,23 +212,23 @@ class Check(Tree):
         self.assertIn(f"debian/changelog is 2026010101 but the spec is {VERSION}", self.problems())
 
     def test_this_repository_floors_plugin_qualify_at_0_20_8_once(self):
-        # the records need plugin-qualify 0.20.8: qualification domain 1.4.0, hostd_conf, the moved keys. One floor in
+        # the records need plugin-qualify 0.21.0: qualification domain 1.4.0, hostd_conf, the moved keys. One floor in
         # packaging/arch-classes; the spec block and the deb substvar are generated from it, so they cannot disagree
         real = os.path.dirname(HERE)
         floors = {l["from"] for l in sets.arch_classes(real)}
-        self.assertEqual(floors, {"0.20.8"})
+        self.assertEqual(floors, {"0.21.0"})
         with open(os.path.join(real, SPEC), encoding="utf-8") as f:
             spec = f.read()
-        self.assertEqual(re.findall(r"^Requires: plugin-qualify (.*)$", spec, re.M), [">= 0.20.8", ">= 0.20.8"])
+        self.assertEqual(re.findall(r"^Requires: plugin-qualify (.*)$", spec, re.M), [">= 0.21.0", ">= 0.21.0"])
         for arch in ("amd64", "arm64"):
-            self.assertEqual(sets.substvars(real, arch), "qualify:Depends=plugin-qualify (>= 0.20.8~)\n")
+            self.assertEqual(sets.substvars(real, arch), "qualify:Depends=plugin-qualify (>= 0.21.0~)\n")
 
     def test_the_spec_block_follows_records_and_arch_classes(self):
         for s in CELLS:
             self.add_set("x86-64", s)
         # the block holds the floors only: a set added to records/ moves nothing in it
         self.assertEqual(sets.problems(self.root), [])
-        self.edit("packaging/arch-classes", "0.20.8\n", "0.20.9\n")
+        self.edit("packaging/arch-classes", "0.21.0\n", "0.21.1\n")
         self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
 
     def test_debian_control_is_one_package_for_the_mapped_architectures(self):
@@ -476,27 +476,27 @@ class Substvars(Tree):
     def test_arm64_takes_plugin_qualify_0_20_7_and_folds_the_rpi5_names(self):
         self.with_two_cells()
         v = self.vars("arm64")
-        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.8~)"})
+        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.21.0~)"})
 
     def test_amd64_takes_plugin_qualify_0_20_7_and_folds_every_cell(self):
         self.with_two_cells()
         v = self.vars("amd64")
-        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.8~)"})
+        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.21.0~)"})
 
     def test_the_rpm_folds_its_classes_names(self):
         self.with_two_cells()
         block = sets.spec_block(self.root)
-        self.assertIn("%ifarch x86_64\nRequires: plugin-qualify >= 0.20.8\n", block)
+        self.assertIn("%ifarch x86_64\nRequires: plugin-qualify >= 0.21.0\n", block)
         self.assertNotRegex(block, r"(?m)^(Provides|Obsoletes|Conflicts):")
         # each architecture's block names its own classes only
         self.assertNotIn("rpi5", block.split("%endif")[0])
-        self.assertIn("%ifarch aarch64\nRequires: plugin-qualify >= 0.20.8\n", block)
+        self.assertIn("%ifarch aarch64\nRequires: plugin-qualify >= 0.21.0\n", block)
         self.assertNotIn("x86-64", block.split("%ifarch aarch64")[1])
         if shutil.which("rpmspec"):
             def q(*what):
                 return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
                                       capture_output=True, text=True, check=True).stdout
-            self.assertIn("plugin-qualify >= 0.20.8", q("--requires"))
+            self.assertIn("plugin-qualify >= 0.21.0", q("--requires"))
             self.assertEqual(q("--obsoletes").split(), [])
             self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
@@ -565,7 +565,7 @@ class Rules(Tree):
 
     def test_gencontrol_gets_the_architectures_substvars(self):
         self.with_two_cells()
-        for arch, low in (("arm64", "0.20.8"), ("amd64", "0.20.8")):
+        for arch, low in (("arm64", "0.21.0"), ("amd64", "0.21.0")):
             if os.path.exists(self.path("debian", f"{PKG}.substvars")):
                 os.remove(self.path("debian", f"{PKG}.substvars"))
             r, saw = self.make("override_dh_gencontrol", arch)

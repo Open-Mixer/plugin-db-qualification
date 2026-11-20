@@ -20,7 +20,7 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026112001
+Version: 2026112201
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
@@ -44,10 +44,10 @@ BuildRequires: plugin-hostd-contract >= 0.21.0
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
-Requires: plugin-qualify >= 0.20.8
+Requires: plugin-qualify >= 0.21.0
 %endif
 %ifarch aarch64
-Requires: plugin-qualify >= 0.20.8
+Requires: plugin-qualify >= 0.21.0
 %endif
 # END per-architecture
 

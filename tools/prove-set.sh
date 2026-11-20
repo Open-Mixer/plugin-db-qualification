@@ -14,7 +14,7 @@
 #
 # <winner> is the set the store's claim rule gives that cell: of the class's sets that hold it, the one settled on by
 # tier, then date (tools/sets.py expected_winner, which calls tools/records-db.py's rule). plugin-qualify 0.20.7 does
-# not apply that rule: it takes the first set by name that holds the cell (fixed in plugin-qualify#152, 0.20.8). The
+# not apply that rule: it takes the first set by name that holds the cell (fixed in plugin-qualify#152, 0.21.0). The
 # proof records what the sync took, and does not require the winner:
 #   - the sync took a set other than the winner: a WRONG WINNER, named (appended to $PROVE_NOTES as "wrong|<text>");
 #   - the sync never took this set: the set is UNPROVEN, named ("unproven-set|<text>"), exit 3;

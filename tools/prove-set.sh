@@ -10,15 +10,28 @@
 # image it was measured on is called; a set of another class is named and reported as not proven.
 #
 #   tools/prove-set.sh install deb|rpm <pkg dir> <arch>    the one package of <arch> from the build artifact
-#   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or ->
+#   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or -> <winner>
+#
+# <winner> is the set the store's claim rule gives that cell: of the class's sets that hold it, the one settled on by
+# tier, then date (tools/sets.py expected_winner, which calls tools/records-db.py's rule). plugin-qualify 0.20.7 does
+# not apply that rule: it takes the first set by name that holds the cell (fixed in plugin-qualify#152, 0.20.8). The
+# proof records what the sync took, and does not require the winner:
+#   - the sync took a set other than the winner: a WRONG WINNER, named (appended to $PROVE_NOTES as "wrong|<text>");
+#   - the sync never took this set: the set is UNPROVEN, named ("unproven-set|<text>"), exit 3;
+#   - the sync took the winner: noted ("pick|<text>"). Every run notes the set the sync picked per cell.
+# A sync that takes nothing, and every other refusal, fails.
 #   tools/prove-set.sh remove deb|rpm
 #
 # deb: the package from <pkg dir>/trixie/, with Debian's own lv2vocoder, whose bytes are the ones the Zynthian image
 #      holds (if Debian rebuilds it this fails with "binary differs": pick another plugin whose installed files still
 #      hash as a record's).
-# rpm: the package from <pkg dir>/; each set installs the channel's omx-plugins at the version it measured (its
-#      provenance.json), removed again after it; when the channel's omx-plugins of that version is rebuilt with other
-#      bytes this fails with "binary differs", and that is reported; the set stays, as qualification results are stable. python3 must be installed.
+# rpm: the package from <pkg dir>/; each set installs the channel's current omx-plugins (the channel keeps the newest
+#      only), removed again after it, and logs the omx-plugins version the set measured (its provenance.json) beside
+#      the one installed. A record the sync reports "binary differs" for, where the installed version differs from the
+#      measured one, is UNPROVEN: the bytes the record names are no longer published, and the record stays as measured.
+#      It is named (a line "UNPROVEN record ..." and a note "unproven-record|<text>" for the release notes), not
+#      failed; a set none of whose plugins applied for that reason is UNPROVEN too (exit 3). A "binary differs" at the
+#      same version, and every other refusal, still fails. python3 must be installed.
 # A container has no device tree, so the host class is the settings file's. No plugin-hostd listens. PROVE_ROOT
 # prefixes every system path (the tests).
 set -euo pipefail
@@ -26,6 +39,11 @@ set -euo pipefail
 pkg=plugin-qualification-records
 step=$1 kind=$2
 r=${PROVE_ROOT:-}
+
+# a line of what the proof found, for the release notes (PROVE_NOTES names the file; the proof's caller reads it)
+note() {
+    [ -z "${PROVE_NOTES:-}" ] || printf '%s|%s\n' "$1" "$2" >> "$PROVE_NOTES"
+}
 
 clear_state() {
     rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf" "$r/etc/omx/plugin-hostd.conf"
@@ -50,7 +68,7 @@ case $step in
         echo "$pkg ($arch): plugin-qualify $have"
         ;;
     set)
-        class=$3 set_=$4 cell=${5:--}
+        class=$3 set_=$4 cell=${5:--} winner=${6:?the expected winner set}
         installed=$r/usr/share/omx/qualification/$class/$set_
         tree=records/$class/$set_
         # the next set starts from nothing, whether this one passed or not: no record the sync copied from this one
@@ -59,9 +77,11 @@ case $step in
         case $kind in
             deb) hostd='' ;; # no extra folder: plugin-hostd's own LV2 list holds the standard ones
             rpm)
-                ver=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1].rsplit("-",1)[0])' "$tree/provenance.json")
-                dnf install -y --setopt=install_weak_deps=False "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
+                measured=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1])' "$tree/provenance.json")
+                dnf install -y --setopt=install_weak_deps=False omx-plugins-clap omx-plugins-lv2
                 rpm -q omx-plugins-clap omx-plugins-lv2
+                have_omx=$(rpm -q --qf '%{VERSION}-%{RELEASE}' omx-plugins-clap)
+                echo "$class/$set_: omx-plugins measured $measured, installed $have_omx"
                 hostd='clap_path /usr/lib64/clap' # plugin-hostd has no clap_extra
                 ;;
         esac
@@ -79,17 +99,75 @@ case $step in
             [ "$cell" = - ] || printf 'grid %s\n' "$cell"
         } > "$r/etc/omx/qualify.conf"
         log=$(mktemp)
-        plugin-qualify-sync --system 2>&1 | tee "$log"
-        # every plugin taken comes from this set: the class's other sets are installed beside it
-        applied=$(grep -c "distributed: .*: applied ($set_)\$" "$log" || true)
-        other=$(grep 'distributed: .*: applied (' "$log" | grep -vc "applied ($set_)\$" || true)
-        echo "$class/$set_: applied $applied, from another set $other"
-        [ "$applied" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from its records"; exit 1; }
-        [ "$other" -eq 0 ] || { echo "::error::$class/$set_: the sync took plugins from another set"; exit 1; }
-        if grep -E 'distributed: .*(binary differs|not applied|measured here)' "$log"; then
+        # the sync's own exit status is judged below: it exits non-zero when it could measure none of what it was left to measure
+        sync_rc=0
+        plugin-qualify-sync --system > "$log" 2>&1 || sync_rc=$?
+        cat "$log"
+        # the sets the sync took plugins from
+        taken=$(sed -n 's/.*distributed: .*: applied (\(.*\))$/\1/p' "$log" | sort -u | paste -sd,)
+        applied=$(grep -c 'distributed: .*: applied (' "$log" || true)
+        echo "$class/$set_: applied $applied from $taken; the store's rule gives the cell to $winner"
+        # a record of other bytes: UNPROVEN when the omx-plugins installed is another version than the one measured
+        # (rpm only: those bytes are no longer published), a failure at the same version or for a deb
+        unproven=0
+        if grep -q 'distributed: .*: binary differs' "$log"; then
+            if [ "$kind" = rpm ] && [ "${have_omx%-*}" != "${measured%-*}" ]; then
+                while IFS= read -r uri; do
+                    echo "UNPROVEN record $class/$set_: $uri: binary differs (omx-plugins measured $measured, installed $have_omx)"
+                    note unproven-record "$class/$set_: $uri (omx-plugins measured $measured, the channel serves $have_omx)"
+                    unproven=$((unproven + 1))
+                done < <(sed -n 's/.*distributed: \(.*\): binary differs.*/\1/p' "$log" | sort -u)
+            else
+                grep 'distributed: .*: binary differs' "$log"
+                echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
+            fi
+        fi
+        # plugin-qualify 0.20.7 has no flag that takes the distributed records and measures nothing (--refresh-pins and
+        # --rejudge return before the layer is read, src/qualify-sync.ts:1577-1613 and 1613), so a record of other
+        # bytes is then measured; with no JACK server that is left unmeasured and the run exits non-zero. That is
+        # explained only when every plugin the sync tried to measure is one whose record it refused with "binary
+        # differs": the run's plugin lines name no other key, and its summary counts exactly those plugins as
+        # measured or unmeasured, none refused, crashed or hung. Anything else fails. (The sync lists the first
+        # unmeasured plugin only; the count in its summary covers the rest.)
+        summary=$(grep -E '^qualified [0-9]+, skipped [0-9]+' "$log" | tail -1 || true)
+        field() { printf '%s' "$summary" | sed -n "s/.*[ ,]$1 \([0-9][0-9]*\).*/\1/p"; }
+        qualified_n=$(field qualified); refused_n=$(field refused); crashed_n=$(field crashed); hung_n=$(field hung); unmeasured_n=$(field unmeasured)
+        tried=$(( ${qualified_n:-0} + ${refused_n:-0} + ${crashed_n:-0} + ${hung_n:-0} + ${unmeasured_n:-0} ))
+        if [ "$sync_rc" -ne 0 ] || [ "$tried" -ne 0 ]; then
+            keys=$(sed -n 's/.*distributed: \(.*\): binary differs.*/\1/p' "$log" | sort -u)
+            stray=$(sed -n -E 's/^plugin-qualify-sync: ([^ ]+): (unmeasured|refused|crashed|hung|qualified)( .*)?$/\1/p' "$log" | sort -u | grep -vxF -f <(printf '%s\n' "$keys") || true)
+            if [ "$unproven" -gt 0 ] && [ "$tried" -eq "$unproven" ] && [ "${refused_n:-0}" -eq 0 ] && [ "${crashed_n:-0}" -eq 0 ] && [ "${hung_n:-0}" -eq 0 ] \
+               && [ -z "$stray" ] && ! grep -E ': unmeasured \(' "$log" | grep -vq 'no JACK server'; then
+                echo "$class/$set_: the sync tried to measure only the $unproven UNPROVEN records, and could not ($unmeasured_n unmeasured), as expected"
+            else
+                echo "::error::$class/$set_: the sync exited $sync_rc after trying to measure $tried plugins ($crashed_n crashed, $hung_n hung, $refused_n refused${stray:+; not records it refused: $stray}), which the $unproven UNPROVEN records do not explain"; exit 1
+            fi
+        fi
+        if [ "$applied" -eq 0 ]; then
+            [ "$unproven" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from its records"; exit 1; }
+            note unproven-set "$class/$set_: every record is of omx-plugins bytes the channel no longer serves (measured $measured, the channel serves $have_omx)"
+            echo "UNPROVEN $class/$set_: every record is of bytes the channel no longer serves"
+            rm -f "$log"; exit 3
+        fi
+        where=$class
+        [ "$cell" = - ] && where="$class, the cells of $set_" || where="$class $cell"
+        if [ "$taken" = "$winner" ]; then
+            note pick "$where: plugin-qualify takes $taken, the store's rule's winner"
+        else
+            echo "WRONG WINNER $where: the sync takes $taken, the store's rule gives the cell to $winner"
+            note wrong "$where: plugin-qualify takes $taken; the store's rule's winner is $winner"
+        fi
+        case ",$taken," in
+            *",$set_,"*) ;;
+            *) echo "UNPROVEN $class/$set_: the sync never took it ($taken)"
+               note unproven-set "$class/$set_: never taken by the sync at its cell ($where: it takes $taken)"
+               unproven_set=1 ;;
+        esac
+        if grep -E 'distributed: .*(not applied|measured here)' "$log"; then
             echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
         fi
         rm -f "$log"
+        [ -z "${unproven_set:-}" ] || exit 3
         ;;
     remove)
         case $kind in

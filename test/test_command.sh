@@ -168,20 +168,58 @@ if len(lines) != 3:
     print("  FAIL: --records printed %d lines, expected one a record (3)" % len(lines)); bad = 1
 for l in lines:
     o = json.loads(l)
-    if list(o) != ["layer", "sha256", "format", "uri", "offer", "host_class", "record"]:
+    if list(o) != ["layer", "sha256", "format", "uri", "offer", "host_class", "set", "record"]:
         print("  FAIL: --records keys %s" % list(o)); bad = 1; continue
     name = "%s-%s.%s.%s.json" % (o["format"], o["uri"].split(":")[-1], o["offer"], o["host_class"])
     doc = open(os.path.join(sys.argv[2], name), encoding="utf-8").read()
-    head = '{"layer":"%s","sha256":"%s","format":"%s","uri":"%s","offer":"%s","host_class":"%s","record":' % (
-        o["layer"], o["sha256"], o["format"], o["uri"], o["offer"], o["host_class"])
+    if not isinstance(o["set"], str) or not o["set"]:
+        print("  FAIL: --records line of %s names no set" % o["uri"]); bad = 1; continue
+    head = '{"layer":"%s","sha256":"%s","format":"%s","uri":"%s","offer":"%s","host_class":"%s","set":"%s","record":' % (
+        o["layer"], o["sha256"], o["format"], o["uri"], o["offer"], o["host_class"], o["set"])
     if l != head + doc + "}":
         print("  FAIL: --records line of %s is not the record document of the library" % name); bad = 1
 sys.exit(bad)
 PY
+# --records at a cell: the whole record of the set that claims the cell, with its set (the store spec, section 4). The
+# fixtures hold two keys at two cells each: the sets of one key are a provisional one and a reference one (the
+# reference one claims 48000/256, the provisional one 96000/256), and of the other an older and a newer measurement of
+# one tier (the newer claims 48000/256, the older 96000/256); the winner of 48000/256 sorts last by name. Both orders.
+for order in winner-last winner-first; do
+    for cell in "48000 256" "96000 256" "192000 256"; do
+        set -- $cell
+        # shellcheck disable=SC2086
+        "$cmd" query --json --records --rate "$1" --quantum "$2" --base "$fx/base-claimants-$order.sqlite" --user '' --contract-dir "$good" > "$fx/command-claimants.out" 2>&1; rc=$?
+        [ $rc -eq 0 ] || note "--records at $1/$2 ($order) exited $rc"
+        python3 -I - "$fx/command-claimants.out" "$1/$2" "$order" <<'PY' || fail=1
+import json, sys
+lines = [l for l in open(sys.argv[1], encoding="utf-8").read().split("\n") if l]
+cell, order = sys.argv[2], sys.argv[3]
+want = {"48000/256": {"urn:p1": ("fedora44-rt-48000-256", "ref/p1.clap", "prov/p1.clap"), "urn:p2": ("z-new", "new/p2.clap", "old/p2.clap")},
+        "96000/256": {"urn:p1": ("fedora44-48000-256", "prov/p1.clap", "ref/p1.clap"), "urn:p2": ("a-old", "old/p2.clap", "new/p2.clap")},
+        "192000/256": {}}[cell]
+bad = 0
+if len(lines) != len(want):
+    print("  FAIL: --records at %s (%s) printed %d lines, expected %d" % (cell, order, len(lines), len(want))); bad = 1
+for l in lines:
+    o = json.loads(l)
+    if list(o) != ["layer", "sha256", "format", "uri", "offer", "host_class", "set", "record"]:
+        print("  FAIL: --records at %s keys %s" % (cell, list(o))); bad = 1; continue
+    w = want.get(o["uri"])
+    if not w:
+        print("  FAIL: --records at %s printed %s" % (cell, o["uri"])); bad = 1; continue
+    if o["set"] != w[0]:
+        print("  FAIL: --records at %s (%s): %s is set %s, expected the claimant %s" % (cell, order, o["uri"], o["set"], w[0])); bad = 1
+    if w[1] not in l or w[2] in l:
+        print("  FAIL: --records at %s (%s): the record of %s is not the claimant's whole record (%s)" % (cell, order, o["uri"], w[1])); bad = 1
+sys.exit(bad)
+PY
+    done
+done
+# a cell is both: one alone is a usage error
 "$cmd" query --json --records --rate 48000 --base "$fx/base.sqlite" --user '' --contract-dir "$good" >/dev/null 2>&1; rc=$?
-[ $rc -eq 2 ] || note "--records with --rate exited $rc, expected 2"
+[ $rc -eq 2 ] || note "--records with --rate alone exited $rc, expected 2"
 "$cmd" query --json --records --quantum 256 --base "$fx/base.sqlite" --user '' --contract-dir "$good" >/dev/null 2>&1; rc=$?
-[ $rc -eq 2 ] || note "--records with --quantum exited $rc, expected 2"
+[ $rc -eq 2 ] || note "--records with --quantum alone exited $rc, expected 2"
 
 # --layer
 n=$("$cmd" query --json --layer user --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1 | wc -l)

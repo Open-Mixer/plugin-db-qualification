@@ -134,6 +134,74 @@ class ComparisonRecords(unittest.TestCase):
         self.assertEqual(self.problems(), [])
 
 
+class LeftOut(unittest.TestCase):
+    """Issue #5's ruling: the two dry runs and every record of the openmixer-console profile (the console key, which
+    waits for its desk run) stay out of records/. A set that carries either turns the check red, by name."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.make("t")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def make(self, name, prov=None, binary=None):
+        self.set = os.path.join(self.tmp.name, "x86-64", name)
+        os.makedirs(self.set, exist_ok=True)
+        probe = b"{}"
+        self.write("provenance.json", {"schema": check.PROVENANCE_SCHEMA, "set": name, "hostClass": "x86-64",
+                                       "package": {"name": f"plugin-db-qualification-x86-64-{name}"},
+                                       "hostProfile": "omx-clap-host", "settings": {"host_class": "x86-64", "clap_extra": "/usr/lib64/clap"},
+                                       "sources": {f"plugin-db-qualification tools/fedora44 (Job), records branch records/fedora44/{name}": "0" * 40},
+                                       **(prov or {})})
+        with open(os.path.join(self.set, "a.probe.json"), "wb") as f:
+            f.write(probe)
+        self.write("a.default.qualification.json", {
+            "schema": check.RECORD_SCHEMA, "binary": binary or {"path": "a.clap", "files": [{"path": "a.clap", "sha256": "0" * 64}]},
+            "verdicts": [{"host": "omx-clap-host"}, {"host": "openmixer-console"}],
+            "probe": {"file": "a.probe.json", "bytes": len(probe), "sha256": hashlib.sha256(probe).hexdigest()}})
+
+    def write(self, name, obj):
+        with open(os.path.join(self.set, name), "w", encoding="utf-8") as f:
+            json.dump(obj, f)
+
+    def problems(self):
+        return check.check_set(self.set)[0]
+
+    def assert_refused(self, words):
+        p = self.problems()
+        self.assertTrue(any(words in x for x in p), p)
+
+    def test_a_set_of_the_device_profile_passes(self):
+        # a record of the omx-clap-host profile may judge the console too: a verdict for openmixer-console is no console key
+        self.assertEqual(self.problems(), [])
+
+    def test_a_set_of_the_console_profile_is_the_console_key(self):
+        self.make("t", prov={"hostProfile": "openmixer-console"})
+        self.assert_refused("the console key")
+
+    def test_a_dry_run_set_name(self):
+        self.make("dry-rt-dry-1")
+        self.assert_refused("a dry run")
+
+    def test_a_dry_run_records_branch(self):
+        self.make("t", prov={"sources": {"plugin-db-qualification tools/fedora44 (Job), records branch records/fedora44/dry-rt-dry-1": "0" * 40}})
+        self.assert_refused("a dry run")
+
+    def test_a_dry_run_plugin_path_in_the_settings(self):
+        for key, value in (("clap_path", "/work/dry/clap"), ("lv2_path", "/work/dry/lv2")):
+            with self.subTest(setting=key):
+                self.make("t", prov={"settings": {"host_class": "x86-64", key: value}})
+                self.assert_refused("a dry run")
+
+    def test_a_record_of_a_dry_run_binary(self):
+        for binary in ({"path": "/work/dry/clap/a.clap", "files": [{"path": "a.clap", "sha256": "0" * 64}]},
+                       {"path": "a.clap", "files": [{"path": "/work/dry/clap/a.clap", "sha256": "0" * 64}]}):
+            with self.subTest(binary=binary):
+                self.make("t", binary=binary)
+                self.assert_refused("a dry run")
+
+
 class OneCellSets(unittest.TestCase):
     """A set named <set>-<rate>-<quantum> holds only that cell: its records measured it and its provenance names it."""
 

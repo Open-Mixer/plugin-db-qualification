@@ -240,6 +240,23 @@ NEWER = [
         cells=[cell(48000, 256, (120.0, 95, 130.0), (None, 64), None)]),
 ]
 
+# the claimant of each cell (the store spec, section 4), with two cells a key: the sets hold one key at two cells, and
+# the winner of the first cell is not the winner of the second. The winner is named to sort LAST in byte order of the
+# sets' names, so no order of names picks it: for the tier pair the provisional set claims 96000/256 alone and the
+# reference set 48000/256; for the re-measure the old set claims 96000/256 alone and the newer one 48000/256
+CLAIMANTS = [
+    rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", tier="provisional", bpath="prov/p1.clap",
+        files=[("prov/p1.clap", P1)], verdict_rating="conditional",
+        cells=[cell(48000, 256, (900.0, 95, 990.0), (64, 640), (8192, 4096)), cell(96000, 256, (950.0, 95, 995.0), (64, 640), (8192, 4096))]),
+    rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-rt-48000-256", tier="reference", bpath="ref/p1.clap",
+        files=[("ref/p1.clap", P1)], cells=[cell(48000, 256, (100.0, 95, 110.0), (64, 128), (2048, 512))]),
+    rec((P2, "clap", "urn:p2"), "default", "x86-64", set="a-old", tier="hardware", measured="2026-11-06", bpath="old/p2.clap",
+        files=[("old/p2.clap", P2)], verdict_rating="conditional",
+        cells=[cell(48000, 256, (70.0, 95, 80.0), (None, 70), None), cell(96000, 256, (71.0, 95, 81.0), (None, 71), None)]),
+    rec((P2, "clap", "urn:p2"), "default", "x86-64", set="z-new", tier="hardware", measured="2026-11-08", bpath="new/p2.clap",
+        files=[("new/p2.clap", P2)], cells=[cell(48000, 256, (60.0, 95, 65.0), (None, 60), None)]),
+]
+
 RICH = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", adapter_code="omx-clap-host.signal-SIGSEGV",
         cell_code="omx-clap-host.resp-3", verdict_rating="conditional", layout=("elf-sections", sha("f")), tested="1.2.3",
@@ -471,6 +488,9 @@ def main(out):
     # two sets of one tier at one cell, built in both orders: the newer set's record claims it
     for order, recs in (("new-last", NEWER), ("new-first", NEWER[::-1])):
         build(p("base-newer-%s.sqlite" % order), 0, recs)
+    # the claimant of each of two cells, the sets in both orders (the command's --records at a cell)
+    for order, recs in (("winner-last", CLAIMANTS), ("winner-first", CLAIMANTS[::-1])):
+        build(p("base-claimants-%s.sqlite" % order), 0, recs)
     # stores whose key is not the binary's entry (section 3.7): opened fine, refused by check
     for name, sql in (("key-mismatch", "UPDATE record_file SET sha256 = '%s' WHERE record_id = 1" % sha("9")),
                       ("key-no-entry", "UPDATE record SET binary_path = 'other.clap' WHERE record_id = 1")):

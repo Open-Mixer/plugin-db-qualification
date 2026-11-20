@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 static const char *FX, *CT;
+static const char *skip_reason;
 static int checks, failures;
 
 #define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; \
@@ -213,11 +214,89 @@ static int matches_expect(const rows *o, const char *file)
     return ok;
 }
 
+static int count_formats(const char *format, long plugins, long offered, long not_offered, void *ctx)
+{
+    (void)format; (void)plugins; (void)offered; (void)not_offered;
+    ++*(int *)ctx;
+    return 0;
+}
+static void write_file(const char *path, const char *bytes, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); exit(2); }
+    if (n) fwrite(bytes, 1, n, f);
+    fclose(f);
+}
+
+/* ruling 2026-11-20: an absent base is a valid empty base layer; the answer says so, the user layer answers alone */
 static void t01_absent_base(void)
 {
+    pqdb *db;
+    rows o;
+    pqdb_query q = any();
+    int n = 0;
+    if (open_ok(fx("missing.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_base_absent(db) == 1, "the handle does not say the base is absent");
+    CHECK(walk(db, &q, &o) == 0 && o.n > 0, "walk");
+    CHECK(matches_expect(&o, fx("expect-user.tsv")), "results are not the user layer's alone");
+    q.layer = "base";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "the absent base gave %d rows", o.n);
+    CHECK(pqdb_counts(db, "base", count_formats, &n) == 0 && n == 0, "counts of the absent base: %d formats", n);
+    pqdb_close(db);
+    CHECK(access(fx("missing.sqlite"), F_OK) != 0, "the absent base was created");
+    if (open_ok(fx("missing.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open with no user layer"); return; }
+    CHECK(pqdb_base_absent(db) == 1, "no user layer: base not said absent");
+    q = any();
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "no layer at all gave %d rows", o.n);
+    pqdb_close(db);
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_base_absent(db) == 0, "a present base is said absent");
+    pqdb_close(db);
+}
+/* a base path that exists but cannot be used is still refused by name, one arm each */
+static void t01_base_is_a_directory(void)
+{
     pqdb_error e;
-    expect_refusal(fx("missing.sqlite"), NULL, GOOD, "qualification-db.absent", &e);
-    CHECK(strstr(e.message, "missing.sqlite") != NULL, "message does not name the file: %s", e.message);
+    char *root = tmpdir();
+    mkdirs(under(root, "base.sqlite"));
+    expect_refusal(under(root, "base.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "base.sqlite") != NULL, "%s", e.message);
+}
+static void t01_base_is_junk(void)
+{
+    pqdb_error e;
+    char *root = tmpdir();
+    write_file(under(root, "short.sqlite"), "not sqlite", 10);
+    expect_refusal(under(root, "short.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "short.sqlite") != NULL, "%s", e.message);
+    write_file(under(root, "empty.sqlite"), "", 0);
+    expect_refusal(under(root, "empty.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
+}
+static void t01_base_wrong_version(void)
+{
+    pqdb_error e;
+    expect_refusal(fx("base-v2.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    expect_refusal(fx("base-v2.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    CHECK(strstr(e.message, "base-v2.sqlite") != NULL, "%s", e.message);
+}
+static void t01_base_not_readable(void)
+{
+    pqdb_error e;
+    char *root = tmpdir();
+    if (geteuid() == 0) { skip_reason = "running as root: a mode 000 file is readable"; return; }
+    copy(fx("base.sqlite"), under(root, "denied.sqlite"));
+    CHECK(chmod(under(root, "denied.sqlite"), 0) == 0, "chmod");
+    expect_refusal(under(root, "denied.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "denied.sqlite") != NULL, "%s", e.message);
+}
+/* only ENOENT is absent: a path through a file (ENOTDIR) is a wrong path, refused */
+static void t01_base_under_a_file(void)
+{
+    pqdb_error e;
+    char *root = tmpdir();
+    write_file(under(root, "afile"), "x", 1);
+    expect_refusal(under(root, "afile/qualification.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "afile") != NULL, "%s", e.message);
 }
 static void t02_absent_user(void)
 {
@@ -894,7 +973,6 @@ static void number_edges(void)
 
 /* ---- the document does not depend on the host's locale: a program that called setlocale(LC_ALL, "") under a comma
  * locale gets the same bytes ---- */
-static const char *skip_reason;
 static void comma_locale(void)
 {
     static const char *const cands[] = { "ca_ES.UTF-8", "ca_ES.utf8", "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8" };
@@ -1013,9 +1091,15 @@ static void t11_no_environment(void)
     setenv("PLUGIN_QUALIFICATION_DB_USER", fx("user.sqlite"), 1);
     setenv("OMX_CONTRACT_PATH", CT, 1);
     int rc = pqdb_open(PQDB_SCOPE_USER, &db, &e);
-    CHECK(rc != 0 && strcmp(e.code, "qualification-db.absent") == 0, "open with a variable set: %s", rc ? e.code : "succeeded");
-    CHECK(strstr(e.message, "/usr/share/omx/qualification/qualification.sqlite") != NULL, "%s", e.message);
-    if (!rc) pqdb_close(db);
+    CHECK(rc == 0, "open with a variable set: %s", rc ? e.code : "succeeded");
+    if (rc) return;
+    {
+        rows o;
+        pqdb_query q = any();
+        CHECK(pqdb_base_absent(db) == 1, "the installed base is not there: the handle must say so");
+        CHECK(walk(db, &q, &o) == 0 && o.n == 0, "a variable stood in for the installed places: %d rows", o.n);
+    }
+    pqdb_close(db);
     unsetenv("PLUGIN_QUALIFICATION_DB_BASE"); unsetenv("PLUGIN_QUALIFICATION_DB_USER"); unsetenv("OMX_CONTRACT_PATH");
 }
 static void t15_scopes(void)
@@ -1050,7 +1134,9 @@ static void t15_scopes(void)
 
 typedef struct { const char *name; void (*fn)(void); int scoped; } test;
 static const test TESTS[] = {
-    { "01 absent base", t01_absent_base, 0 }, { "02 absent user layer", t02_absent_user, 0 },
+    { "01 absent base is an empty base layer", t01_absent_base, 0 }, { "01 a base that is a directory", t01_base_is_a_directory, 0 },
+    { "01 a base that is junk", t01_base_is_junk, 0 }, { "01 a base of another version", t01_base_wrong_version, 0 },
+    { "01 a base that cannot be read", t01_base_not_readable, 0 }, { "01 a base path through a file", t01_base_under_a_file, 0 }, { "02 absent user layer", t02_absent_user, 0 },
     { "03 one schema version", t03_versions, 0 }, { "04 word not in the domain", t04_word_unknown, 0 },
     { "05 domain too old", t05_domain_too_old, 0 }, { "06 whole-record merge", t06_whole_record_merge, 0 },
     { "07 a user record shadows the whole base record", t07_shadows_whole, 0 },

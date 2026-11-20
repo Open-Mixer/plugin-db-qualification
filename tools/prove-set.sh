@@ -6,7 +6,8 @@
 # --system with that set's class (and, for a set of one cell, that cell as its grid) takes plugins from that set's
 # records and measures none of them; the sync's state is cleared between sets. tools/sets.py prove runs the three
 # steps for the package of the machine's architecture; the release runs that in a Debian trixie arm64 container
-# (deb) and a Fedora 45 x86_64 container (rpm), with plugin-qualify from the channel; only the sets measured on the image's own host class (its os-release ID and VERSION_ID, fedora45) are proven, the others are named and reported as not proven.
+# (deb) and a Fedora 45 x86_64 container (rpm), with plugin-qualify from the channel; every set of the machine's host class (the class packaging/arch-classes gives its architecture) is proven, whatever the
+# image it was measured on is called; a set of another class is named and reported as not proven.
 #
 #   tools/prove-set.sh install deb|rpm <pkg dir> <arch>    the one package of <arch> from the build artifact
 #   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or ->

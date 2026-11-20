@@ -678,16 +678,6 @@ class Prove(Tree):
         self.assertIn("::error::", out)
         self.assertIn("carries no set", out)
 
-    def test_an_image_whose_host_class_cannot_be_read_fails_the_proof(self):
-        self.with_two_cells()
-        for text in (None, "", 'NAME="Test"\nID=fedora\n', 'NAME="Test"\nVERSION_ID="45"\n'):
-            shutil.rmtree(os.path.join(self.tmp.name, "root"), ignore_errors=True)
-            rc, out, log = self.prove("rpm", "x86_64", image="none", os_release=text)
-            self.assertEqual(rc, 1, (text, out))
-            self.assertIn("::error::", out)
-            self.assertIn("host class of this image cannot be read", out)
-            self.assertNotIn("plugin-qualify-sync", log)
-
     def test_no_set_is_not_a_proof(self):
         os.environ["PROVE_ARCH"] = "x86_64"
         try:

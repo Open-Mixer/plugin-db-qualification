@@ -20,7 +20,7 @@ debian/rules and the spec read all of it from here.
                                                 records/<class>/<set>/, then runs tools/check-records.py on it; a
                                                 refusal is named and leaves the tree as it was
     tools/sets.py prove deb|rpm <pkg dir>       installs the package of this machine's architecture from <pkg dir> and
-                                                proves every set it carries that was measured on this image's host class
+                                                proves every set it carries of this machine's host class
                                                 (tools/prove-set.sh), one after the other; the others are named, not proven
 
 packaging/arch-classes maps a Debian architecture and an RPM architecture to a machine class and the plugin-qualify
@@ -363,27 +363,6 @@ def machine_arch(root, kind):
     raise Refused(f"this machine ({m}) has no line in {ARCH_CLASSES}")
 
 
-HOST_CLASS = re.compile(r"^([a-z]+[0-9]+(?:\.[0-9]+)?)-")
-
-
-def measured_on(set_):
-    """The host class a set's name says it was measured on (fedora44-48000-64: fedora44), or None when its name has none."""
-    m = HOST_CLASS.match(set_)
-    return m.group(1) if m else None
-
-
-def image_host_class():
-    """This image's own host class, ID and VERSION_ID of its os-release (fedora 45: fedora45), or None."""
-    path = os.path.join(os.environ.get("PROVE_ROOT") or "/", "etc", "os-release")
-    try:
-        with open(path, encoding="utf-8") as f:
-            text = f.read()
-    except OSError:
-        return None
-    got = dict(m.groups() for m in re.finditer(r'^(ID|VERSION_ID)="?([^"\n]*)"?$', text, re.M))
-    return f"{got['ID']}{got['VERSION_ID']}" if "ID" in got and "VERSION_ID" in got else None
-
-
 def prove(root, kind, pkgs):
     arch = machine_arch(root, kind)
     sets = carried(root, kind, arch)
@@ -392,10 +371,9 @@ def prove(root, kind, pkgs):
     if not sets:
         print(f"::error::{PACKAGE} ({arch}) carries no set: nothing to prove", flush=True)
         return 1
-    here = image_host_class()
-    if here is None:
-        print("::error::the host class of this image cannot be read: /etc/os-release has no ID and VERSION_ID", flush=True)
-        return 1
+    # the host class of this machine: the class packaging/arch-classes gives its architecture (x86_64: x86-64, aarch64:
+    # rpi5). The operating system is no part of it: qualification results are stable across releases and OS names.
+    here = "/".join(classes(root, kind, arch))
     if subprocess.run(["bash", script, "install", kind, pkgs, arch], cwd=root).returncode != 0:
         print(f"::error::{PACKAGE} ({arch}) did not install", flush=True)
         subprocess.run(["bash", script, "remove", kind], cwd=root)
@@ -416,17 +394,17 @@ def prove(root, kind, pkgs):
             if got != tree:
                 print(f"::error::{PACKAGE} ({arch}) installs the {c} sets {got}, not {tree}", flush=True)
                 return 1
-        # a set is proven where it was measured: a set measured on another host class is named, not proven, and does
-        # not fail; a set whose name carries no host class is proven everywhere
-        unmatched = [(c, s) for c, s in sets if measured_on(s) not in (None, here)]
+        # a set is proven on a machine of its class, whatever its name says about the image it was measured on; a set of
+        # another class is named, not proven, and does not fail
+        unmatched = [(c, s) for c, s in sets if c not in classes(root, kind, arch)]
         for cls, set_ in unmatched:
-            print(f"::notice::{cls}/{set_}: measured on {measured_on(set_)}, not proven in {here}", flush=True)
+            print(f"::notice::{cls}/{set_}: a set of the {cls} class, not proven on an {here} machine", flush=True)
         if unmatched:
-            print(f"{len(unmatched)} sets measured on another host class, not proven in {here}", flush=True)
+            print(f"{len(unmatched)} sets of another host class, not proven on an {here} machine", flush=True)
         total = len(sets)
         sets = [x for x in sets if x not in unmatched]
         if not sets:
-            print(f"::warning::proved 0 of {len(unmatched)} sets: none was measured on {here}", flush=True)
+            print(f"::warning::proved 0 of {len(unmatched)} sets: none is a set of the {here} class", flush=True)
         for cls, set_ in sets:
             print(f"::group::{cls}/{set_}", flush=True)
             r = subprocess.run(["bash", script, "set", kind, cls, set_, cell(set_)], cwd=root)

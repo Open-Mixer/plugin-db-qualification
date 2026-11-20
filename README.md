@@ -43,8 +43,10 @@ A reader opens the base and one user layer. A record in the user layer shadows t
 The base is never changed. A scope reads its own layer and not the other's. The command and the tests may name other
 places; the library's `pqdb_open(scope)` does not.
 
-The base is built from the qualification runs. They are two: the x86_64 run on Fedora 45, and the arm64 run on the
-Zynthian image (Debian trixie). Each record keeps the plugin's verdicts, its cost and latency figures, memory, real-time
+Qualification results are stable. They are stored once and never measured again per release or per operating system.
+The base is built from the existing records under `records/`, every set with its provenance: the x86-64 sets, which are
+named for the Fedora 44 image they were measured on, and the rpi5 sets. A set stays valid on later releases: x86-64 is a
+host class, not an operating system. Each record keeps the plugin's verdicts, its cost and latency figures, memory, real-time
 safety, and the name and hash of the probe output it judged. It keeps codes, never sentences.
 
 ### The record key
@@ -123,24 +125,20 @@ serial, `YYYYMMDDXX`, for example `2026103001`. A number is never used twice. Th
 
 A manual run with `publish=false` builds everything and publishes nothing.
 
-### When the qualification runs land
+## Adding measurements
 
-The runs come as `plugin-qualify --out` directories: `*.qualification.json` and `*.probe.json` files. Put each set's
-directory at `<runs>/<set>/` and its provenance at `<runs>/<set>.provenance.json`. Then, for each class:
+The records change only when new measurements are added, never per release. A new measurement is a new set. Import a
+`plugin-qualify --out` directory (its `*.qualification.json` and `*.probe.json` files) with its provenance:
 
 ```
-tools/replace-sets.sh x86-64 <runs> fedora45-48000-128 fedora45-48000-256 ...   # one name per cell
-tools/replace-sets.sh rpi5 <runs> zynthian-default
+tools/sets.py import <class> <set> <out-dir> --provenance <file>
 ```
 
-The script removes the class's old sets with `git rm`, imports each new set with `tools/sets.py import` (which checks it),
-rewrites the spec's per-architecture block with `tools/sets.py spec`, checks the packaging, builds the base database from
-`records/`, and runs the suite. It commits nothing. Commit the removal, the imports and the spec each on their own. The
-deb is released for arm64 only; the rpm for x86_64 and aarch64.
+The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. It refuses a set that already exists
+(`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then run
+`tools/sets.py spec`, and release the records package under a new date version.
 
-## Measuring a class again
-
-`tools/build-package.sh` takes a run's qualification directories and replaces the sets of one class in `records/`:
+`tools/build-package.sh` builds such a set from a run's qualification directories:
 
 ```
 tools/build-package.sh --from-run <run> --provenance provenance.json \

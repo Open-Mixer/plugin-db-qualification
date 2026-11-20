@@ -17,7 +17,7 @@
 #      hash as a record's).
 # rpm: the package from <pkg dir>/; each set installs the channel's omx-plugins at the version it measured (its
 #      provenance.json), removed again after it; when the channel's omx-plugins of that version is rebuilt with other
-#      bytes this fails with "binary differs", and the set is due to be measured again. python3 must be installed.
+#      bytes this fails with "binary differs", and that is reported; the set stays, as qualification results are stable. python3 must be installed.
 # A container has no device tree, so the host class is the settings file's. No plugin-hostd listens. PROVE_ROOT
 # prefixes every system path (the tests).
 set -euo pipefail

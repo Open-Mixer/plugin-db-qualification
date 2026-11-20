@@ -172,7 +172,7 @@ def import_set(root, cls, set_, out, provenance=None):
         raise ImportRefused("class-unknown", f"{cls!r} is not a class of {ARCH_CLASSES}")
     dest = os.path.join(root, "records", cls, set_)
     if os.path.exists(dest):
-        raise ImportRefused("set-exists", f"records/{cls}/{set_}/ exists; a set is replaced by removing it first")
+        raise ImportRefused("set-exists", f"records/{cls}/{set_}/ exists; a set is never replaced, a new measurement is a new set")
     if not os.path.isdir(out):
         raise ImportRefused("dir-absent", f"{out}: no such directory")
     names = sorted(os.listdir(out), key=os.fsencode)

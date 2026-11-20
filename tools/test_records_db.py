@@ -42,6 +42,8 @@ REF = os.environ.get("PDQ_REF", "origin/main")
 SENTENCE_PATHS = ("binary.unpinnable", "run.steps[].detail", "measurements.grid[].memory.unmeasuredDetail",
                   "measurements.unmeasured[].detail", "tiers.dimmed")
 PROVENANCE_SENTENCES = ("image", "board", "kernel", "realtime", "jack", "grid", "tierNote", "sources", "repositories")
+# checked against the set's name, not stored (section 3.5)
+PROVENANCE_CHECKED = ("cell",)
 MAP_PATHS = ("verdicts[].reasons[].params.*", "cost[].reasons[].params.*", "adapter.params.*", "adapter.cells[].params.*",
              "adapter.versions.*", "rejudged.figures.adapter.versions.*")
 # the table of every array of section 3.5 and the number of its elements across the files
@@ -508,6 +510,34 @@ class TwoTiers(Base):
         self.refused("claim-duplicate", "fedora44-rt-48000-512", "fedora44-48000-512")
 
 
+class ProvenanceCell(Base):
+    """The provenance's `cell` ({rate, quantum}), which plugin-qualify writes for a set of one cell: checked against the
+    cell of the set's name and not stored, since record_set.name and the set's cells hold it (section 3.5)."""
+
+    def with_cell(self, cell, name=None):
+        d = make_set(self.tmp, n=2, name=name)
+        prov = load(os.path.join(d, "provenance.json"))
+        prov["cell"] = cell
+        dump(os.path.join(d, "provenance.json"), prov)
+
+    def test_the_cell_of_the_set_name_builds(self):
+        self.with_cell({"rate": 48000, "quantum": 512})
+        build_ok(self, os.path.join(self.tmp, "records"), self.db)
+        self.assertEqual(self.rows("SELECT name FROM record_set"), [("fedora44-48000-512",)])
+
+    def test_another_cell_is_refused(self):
+        self.with_cell({"rate": 96000, "quantum": 256})
+        self.refused("cell-mismatch", "provenance.json", "96000/256", "48000/512")
+
+    def test_a_cell_on_a_set_whose_name_names_none_is_refused(self):
+        self.with_cell({"rate": 48000, "quantum": 512}, name="fedora44")
+        self.refused("cell-mismatch", "provenance.json", "names no cell")
+
+    def test_a_cell_that_is_not_two_integers_is_refused(self):
+        self.with_cell({"rate": "48000", "quantum": 512})
+        self.refused("field-type", "provenance.json", "cell")
+
+
 class Identity(Base):
     def test_04_two_builds_are_row_identical_and_byte_identical(self):
         for s in ("fedora44-48000-512", "fedora44-96000-64"):
@@ -868,7 +898,7 @@ class RoundTrip(unittest.TestCase):
         ex = self.q.Exporter(self.db)
         for r in self.db.execute("SELECT set_id, host_class, name FROM record_set"):
             want = load(os.path.join(RECORDS, r["host_class"], r["name"], "provenance.json"))
-            for k in PROVENANCE_SENTENCES:
+            for k in PROVENANCE_SENTENCES + PROVENANCE_CHECKED:
                 want.pop(k, None)
             if "settings" in want:
                 want["settings"].pop("note", None)

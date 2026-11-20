@@ -72,8 +72,58 @@ pk=$("$cmd" query --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --con
 c=$("$cmd" check --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$c" = "ok" ] || note "check: exit $rc, output '$c'"
 c=$("$cmd" check --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
-case "$c" in qualification-db.absent*) ;; *) note "check of an absent base printed '$c'" ;; esac
-[ $rc -eq 1 ] || note "check of an absent base exited $rc, expected 1"
+[ $rc -eq 0 ] && [ "$c" = "ok base-absent" ] || note "check of an absent base: exit $rc, output '$c'"
+
+# an absent base is an empty base layer: exit 0, the answer says so, the user layer answers alone
+# stdout holds records only (each line a stored record, or none); stderr carries the one named line
+want="plugin-qualification-db: base-absent: $fx/missing.sqlite: the base layer is empty"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] || note "query with an absent base exited $rc"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "query with an absent base: stderr is '$(cat "$fx/abs.err")'"
+u=$("$cmd" query --json --layer user --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>/dev/null)
+[ "$a" = "$u" ] && [ -n "$u" ] || note "query with an absent base is not the user layer's alone"
+printf '%s\n' "$a" | python3 -I -c '
+import json, sys
+for l in sys.stdin.read().splitlines():
+    o = json.loads(l)
+    assert "sha256" in o and "layer" in o and "base" not in o, l' || note "stdout of query with an absent base holds a line that is no record"
+a=$("$cmd" counts --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] || note "counts with an absent base exited $rc"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "counts with an absent base: stderr is '$(cat "$fx/abs.err")'"
+printf '%s\n' "$a" | python3 -I -c '
+import json, sys
+for l in sys.stdin.read().splitlines():
+    o = json.loads(l)
+    assert "format" in o and "plugins" in o and "base" not in o, l' || note "stdout of counts with an absent base holds a line that is no count"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user '' --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] && [ -z "$a" ] || note "no layer at all: exit $rc, stdout '$a'"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "no layer at all: stderr is '$(cat "$fx/abs.err")'"
+for v in query counts; do
+    "$cmd" $v --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" >/dev/null 2>"$fx/abs.err"
+    [ ! -s "$fx/abs.err" ] || note "$v with a base present wrote to stderr: $(cat "$fx/abs.err")"
+done
+# a base that exists and cannot be used is refused by name
+mkdir -p "$fx/base-dir.sqlite"
+for arm in "base-dir.sqlite" ; do
+    c=$("$cmd" query --json --base "$fx/$arm" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
+    case "$c" in qualification-db.unreadable*) ;; *) note "a directory as the base printed '$c'" ;; esac
+    [ $rc -eq 1 ] || note "a directory as the base exited $rc"
+done
+printf 'not sqlite' > "$fx/junk.sqlite"
+c=$("$cmd" counts --json --base "$fx/junk.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+case "$c" in qualification-db.unreadable*) ;; *) note "a junk base printed '$c'" ;; esac
+[ $rc -eq 1 ] || note "a junk base exited $rc"
+c=$("$cmd" check --base "$fx/base-v2.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+case "$c" in qualification-db.schema-other*) ;; *) note "a base of version 2 printed '$c'" ;; esac
+[ $rc -eq 1 ] || note "a base of version 2 exited $rc"
+if [ "$(id -u)" -ne 0 ]; then
+    cp "$fx/base.sqlite" "$fx/denied.sqlite"; chmod 000 "$fx/denied.sqlite"
+    c=$("$cmd" query --json --base "$fx/denied.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+    case "$c" in qualification-db.unreadable*) ;; *) note "an unreadable base printed '$c'" ;; esac
+    [ $rc -eq 1 ] || note "an unreadable base exited $rc"
+else
+    echo "skip   unreadable base: running as root, a mode 000 file is readable"
+fi
 c=$("$cmd" check --base "$fx/base.sqlite" --contract-dir "$ct/contract-no-conditional" --user '' 2>&1); rc=$?
 case "$c" in qualification-db.word-unknown*) ;; *) note "check with a missing word printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "check with a missing word exited $rc"

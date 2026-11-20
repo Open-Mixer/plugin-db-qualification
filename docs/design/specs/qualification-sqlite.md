@@ -1022,8 +1022,10 @@ typedef struct { const char *code; char message[256]; } pqdb_error;  /* names th
 int  pqdb_open(pqdb_scope scope, pqdb **out, pqdb_error *err);
 /* TEST AND COMMAND ONLY: the base, the user layer (NULL: none) and the contract directory, given. */
 int  pqdb_open_at(const char *base, const char *user, const char *contract_dir, pqdb **out, pqdb_error *err);
+/* 1 when the open found no base file: the base layer is empty, every answer is the user layer's alone (section 6). */
+int  pqdb_base_absent(const pqdb *db);
 void pqdb_close(pqdb *db);
-const char *pqdb_code(int status);                 /* "qualification-db.absent" ... */
+const char *pqdb_code(int status);                 /* "qualification-db.unreadable" ... */
 
 /* every field optional: a string of NULL, and a rate or quantum of -1, is "any"; 0 is not. Start from PQDB_QUERY_ANY. */
 #define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
@@ -1093,9 +1095,14 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
   for byte after JSON normalisation, for every record of the fixtures (section 8, change 3).
 - **Pointers** in a result are valid until the callback returns; a caller copies what it keeps.
 - **Refused, by name** (`pqdb_code` gives the string; each refusal names the file):
-  - `qualification-db.absent`: the base file does not exist. An absent USER layer is not an error: it is an empty
-    layer;
-  - `qualification-db.unreadable`: it exists and SQLite cannot open or read it;
+  - an ABSENT base is not a refusal (ruling of 2026-11-20): the store has no base records until the records migration
+    ships, and the sync writes the user and system layers from day one, so a base file that does not exist is a valid
+    EMPTY base layer, as an absent user layer is. Only `ENOENT` is absent. `pqdb_base_absent(db)` is 1 for it, and the
+    command's answers say it (below); nothing fakes a base, and no layer or record is invented. `qualification-db.absent`
+    is retired from the code list: nothing refuses with it;
+  - `qualification-db.unreadable`: the base or the user layer exists, or its path cannot be walked (`ENOTDIR`, a
+    path through a file, is a wrong path, not an absent base; `EACCES` likewise), and SQLite cannot open or read it: a
+    directory, a file with no read permission, a file that is no SQLite database (a short or corrupt one);
   - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `user_layer` that is not the
     file's (a user file opened as the base), or a REAL column of a record holding a value that is not finite (no
     JSON number writes it; the message names the layer, the record and the column);
@@ -1146,7 +1153,12 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     exit 2), because a record is not a cell;
   - `counts [--layer user|base] --json`: one JSON object per line per format, in format order:
     `{"format": "clap", "plugins": 248, "offered": 224, "not_offered": 24}`;
-  - `check`: opens both layers, verifies section 3.7's key rule for every record of both, and prints `ok`, or the code and message; exit 0, or 1 with the code;
+  - an absent base is told, never silent, and stdout stays records only (a reader parses each line as a record, and a
+    box with no base must not meet a line a box with a base never prints): when `pqdb_base_absent` is 1, `query --json`
+    and `counts --json` exit 0, print the user layer's lines alone (none when it has none) and write ONE line to
+    stderr, `plugin-qualification-db: base-absent: <path>: the base layer is empty`; a present base writes nothing to
+    stderr;
+  - `check`: opens both layers, verifies section 3.7's key rule for every record of both, and prints `ok` (`ok base-absent` when the base is absent), or the code and message; exit 0, or 1 with the code;
   - `--base`, `--user`, `--contract-dir` and their variables, as section 2 says; and `--scope user|system` (default
     `user`), which opens the production places of that scope (`pqdb_open`) when neither `--base` nor `--user` is given.
     `--scope` with either of them is a usage error. Exit 2 on a usage error.
@@ -1358,7 +1370,7 @@ makes it fail.
 
 ### Change 3: the reader
 
-1. **Absent base** → `qualification-db.absent` with the path. Fails when open succeeds on an empty layer.
+1. **Absent base** → open succeeds, `pqdb_base_absent` is 1, the results are the user layer's alone, a `base`-layer query and `pqdb_counts` give none, no file is created; the command exits 0 with records only on stdout and the one `base-absent` line on stderr (`ok base-absent` for `check`), and a present base writes no such line. Fails when open is refused, when the base is said present, when stdout holds a line that is no record, or when a base appears. A base that exists and cannot be used is still refused by name, one arm each: a permission-denied file (skipped as root) and a directory and a short non-SQLite file (`qualification-db.unreadable`), a file at another `user_version` (`schema-other`), an empty file (`not-a-store`), a path through a file (`ENOTDIR`, `unreadable`). Fails when any of them reads as absent. The writer puts the user and the system layer with no base anywhere.
 2. **Absent user layer** → open succeeds; results are the base's. Fails when an absent user file is refused or created.
 3. **One schema version.** A base at `user_version` 2 (and a reader at 1) → `schema-other`; a base at 1 with a user
    layer at 2 → `schema-mismatch`, naming both files; **0** → `not-a-store`; a user file opened as the base →
@@ -1450,7 +1462,7 @@ C4. **The sync writes the store.** After a run in a fixture home, the user layer
     (`binary_path` relative, list in order, key rule held) and no `*.qualification.json`, `*.probe.json` or
     `*.unmeasured.json` exists under any directory the sync used. Fails when any file is written.
 C5. **No directory is read.** With a directory of valid old `*.qualification.json` and `*.probe.json` files present, and
-    with the store absent, the sync refuses by `qualification-db.absent` and takes nothing from the files; with the
+    with no base file (an empty base layer, section 6) the sync takes nothing from the files and writes its layer; with the
     store present, `qualify-rejudge`, `pruneStale` and `pluginCounts` give the store's answers and the open trace shows
     no read of that directory. Fails when any function falls back, or reads both.
 C6. **`qualify-rejudge` on the store.** It judges the user layer's records again with no probe output on disk, `put`s only

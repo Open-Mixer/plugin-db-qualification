@@ -1,0 +1,46 @@
+.\" SPDX-License-Identifier: GPL-3.0-or-later
+.\" Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+.TH PLUGIN-QUALIFICATION-DB-WRITE 1 2026-11-19 plugin-db-qualification "User Commands"
+.SH NAME
+plugin-qualification-db-write \- put and delete records in the OpenMixer qualification store's layers
+.SH SYNOPSIS
+.B plugin-qualification-db-write put \-\-scope
+.IR user | system
+.B \-\-offer
+.I word
+.B \-\-host\-class
+.I word
+.RB [ \-\-contract\-dir
+.IR dir ]
+.br
+.B plugin-qualification-db-write delete \-\-scope
+.IR user | system
+.B \-\-sha256
+.I hash
+.B \-\-format
+.I format
+.B \-\-uri
+.I uri
+.B \-\-offer
+.I word
+.B \-\-host\-class
+.I word
+.SH DESCRIPTION
+.B put
+reads one qualification record, the JSON document of plugin-qualify.qualification-record/1, on standard input and
+replaces, whole and in one transaction, the layer's record of the same key (sha256, format, uri, offer, host class). The
+layer is created from the installed DDL when its file is absent. Every word is checked against the contract domains;
+the binary's path must be relative to the install root, its file list ordered, unique and not empty, and the key's
+SHA-256 the one of the entry at that path.
+.PP
+.B delete
+removes the layer's record of a key; a key the layer does not hold is not an error. Nothing is deleted from the base.
+.PP
+The user scope's layer is ~/.local/share/omx/qualification/qualification.sqlite, the system scope's
+/var/lib/omx/qualification/qualification.sqlite. The contract directory is \-\-contract\-dir, then OMX_CONTRACT_PATH,
+then the contractdir of libomx-domain.pc.
+.SH EXIT STATUS
+0 on success. A refusal is printed on standard error as
+.I plugin-qualification-db-write: refused: name: ...
+and exits 1: path-absolute, binary-not-in-files, key-not-the-binary, files-unordered, files-duplicate, files-empty,
+word-unknown, field-unmapped, schema-refused, among others. A usage error exits 2.

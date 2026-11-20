@@ -1,33 +1,36 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
-"""The one records package, plugin-qualification-records, per architecture: which sets each architecture carries,
-what it depends on, which older package names it takes over, and which architectures a tag releases. The workflows,
+"""The records package, plugin-qualification-records, per architecture (beside the reader's three packages): which sets each architecture carries,
+what it depends on, and which architectures a tag releases. The workflows,
 debian/rules and the spec read all of it from here.
 
     tools/sets.py check                         packaging/arch-classes, packaging/release-arches, debian/control,
                                                 the spec and records/ agree (the check workflow)
-    tools/sets.py names deb|rpm                 the binary package name (binary-names of the builds)
+    tools/sets.py names deb|rpm                 the binary package names, space-separated (binary-names of the builds)
     tools/sets.py list deb|rpm <arch>           one line per set the package of <arch> carries: <class> <set> <cell or ->
     tools/sets.py github-output                 what release.yml's plan job needs, appended to $GITHUB_OUTPUT
-    tools/sets.py substvars <deb arch>          the substvars of the Debian package of <deb arch> (debian/rules)
+    tools/sets.py substvars <deb arch>          the substvar of the Debian package of <deb arch>: its plugin-qualify floor (debian/rules)
     tools/sets.py install deb|rpm <arch> <dir>  copies records/<class>/ of every class of <arch> into <dir>/<class>/
                                                 (debian/rules and the spec's %install)
     tools/sets.py spec                          rewrites the spec's per-architecture block from arch-classes and records/
+    tools/sets.py import <class> <set> <out-dir> [--provenance <file>]
+                                                copies the *.qualification.json and *.probe.json files of a
+                                                `plugin-qualify --out` directory (and the provenance) into
+                                                records/<class>/<set>/, then runs tools/check-records.py on it; a
+                                                refusal is named and leaves the tree as it was
     tools/sets.py prove deb|rpm <pkg dir>       installs the package of this machine's architecture from <pkg dir> and
-                                                proves every set it carries (tools/prove-set.sh), one after the other
+                                                proves every set it carries of this machine's host class
+                                                (tools/prove-set.sh), one after the other; the others are named, not proven
 
 packaging/arch-classes maps a Debian architecture and an RPM architecture to a machine class and the plugin-qualify
-range of that architecture's package. Every set under records/<class>/ goes into the package of its class's
+floor of that architecture's package. Every set under records/<class>/ goes into the package of its class's
 architecture, at /usr/share/omx/qualification/<class>/<set>/; the sync chooses the set. A set is per machine class,
 per sample rate and per quantum: a set named <set>-<rate>-<quantum> holds that one cell.
 
-The package takes over the names the sets were published under before, one package per set: for every set,
-plugin-db-qualification-<class>-<set>, and for the set's name without its cell, plugin-db-qualification-<class>-<base>
-and omx-qualification-<class>-<base>. They are derived from records/ at build time, never written by hand. Debian
-folds the names of its architecture's classes, and on every architecture the names of the Debian packages that were
-Architecture: all (the rpi5 sets): Provides (= this version), Replaces and Breaks (<< this version). The RPM folds the
-names of its architecture's classes: Provides and Obsoletes (< this version-release), in the block `spec` writes.
+The package carries no relation to the names the sets were published under before, one package per set, and none to
+another package of this source: no Provides, Replaces, Breaks, Conflicts or Obsoletes. Those names are pruned from the
+channel. `check` refuses a relation in debian/control or the spec.
 """
 import json
 import os
@@ -39,14 +42,23 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PACKAGE = "plugin-qualification-records"
+# The source package's binary packages, exactly (this repository's qualification store spec, section 7): the records
+# package, which this tool builds the sets of, and the reader's library, its development files and its command, the DDL
+# (plugin-qualification-db-schema) and the layer writer (plugin-qualification-db-write). A package, or a
+# debian/<name>.install, .symbols or .lintian-overrides file, of any other name is refused.
+DEB_PACKAGES = [PACKAGE, "libplugin-qualification-db0", "libplugin-qualification-db-dev", "plugin-qualification-db",
+                "plugin-qualification-db-schema", "plugin-qualification-db-write"]
+RPM_PACKAGES = [PACKAGE, "libplugin-qualification-db", "libplugin-qualification-db-devel", "plugin-qualification-db",
+                "plugin-qualification-db-schema", "plugin-qualification-db-write"]
+PACKAGE_FILES = (".install", ".symbols", ".lintian-overrides")
 SPEC = os.path.join("packaging", f"{PACKAGE}.spec")
 ARCH_CLASSES = os.path.join("packaging", "arch-classes")
 RELEASE_ARCHES = os.path.join("packaging", "release-arches")
 QUALIFICATION = os.path.join("usr", "share", "omx", "qualification")
+BASE_DB = "qualification.sqlite"
+RECORD = ".qualification.json"
+PROBE = ".probe.json"
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
-# the classes whose Debian packages were Architecture: all, installable on any architecture: their names are folded
-# by the package of every Debian architecture
-DEB_ALL_CLASSES = ("rpi5",)
 BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
 BLOCK_END = "# END per-architecture"
 FORMATS = ("deb", "rpm")
@@ -66,12 +78,12 @@ def rows(text):
 
 
 def arch_classes(root):
-    """[{deb, rpm, class, from, below}] of packaging/arch-classes, in file order."""
+    """[{deb, rpm, class, from}] of packaging/arch-classes, in file order."""
     out = []
     for r in rows(read(root, ARCH_CLASSES)):
-        if len(r) != 5:
-            raise Refused(f"{ARCH_CLASSES}: {' '.join(r)!r} is not <deb arch> <rpm arch> <class> <from> <below>")
-        out.append(dict(zip(("deb", "rpm", "class", "from", "below"), r)))
+        if len(r) != 4:
+            raise Refused(f"{ARCH_CLASSES}: {' '.join(r)!r} is not <deb arch> <rpm arch> <class> <from>")
+        out.append(dict(zip(("deb", "rpm", "class", "from"), r)))
     return out
 
 
@@ -123,28 +135,12 @@ def carried(root, kind, arch):
     return out
 
 
-def qualify_range(root, kind, arch):
-    """(from, below) of <arch>; refused when its classes give two ranges."""
-    ranges = {(line["from"], line["below"]) for line in lines_of(root, kind, arch)}
-    if len(ranges) != 1:
-        raise Refused(f"{kind} architecture {arch} has {len(ranges)} plugin-qualify ranges in {ARCH_CLASSES}, not one")
-    return ranges.pop()
-
-
-def folded_names(root, cls_list):
-    """The names the sets of these classes were published under, one package per set."""
-    names = set()
-    for c in cls_list:
-        for _, s in tree_sets(root, c):
-            names.add(f"plugin-db-qualification-{c}-{s}")
-            base = CELL.sub("", s)
-            names.add(f"plugin-db-qualification-{c}-{base}")
-            names.add(f"omx-qualification-{c}-{base}")
-    return sorted(names)
-
-
-def deb_folded(root, arch):
-    return folded_names(root, sorted(set(classes(root, "deb", arch)) | set(DEB_ALL_CLASSES)))
+def qualify_floor(root, kind, arch):
+    """The plugin-qualify floor of <arch>; refused when its classes give two."""
+    floors = {line["from"] for line in lines_of(root, kind, arch)}
+    if len(floors) != 1:
+        raise Refused(f"{kind} architecture {arch} has {len(floors)} plugin-qualify floors in {ARCH_CLASSES}, not one")
+    return floors.pop()
 
 
 def changelog_version(root):
@@ -158,16 +154,59 @@ def spec_version(root):
 
 
 def substvars(root, arch):
+    """The one substvar: the plugin-qualify floor. A package of this source carries no Provides, Replaces or Breaks."""
     carried(root, "deb", arch)
-    low, below = qualify_range(root, "deb", arch)
-    version = changelog_version(root)
-    names = deb_folded(root, arch)
-    return "\n".join([
-        f"qualify:Depends=plugin-qualify (>= {low}~), plugin-qualify (<< {below}~)",
-        "records:Provides=" + ", ".join(f"{n} (= {version})" for n in names),
-        "records:Replaces=" + ", ".join(f"{n} (<< {version})" for n in names),
-        "records:Breaks=" + ", ".join(f"{n} (<< {version})" for n in names),
-    ]) + "\n"
+    return f"qualify:Depends=plugin-qualify (>= {qualify_floor(root, 'deb', arch)}~)\n"
+
+
+class ImportRefused(Refused):
+    def __init__(self, name, msg):
+        super().__init__(f"import: {name}: {msg}")
+
+
+def import_set(root, cls, set_, out, provenance=None):
+    """A `plugin-qualify --out` directory into records/<cls>/<set_>/: its *.qualification.json and *.probe.json files, byte
+    for byte, and the provenance given. Refused by name, and then nothing is written (a set that fails the records check is
+    removed again): file-other, class-unknown, set-exists, dir-absent, dir-empty, probe-missing, qualification-missing,
+    set-check-failed."""
+    if cls not in {line["class"] for line in arch_classes(root)}:
+        raise ImportRefused("class-unknown", f"{cls!r} is not a class of {ARCH_CLASSES}")
+    dest = os.path.join(root, "records", cls, set_)
+    if os.path.exists(dest):
+        raise ImportRefused("set-exists", f"records/{cls}/{set_}/ exists; a set is never replaced, a new measurement is a new set")
+    if not os.path.isdir(out):
+        raise ImportRefused("dir-absent", f"{out}: no such directory")
+    names = sorted(os.listdir(out), key=os.fsencode)
+    if not names:
+        raise ImportRefused("dir-empty", f"{out} holds no file")
+    for n in names:
+        if os.path.islink(os.path.join(out, n)) or not os.path.isfile(os.path.join(out, n)) or not n.endswith((RECORD, PROBE)):
+            raise ImportRefused("file-other", f"{n}: only *{RECORD} and *{PROBE} files are imported")
+    records = {n[: -len(RECORD)] for n in names if n.endswith(RECORD)}
+    probes = {n[: -len(PROBE)] for n in names if n.endswith(PROBE)}
+    for stem in sorted(records - probes):
+        raise ImportRefused("probe-missing", f"{stem}{RECORD} has no {stem}{PROBE}")
+    for stem in sorted(probes - records):
+        raise ImportRefused("qualification-missing", f"{stem}{PROBE} has no {stem}{RECORD}")
+    if provenance is not None and not os.path.isfile(provenance):
+        raise ImportRefused("file-other", f"{provenance}: no such provenance file")
+    os.makedirs(dest)
+    try:
+        for n in names:
+            shutil.copyfile(os.path.join(out, n), os.path.join(dest, n))
+        if provenance is not None:
+            shutil.copyfile(provenance, os.path.join(dest, "provenance.json"))
+        r = subprocess.run([sys.executable, "-B", os.path.join(root, "tools", "check-records.py"), dest], capture_output=True, text=True)
+    except BaseException:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+    if r.returncode:
+        shutil.rmtree(dest, ignore_errors=True)
+        parent = os.path.dirname(dest)
+        if not os.listdir(parent):
+            os.rmdir(parent)
+        raise ImportRefused("set-check-failed", f"records/{cls}/{set_}/ fails tools/check-records.py:\n{(r.stdout + r.stderr).strip()}")
+    return len(records)
 
 
 def install(root, kind, arch, dest):
@@ -195,14 +234,11 @@ def exclusive_arch(root):
 
 
 def spec_block(root):
-    """The spec's per-architecture block: for each architecture it builds, the Requires and the folded names."""
+    """The spec's per-architecture block: for each architecture it builds, the Requires."""
     out = [BLOCK_BEGIN]
     for arch in exclusive_arch(root):
-        low, below = qualify_range(root, "rpm", arch)
-        out += [f"%ifarch {arch}", f"Requires: (plugin-qualify >= {low} with plugin-qualify < {below})"]
-        for n in folded_names(root, classes(root, "rpm", arch)):
-            out += [f"Provides: {n} = %{{version}}-%{{release}}", f"Obsoletes: {n} < %{{version}}-%{{release}}"]
-        out.append("%endif")
+        low = qualify_floor(root, "rpm", arch)
+        out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}", "%endif"]
     out.append(BLOCK_END)
     return "\n".join(out)
 
@@ -243,32 +279,44 @@ def problems(root):
     for kind in FORMATS:
         for arch in sorted({line[kind] for line in lines}):
             try:
-                qualify_range(root, kind, arch)
+                qualify_floor(root, kind, arch)
             except Refused as e:
                 out.append(str(e))
 
+    for s in control_stanzas(root):
+        for field in ("Provides", "Replaces", "Breaks", "Conflicts"):
+            if field in s:
+                out.append(f"debian/control: {s.get('Package', 'the source')}: {field} is a relation; the packages of this source "
+                           "carry none (the older names are pruned from the channel)")
     binaries = [s for s in control_stanzas(root) if "Package" in s]
-    if [s["Package"] for s in binaries] != [PACKAGE]:
-        out.append(f"debian/control: one binary package, {PACKAGE}, not {[s['Package'] for s in binaries]}")
-    else:
-        b = binaries[0]
+    names = [s["Package"] for s in binaries]
+    if names != DEB_PACKAGES:
+        out.append(f"debian/control: the binary packages are exactly {DEB_PACKAGES}, not {names}")
+    for b in binaries:
+        if b["Package"] != PACKAGE:
+            continue
         if sorted(b.get("Architecture", "").split()) != deb_arches:
             out.append(f"debian/control: Architecture is {b.get('Architecture')!r}, not the Debian architectures of "
                        f"{ARCH_CLASSES}: {' '.join(deb_arches)}")
-        for field, var in (("Depends", "qualify:Depends"), ("Provides", "records:Provides"),
-                           ("Replaces", "records:Replaces"), ("Breaks", "records:Breaks")):
-            if f"${{{var}}}" not in b.get(field, ""):
-                out.append(f"debian/control: {field} does not carry ${{{var}}}")
+        if "${qualify:Depends}" not in b.get("Depends", ""):
+            out.append("debian/control: Depends does not carry ${qualify:Depends}")
     for name in sorted(os.listdir(os.path.join(root, "debian"))):
-        if name == "install" or (name.endswith((".install", ".lintian-overrides")) and name.rsplit(".", 1)[0] != PACKAGE):
-            out.append(f"debian/{name}: a file of no package; the one binary package is {PACKAGE}")
+        stem, ext = os.path.splitext(name)
+        if name == "install" or (ext in PACKAGE_FILES and stem not in DEB_PACKAGES):
+            out.append(f"debian/{name}: a file of no package; the binary packages are {' '.join(DEB_PACKAGES)}")
 
     try:
         spec = read(root, SPEC)
     except OSError:
         return out + [f"{SPEC}: missing"]
+    for field in ("Provides", "Obsoletes", "Conflicts"):
+        if re.search(rf"^{field}:", spec, re.M):
+            out.append(f"{SPEC}: {field}: is a relation; the packages of this source carry none (the older names are pruned from the channel)")
     if not re.search(rf"^Name: *{re.escape(PACKAGE)}$", spec, re.M):
         out.append(f"{SPEC}: Name is not {PACKAGE}")
+    declared = re.findall(r"^%package +(.*?) *$", spec, re.M)
+    if declared != [f"-n {n}" for n in RPM_PACKAGES[1:]]:
+        out.append(f"{SPEC}: the %package lines are exactly {[f'-n {n}' for n in RPM_PACKAGES[1:]]}, not {declared}")
     rpm_arches = {line["rpm"] for line in lines}
     built = exclusive_arch(root)
     if not built:
@@ -321,16 +369,28 @@ def prove(root, kind, pkgs):
     sets = carried(root, kind, arch)
     script = os.path.join(HERE, "prove-set.sh")
     print(f"{PACKAGE} for {kind} {arch}: {len(sets)} sets", flush=True)
+    if not sets:
+        print(f"::error::{PACKAGE} ({arch}) carries no set: nothing to prove", flush=True)
+        return 1
+    # the host class of this machine: the class packaging/arch-classes gives its architecture (x86_64: x86-64, aarch64:
+    # rpi5). The operating system is no part of it: qualification results are stable across releases and OS names.
+    here = "/".join(classes(root, kind, arch))
     if subprocess.run(["bash", script, "install", kind, pkgs, arch], cwd=root).returncode != 0:
         print(f"::error::{PACKAGE} ({arch}) did not install", flush=True)
         subprocess.run(["bash", script, "remove", kind], cwd=root)
         return 1
     failed = []
+    total, unmatched = len(sets), []
     try:
         # the package holds the classes of its architecture, each with the sets of the tree, and nothing else
         installed = os.path.join(os.environ.get("PROVE_ROOT") or "/", QUALIFICATION)
+        # beside the classes, the base database the package builds from them (the spec, debian/rules): it is no class
+        base = os.path.join(installed, BASE_DB)
+        if not os.path.isfile(base) or os.path.getsize(base) == 0:
+            print(f"::error::{PACKAGE} ({arch}) installs no base database {BASE_DB} in {installed}", flush=True)
+            return 1
         want = sorted({c for c, _ in sets})
-        have = sorted(os.listdir(installed)) if os.path.isdir(installed) else []
+        have = sorted(e for e in os.listdir(installed) if e != BASE_DB) if os.path.isdir(installed) else []
         if have != want:
             print(f"::error::{PACKAGE} ({arch}) installs the classes {have}, not {want}", flush=True)
             return 1
@@ -340,6 +400,17 @@ def prove(root, kind, pkgs):
             if got != tree:
                 print(f"::error::{PACKAGE} ({arch}) installs the {c} sets {got}, not {tree}", flush=True)
                 return 1
+        # a set is proven on a machine of its class, whatever its name says about the image it was measured on; a set of
+        # another class is named, not proven, and does not fail
+        unmatched = [(c, s) for c, s in sets if c not in classes(root, kind, arch)]
+        for cls, set_ in unmatched:
+            print(f"::notice::{cls}/{set_}: a set of the {cls} class, not proven on an {here} machine", flush=True)
+        if unmatched:
+            print(f"{len(unmatched)} sets of another host class, not proven on an {here} machine", flush=True)
+        total = len(sets)
+        sets = [x for x in sets if x not in unmatched]
+        if not sets:
+            print(f"::warning::proved 0 of {len(unmatched)} sets: none is a set of the {here} class", flush=True)
         for cls, set_ in sets:
             print(f"::group::{cls}/{set_}", flush=True)
             r = subprocess.run(["bash", script, "set", kind, cls, set_, cell(set_)], cwd=root)
@@ -349,8 +420,8 @@ def prove(root, kind, pkgs):
                 failed.append(set_)
     finally:
         subprocess.run(["bash", script, "remove", kind], cwd=root)
-    print(f"{len(sets) - len(failed)} of {len(sets)} sets proven" + (f"; failed: {' '.join(failed)}" if failed else ""))
-    return 1 if failed or not sets else 0
+    print(f"{len(sets) - len(failed)} of {total} sets proven, {len(unmatched)} not proven (measured on another host class)" + (f"; failed: {' '.join(failed)}" if failed else ""))
+    return 1 if failed else 0
 
 
 def main(argv, root=os.path.dirname(HERE)):
@@ -364,12 +435,12 @@ def main(argv, root=os.path.dirname(HERE)):
                 for line in arch_classes(root):
                     n = len(tree_sets(root, line['class']))
                     print(f"{line['deb']}/{line['rpm']}: {line['class']}, {n} set{'' if n == 1 else 's'}, "
-                          f"plugin-qualify {line['from']} up to {line['below']}")
+                          f"plugin-qualify {line['from']} or later")
                 rel = release_arches(root)
                 print(f"this version releases: deb {' '.join(rel['deb']) or 'none'}, rpm {' '.join(rel['rpm']) or 'none'}")
             return 1 if p else 0
         if cmd == "names" and len(argv) == 2 and argv[1] in FORMATS:
-            print(PACKAGE)
+            print(" ".join(DEB_PACKAGES if argv[1] == "deb" else RPM_PACKAGES))
             return 0
         if cmd == "list" and len(argv) == 3 and argv[1] in FORMATS:
             for cls, set_ in carried(root, argv[1], argv[2]):
@@ -380,9 +451,9 @@ def main(argv, root=os.path.dirname(HERE)):
             # the install-and-sync proofs run where the records' plugins are: Debian's arm64 lv2vocoder, the
             # channel's x86_64 omx-plugins
             lines = [f"deb-arches={json.dumps(rel['deb'])}", f"deb-run={'true' if rel['deb'] else 'false'}",
-                     f"deb-names={PACKAGE}", f"deb-prove={'true' if 'arm64' in rel['deb'] else 'false'}",
+                     f"deb-names={' '.join(DEB_PACKAGES)}", f"deb-prove={'true' if 'arm64' in rel['deb'] else 'false'}",
                      f"rpm-arches={json.dumps(rel['rpm'])}", f"rpm-run={'true' if rel['rpm'] else 'false'}",
-                     f"rpm-names={PACKAGE}", f"rpm-prove={'true' if 'x86_64' in rel['rpm'] else 'false'}"]
+                     f"rpm-names={' '.join(RPM_PACKAGES)}", f"rpm-prove={'true' if 'x86_64' in rel['rpm'] else 'false'}"]
             with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
                 f.write("\n".join(lines) + "\n")
             print("\n".join(lines))
@@ -393,6 +464,10 @@ def main(argv, root=os.path.dirname(HERE)):
         if cmd == "install" and len(argv) == 4 and argv[1] in FORMATS:
             for c in install(root, argv[1], argv[2], argv[3]):
                 print(f"records/{c}/ -> {os.path.join(argv[3], c)}/")
+            return 0
+        if cmd == "import" and len(argv) in (4, 6) and (len(argv) == 4 or argv[4] == "--provenance"):
+            n = import_set(root, argv[1], argv[2], argv[3], argv[5] if len(argv) == 6 else None)
+            print(f"records/{argv[1]}/{argv[2]}/: {n} record{'' if n == 1 else 's'} imported and checked")
             return 0
         if cmd == "spec" and len(argv) == 1:
             write_spec(root)

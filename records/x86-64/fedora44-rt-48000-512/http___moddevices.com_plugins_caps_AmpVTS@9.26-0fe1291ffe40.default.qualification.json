@@ -1,0 +1,266 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://moddevices.com/plugins/caps/AmpVTS"
+  },
+  "testedVersion": "9.26",
+  "binary": {
+    "path": "AmpVTS.so",
+    "sha256": "0fe1291ffe40819a7bf8db510ae38a1812715c89cfa57df53efea49dfcf6d14b",
+    "files": [
+      {
+        "path": "AmpVTS.so",
+        "sha256": "0fe1291ffe40819a7bf8db510ae38a1812715c89cfa57df53efea49dfcf6d14b"
+      },
+      {
+        "path": "AmpVTS.ttl",
+        "sha256": "abacf78469940c9f7b03551ff0edeb2bbb35b7ccc8e81076f0bc32f65f942912"
+      },
+      {
+        "path": "manifest.ttl",
+        "sha256": "617da9ce6e5bf5620fbdddf4653f9abfc2a91e32fa2d01186f315db000413667"
+      },
+      {
+        "path": "modgui.ttl",
+        "sha256": "84b2038ea1d540e147df2d66b4d6ea09c03c6f286f3c527f855c064117a211ab"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "de566a5e9233fbe1f7fe7a12b86d4ab5c73cf3011d4e16ee91f17cd922fae9af"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {
+    "host": "omx-clap-host",
+    "measured": true,
+    "admitted": true,
+    "params": {}
+  },
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 1024,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 1024
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 512,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 2
+        },
+        "cost": {
+          "median": 91.2061,
+          "percentile": {
+            "p": 95,
+            "value": 118.016
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 3528,
+          "afterActivateKb": 3528,
+          "atRestKb": 3528,
+          "secondInstanceKb": 16,
+          "firstInstanceKb": 3528,
+          "perInstanceKb": 16
+        }
+      }
+    ],
+    "behaviour": {
+      "lifecycle": {
+        "cycles": 30,
+        "instantiated": 30,
+        "failed": 0
+      },
+      "threads": {
+        "before": 1,
+        "afterFirstInstantiate": 1,
+        "afterAllFreed": 1
+      },
+      "features": {
+        "required": []
+      }
+    }
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "lv2_measure",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T16:23:15+00:00",
+  "probe": {
+    "file": "http___moddevices.com_plugins_caps_AmpVTS@9.26-0fe1291ffe40.default.probe.json",
+    "sha256": "a3fecf5c648f899c30fe3b6feb067113e554704cc52cbaa1476ba69d84c39a9a",
+    "bytes": 10361,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 12.15,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T162315Z-a995-ca338cae",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 1.6666666666666667,
+          "xruns": 3,
+          "midiInputsLinked": 0
+        }
+      }
+    ]
+  }
+}

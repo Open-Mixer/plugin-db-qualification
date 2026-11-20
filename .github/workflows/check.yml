@@ -29,11 +29,15 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 tools/check-records.py
       - run: python3 -m unittest tools/test_check_records.py
+      - run: python3 -m unittest tools/test_rewrite_records.py
       - run: python3 -m unittest tools/test_fedora44_channel_check.py
       - run: python3 -m unittest tools/test_fedora44_deliver.py
       - run: python3 -m unittest tools/test_build_package.py
+      - run: python3 -m unittest tools/test_dev_requires.py
       - run: python3 -m unittest tools/test_sets.py
+      - run: python3 -m unittest tools/test_no_relations.py
       - run: python3 -m unittest tools/test_fedora44_rt.py
+      - run: python3 -m unittest tools/test_reference_sets.py
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
       # every class under records/ is carried by an architecture of the one package, debian/control and the spec's
       # per-architecture block are what packaging/arch-classes and records/ give, and the spec's Version is
@@ -41,6 +45,89 @@ jobs:
       - name: The package builds the sets this tree holds
         run: python3 tools/sets.py check
 
+  # The reader (libplugin-qualification-db, its command and their tests): built with pkg-config's flags against the
+  # channel's libomx-domain, as a consumer builds it. `make check` builds the fixture stores from schema/qualification.sql.
+  reader:
+    name: the reader builds and passes make check
+    runs-on: ${{ github.event.repository.private && 'arc-freemixer' || github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.OMX_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    container:
+      image: fedora:45
+    steps:
+      - name: Install the build tools
+        run: dnf install -y --setopt=install_weak_deps=False git dnf5-plugins gcc gcc-c++ make python3 binutils pkgconf-pkg-config sqlite-devel diffutils gawk sed grep findutils
+      - name: Add the OpenMixer repository
+        uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
+      - name: Install the contract loader
+        run: dnf install -y --setopt=install_weak_deps=False 'libomx-domain-devel >= 3.20.0' 'omx-contract-devel >= 3.20.0'
+      - uses: actions/checkout@v4
+      # an ordinary run builds against the channel: refuse an omx package from the staging channel
+      - name: Every omx package comes from the channel
+        run: |
+          set -euo pipefail
+          dnf repoquery --installed --qf '%{name} %{version} %{from_repo}\n' 'omx-*' 'libomx-*' | tee /tmp/from-repo
+          if grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
+      - run: make check
+      # the hosting exception of the store spec (section 3.4) ends when omx-clap-core ships a `hosting` domain: fail while
+      # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone)
+      - name: The hosting exception ends with omx-clap-core's hosting domain
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap-core
+          sh tools/hosting-skip-ends.sh /tmp/omx-clap-core src/pqdb.c
+
+  # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the
+  # owners' own, read from their main (the test assembles the contract directory from these clones); the hosting words
+  # are the data/ of omx-clap-core's main, laid out as its install-contract lays them.
+  layer-writer:
+    name: the layer writer refuses by name
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PDQ_SIBLINGS: ${{ github.workspace }}/siblings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-qualify, path: siblings/plugin-qualify, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-hostd, path: siblings/plugin-hostd, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
+      - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
+      - run: python3 -m unittest tools/test_qualification_db_write.py
+
+  # The base database (tools/records-db.py) over every record of records/: the round trip, the counts, the refusals. The
+  # words are the owners' own, read from their main (the test assembles the contract directory from these clones);
+  # the hosting words are the data/ of omx-clap-core's main, laid out as its install-contract lays them.
+  records-db:
+    name: the base database round-trips records/
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PDQ_SIBLINGS: ${{ github.workspace }}/siblings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-qualify, path: siblings/plugin-qualify, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-hostd, path: siblings/plugin-hostd, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
+      - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
+      - run: python3 -m unittest tools/test_records_db.py
+
   # the commit messages, private references and layout every OpenMixer repository is held to
   public-sources:
     uses: Open-Mixer/.github/.github/workflows/public-sources-check.yml@openmixer-v1
+
+  deps-render:
+    name: the packaging states floors only
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Open-Mixer/.github/.github/actions/deps-render@openmixer-v1

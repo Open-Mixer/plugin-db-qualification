@@ -6,7 +6,8 @@
 # --system with that set's class (and, for a set of one cell, that cell as its grid) takes plugins from that set's
 # records and measures none of them; the sync's state is cleared between sets. tools/sets.py prove runs the three
 # steps for the package of the machine's architecture; the release runs that in a Debian trixie arm64 container
-# (deb) and a Fedora 44 x86_64 container (rpm), with plugin-qualify from the channel.
+# (deb) and a Fedora 45 x86_64 container (rpm), with plugin-qualify from the channel; every set of the machine's host class (the class packaging/arch-classes gives its architecture) is proven, whatever the
+# image it was measured on is called; a set of another class is named and reported as not proven.
 #
 #   tools/prove-set.sh install deb|rpm <pkg dir> <arch>    the one package of <arch> from the build artifact
 #   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or ->
@@ -17,7 +18,7 @@
 #      hash as a record's).
 # rpm: the package from <pkg dir>/; each set installs the channel's omx-plugins at the version it measured (its
 #      provenance.json), removed again after it; when the channel's omx-plugins of that version is rebuilt with other
-#      bytes this fails with "binary differs", and the set is due to be measured again. python3 must be installed.
+#      bytes this fails with "binary differs", and that is reported; the set stays, as qualification results are stable. python3 must be installed.
 # A container has no device tree, so the host class is the settings file's. No plugin-hostd listens. PROVE_ROOT
 # prefixes every system path (the tests).
 set -euo pipefail
@@ -27,7 +28,7 @@ step=$1 kind=$2
 r=${PROVE_ROOT:-}
 
 clear_state() {
-    rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf"
+    rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf" "$r/etc/omx/plugin-hostd.conf"
 }
 
 case $kind in deb|rpm) ;; *) echo "deb or rpm, not $kind" >&2; exit 2 ;; esac
@@ -56,12 +57,12 @@ case $step in
         trap 'clear_state; [ "$kind" = rpm ] && { dnf remove -y omx-plugins-clap omx-plugins-lv2 >/dev/null 2>&1 || true; }' EXIT
         clear_state
         case $kind in
-            deb) conf='lv2_extra' ;;
+            deb) hostd='' ;; # no extra folder: plugin-hostd's own LV2 list holds the standard ones
             rpm)
                 ver=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1].rsplit("-",1)[0])' "$tree/provenance.json")
                 dnf install -y --setopt=install_weak_deps=False "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
                 rpm -q omx-plugins-clap omx-plugins-lv2
-                conf='clap_extra /usr/lib64/clap'
+                hostd='clap_path /usr/lib64/clap' # plugin-hostd has no clap_extra
                 ;;
         esac
         test -f "$installed/provenance.json"
@@ -71,8 +72,10 @@ case $step in
         [ "$n" -eq "$want" ] || { echo "::error::$class/$set_: $n records installed, records/$class/$set_ holds $want"; exit 1; }
 
         mkdir -p "$r/etc/omx"
+        # the folders scanned are plugin-hostd's (plugin-qualify 0.20.7 refuses lv2_path, lv2_extra, clap_path, clap_extra in qualify.conf)
+        printf '%s' "${hostd:+$hostd$'\n'}" > "$r/etc/omx/plugin-hostd.conf"
         {
-            printf 'host_class %s\n%s\nhostd_port 0\n' "$class" "$conf"
+            printf 'host_class %s\nhostd_conf %s\nhostd_port 0\n' "$class" "$r/etc/omx/plugin-hostd.conf"
             [ "$cell" = - ] || printf 'grid %s\n' "$cell"
         } > "$r/etc/omx/qualify.conf"
         log=$(mktemp)

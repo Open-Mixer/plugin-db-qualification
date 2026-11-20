@@ -28,7 +28,7 @@ step=$1 kind=$2
 r=${PROVE_ROOT:-}
 
 clear_state() {
-    rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf"
+    rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf" "$r/etc/omx/plugin-hostd.conf"
 }
 
 case $kind in deb|rpm) ;; *) echo "deb or rpm, not $kind" >&2; exit 2 ;; esac
@@ -57,12 +57,12 @@ case $step in
         trap 'clear_state; [ "$kind" = rpm ] && { dnf remove -y omx-plugins-clap omx-plugins-lv2 >/dev/null 2>&1 || true; }' EXIT
         clear_state
         case $kind in
-            deb) conf='lv2_extra' ;;
+            deb) hostd='' ;; # no extra folder: plugin-hostd's own LV2 list holds the standard ones
             rpm)
                 ver=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1].rsplit("-",1)[0])' "$tree/provenance.json")
                 dnf install -y --setopt=install_weak_deps=False "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
                 rpm -q omx-plugins-clap omx-plugins-lv2
-                conf='clap_extra /usr/lib64/clap'
+                hostd='clap_path /usr/lib64/clap' # plugin-hostd has no clap_extra
                 ;;
         esac
         test -f "$installed/provenance.json"
@@ -72,8 +72,10 @@ case $step in
         [ "$n" -eq "$want" ] || { echo "::error::$class/$set_: $n records installed, records/$class/$set_ holds $want"; exit 1; }
 
         mkdir -p "$r/etc/omx"
+        # the folders scanned are plugin-hostd's (plugin-qualify 0.20.7 refuses lv2_path, lv2_extra, clap_path, clap_extra in qualify.conf)
+        printf '%s' "${hostd:+$hostd$'\n'}" > "$r/etc/omx/plugin-hostd.conf"
         {
-            printf 'host_class %s\n%s\nhostd_port 0\n' "$class" "$conf"
+            printf 'host_class %s\nhostd_conf %s\nhostd_port 0\n' "$class" "$r/etc/omx/plugin-hostd.conf"
             [ "$cell" = - ] || printf 'grid %s\n' "$cell"
         } > "$r/etc/omx/qualify.conf"
         log=$(mktemp)

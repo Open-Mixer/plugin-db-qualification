@@ -29,6 +29,8 @@ from qualification_db import (  # noqa: E402
     _insert_tree, parse_record, schema_version)
 
 PROVENANCE_SCHEMA = "plugin-qualify.distributed-provenance/1"
+# a set of one cell is named <set>-<rate>-<quantum> (tools/sets.py)
+CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 # the set tier whose record claims a cell another tier's set also holds (section 4, ruling 2026-11-20)
 REFERENCE = "reference"
 
@@ -125,7 +127,19 @@ class Writer:
         settings = prov.get("settings", {})
         if not isinstance(settings, dict) or ("settings" in prov and not settings):
             em.refuse("field-type" if not isinstance(settings, dict) else "empty-object", "settings", "expected a non-empty object")
-        em.obj(PROVENANCE, {k: v for k, v in prov.items() if k != "settings"}, scope, "")
+        if "cell" in prov:
+            # the cell of a set of one cell, as plugin-qualify writes it: checked against the set's name, not stored
+            # (record_set.name and the set's cells hold it; section 3.5)
+            c = prov["cell"]
+            if (not isinstance(c, dict) or sorted(c) != ["quantum", "rate"]
+                    or not all(isinstance(c[k], int) and not isinstance(c[k], bool) for k in c)):
+                em.refuse("field-type", "cell", "expected {rate, quantum}, two integers")
+            m = CELL.search(name)
+            if not m:
+                em.refuse("cell-mismatch", "cell", f"{c['rate']}/{c['quantum']}, but the set's name {name} names no cell")
+            if (c["rate"], c["quantum"]) != (int(m.group(1)), int(m.group(2))):
+                em.refuse("cell-mismatch", "cell", f"{c['rate']}/{c['quantum']}, not {m.group(1)}/{m.group(2)}, the cell of the set's name")
+        em.obj(PROVENANCE, {k: v for k, v in prov.items() if k not in ("settings", "cell")}, scope, "")
         s = scope.rows["record_set"]
         if s["name"] != name or s["host_class"] != cls:
             em.refuse("set-mismatch", "set", f"provenance names {s['host_class']}/{s['name']}, the directory is {cls}/{name}")

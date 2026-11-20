@@ -774,7 +774,9 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 
 `provenance.json` of a set: `schema`, `set`, `hostClass`, `hostProfile`, `tier`, `measured`, `date`, `package.name`,
 `package.version` → `record_set`; `packages.<name>` and `passes.<name>` → `set_package` (`pass` 0 and 1); `settings.<key>` (but `note`)
-→ `set_setting`.
+→ `set_setting`. `cell` (`{rate, quantum}`, written by plugin-qualify for a set of one cell) is checked, not stored: it
+must be two integers equal to the cell of the set's name (`<set>-<rate>-<quantum>`), else the set is refused
+(`field-type`, `cell-mismatch`); `record_set.name` and the set's `cell` rows hold it.
 
 **The package fields, field by field.** No current record or provenance holds the package of a binary, so the
 migration writes NULL in all six for every one of the 12,953 records:

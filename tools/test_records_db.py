@@ -997,7 +997,8 @@ class RoundTrip(unittest.TestCase):
         order = sorted(ids, key=lambda k: os.fsencode("/".join(k)))
         self.assertEqual([ids[k] for k in order], list(range(1, len(ids) + 1)))
         sets = [(r["host_class"], r["name"]) for r in self.db.execute("SELECT host_class, name FROM record_set ORDER BY set_id")]
-        self.assertEqual(sets, sorted(sets, key=lambda k: os.fsencode("/".join(k))))
+        # the sets in the byte order of their directories' paths, as their records are
+        self.assertEqual(sets, sorted(sets, key=lambda k: os.fsencode("/".join(k) + "/")))
 
     def test_console_judgments_are_held_back(self):
         """No row of the openmixer-console profile anywhere in the base, and every record is in (issue #5)."""

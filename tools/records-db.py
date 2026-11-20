@@ -266,11 +266,13 @@ def walk(records_dir, classes=None):
     if not os.path.isdir(records_dir):
         raise Refusal("records.dir.absent", f"{records_dir}: no such directory")
     found = []
-    for cls in sorted(os.listdir(records_dir), key=os.fsencode):
+    # each directory sorted as its path continues ("<name>/"), so the records go in the byte order of their whole
+    # paths (section 5) also where one set's name begins another's: zynthian-vangelis-48000-256/ before zynthian-vangelis/
+    for cls in sorted(os.listdir(records_dir), key=lambda n: os.fsencode(n + "/")):
         cdir = os.path.join(records_dir, cls)
         if not os.path.isdir(cdir) or (classes and cls not in classes):
             continue
-        for s in sorted(os.listdir(cdir), key=os.fsencode):
+        for s in sorted(os.listdir(cdir), key=lambda n: os.fsencode(n + "/")):
             if os.path.isdir(os.path.join(cdir, s)):
                 found.append((cls, s, os.path.join(cdir, s)))
     for c in classes or ():

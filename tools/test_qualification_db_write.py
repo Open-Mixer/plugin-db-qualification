@@ -255,12 +255,21 @@ class Columns(Layer):
         def put(r):
             rt = r["measurements"]["grid"][0]["rtSafety"]
             rt["ownThreads"] = 2
-            rt["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+            rt["otherThreads"] = {"allocations": 5, "locks": 0, "syscalls": 7}
         got = self.put_back(self.edited(put))
         rt = got["measurements"]["grid"][0]["rtSafety"]
-        self.assertEqual((rt["ownThreads"], rt["otherThreads"]), (2, {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}))
+        self.assertEqual((rt["ownThreads"], rt["otherThreads"]), (2, {"allocations": 5, "locks": 0, "syscalls": 7}))
         self.assertEqual(self.rows("SELECT rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls FROM cell "
                                    "WHERE rt_own_threads IS NOT NULL"), [(2, 5, 0, 7)])
+
+    def test_24_other_threads_with_the_inrun_names_is_refused_by_name(self):
+        """The record format has no such fields (plugin-qualify spreads the probe point's names): not an alias."""
+        def put(r):
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(self.edited(put))
+        self.assertEqual(cm.exception.name, "field-unmapped")
+        self.assertIn("otherThreads.allocationsInRun", str(cm.exception))
 
     def test_24_records_of_today_hold_none(self):
         got = self.put_back(self.rec)
@@ -271,7 +280,7 @@ class Columns(Layer):
 
     def test_24_other_threads_with_one_count_only_is_refused_by_the_schema(self):
         def put(r):
-            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locksInRun": 1}
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locks": 1}
         self.refused("schema-refused", rec=self.edited(put))
 
 

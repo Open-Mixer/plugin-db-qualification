@@ -8,7 +8,7 @@ the machine hosts it. That takes hours on a small board. A machine of the same c
 not need to measure again. This repository ships the records of the qualification runs, so `plugin-qualify-sync` can
 take a plugin from them and measure only what they do not hold.
 
-The design is in `docs/design/specs/qualification-sqlite.md`. Read it for every rule below.
+The design is this repository's qualification store spec. Read it for every rule below.
 
 ## What is offered
 

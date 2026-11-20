@@ -9,7 +9,7 @@ refusal by its exact name.
 
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones
 (TEST ONLY, the writer reads no variable for it): PDQ_SIBLINGS names the directory that holds the clones
-(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
+(plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
 (default origin/main); the hosting words come from the data/ of omx-clap-core at the same ref, laid out as its
 `make install-contract` lays them out (<contractdir>/3/omx-clap-core/ and its MANIFEST.json). Without PDQ_SIBLINGS the tests that need the words are
 skipped, saying so. The fixture records are records of records/, in the section 3.7 form the rewrite of records/ gives
@@ -33,7 +33,7 @@ import qualification_db as q  # noqa: E402
 
 RECORDS = os.path.join(REPO, "records")
 HEADER = os.path.join(REPO, "include", "plugin-qualification-db", "pqdb.h")
-DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
+DOMAIN_REPO = {"qualification": "plugin-hostd", "machine": "plugin-hostd", "probe": "plugin-hostd",
                "plugin-db": "plugin-db"}
 SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
 REF = os.environ.get("PDQ_REF", "origin/main")

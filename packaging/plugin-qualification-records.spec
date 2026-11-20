@@ -34,6 +34,9 @@ BuildRequires: python3
 BuildRequires: gcc make pkgconfig binutils
 BuildRequires: sqlite-devel >= 3.37.0
 BuildRequires: libomx-domain-devel >= 3.20.0
+# the record check of %check reads the qualification domain, plugin-hostd's, from its contract package (a floor only; the
+# package the domain left is pruned from the channel, so no relation to it stands here)
+BuildRequires: plugin-hostd-contract >= 0.21.0
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64

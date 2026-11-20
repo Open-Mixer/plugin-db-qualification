@@ -8,7 +8,8 @@
 Without arguments every set under records/ is checked. A set passes when:
 
 - its provenance.json is plugin-qualify.distributed-provenance/1, names the set and host class of its directory,
-  and the package plugin-db-qualification-<host class>-<set>;
+  and the package plugin-db-qualification-<host class>-<set>, and its hostProfile and host classes are words of the
+  `qualification` domain (plugin-hostd's, read from OMX_CONTRACT_PATH, else the installed contract directory);
 - every *.qualification.json is a plugin-qualify.qualification-record/1 with its binary's files and its probe output
   beside it, whose size and SHA-256 are the ones the record names (a record with no verdict for the provenance's
   hostProfile is counted and named, not refused: the sync only skips it under that host);
@@ -44,7 +45,26 @@ FIGURES = {"cpu", "latency"}
 CHECK_RESULTS = {"pass", "fail", "not-observable", "not-run"}
 FIGURE_RESULTS = {"measured", "not-observable", "not-run"}
 CELL_SET = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
+INSTALLED_CONTRACT_DIR = "/usr/share/omx-contract/contract.d"
 COUNTS = ("loads", "instantiates", "output", "runsClean", "rtSafe", "rtObserved", "crashes")
+
+
+def qualification_words(item):
+    """The words of an item of the `qualification` domain (plugin-hostd's): the first directory of OMX_CONTRACT_PATH (a ':'
+    list) that holds the domain, else the installed contract directory. A domain that is absent, or without the item, ends
+    the run naming it."""
+    dirs = [d for d in os.environ.get("OMX_CONTRACT_PATH", "").split(":") if d] + [INSTALLED_CONTRACT_DIR]
+    for d in dirs:
+        path = os.path.join(d, "qualification", "qualification.json")
+        if os.path.isfile(path):
+            break
+    else:
+        raise SystemExit("check-records: the qualification domain is in none of %s (plugin-hostd-contract installs it)" % ", ".join(dirs))
+    try:
+        with open(path, encoding="utf-8") as f:
+            return [e["const"] for e in json.load(f)["components"]["schemas"][item]["oneOf"]]
+    except (OSError, ValueError, KeyError) as e:
+        raise SystemExit("check-records: %s: %s is not readable: %s" % (path, item, e))
 
 
 def set_cell(set_name):
@@ -176,6 +196,14 @@ def check_set(path):
     host = prov.get("hostProfile")
     if not isinstance(host, str) or not host:
         bad("provenance.json", "names no hostProfile")
+    elif host not in qualification_words("QUALIFICATION_HOST_PROFILES"):
+        bad("provenance.json", f"hostProfile {host!r} is not a word of QUALIFICATION_HOST_PROFILES")
+    classes = qualification_words("QUALIFICATION_HOST_CLASSES")
+    if host_class not in classes:
+        bad("provenance.json", f"its host class {host_class!r} (the directory) is not a word of QUALIFICATION_HOST_CLASSES")
+    set_class = (prov.get("settings") or {}).get("host_class")
+    if set_class is not None and set_class not in classes:
+        bad("provenance.json", f"settings.host_class {set_class!r} is not a word of QUALIFICATION_HOST_CLASSES")
     cell = set_cell(set_name)
     if cell is not None and cell not in grid_cells(prov.get("grid")):
         bad("provenance.json", f"its grid {prov.get('grid')!r} does not name {cell[0]}/{cell[1]}, the cell of the set's name")

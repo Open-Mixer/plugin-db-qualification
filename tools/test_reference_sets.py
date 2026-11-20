@@ -101,13 +101,15 @@ class ReferenceSets(unittest.TestCase):
         self.assertEqual(r.returncode, 0, (r.stdout + r.stderr)[-4000:])
 
     def test_packaged(self):
-        """The amd64 and x86_64 packages carry every reference set, at its cell, and the measured-on class of its name
-        is fedora44, so tools/sets.py prove proves it on a fedora44 image."""
+        """The amd64 and x86_64 packages carry every x86-64 set, of either tier, each at the cell of its name."""
         for kind, arch in (("deb", "amd64"), ("rpm", "x86_64")):
             carried = {s for c, s in sets.carried(ROOT, kind, arch) if c == "x86-64"}
-            self.assertTrue(set(REFERENCE) <= carried, sorted(set(REFERENCE) - carried))
-        for name in REFERENCE:
-            self.assertEqual(sets.measured_on(name), "fedora44")
+            self.assertTrue(set(REFERENCE + PROVISIONAL) <= carried, sorted(set(REFERENCE + PROVISIONAL) - carried))
+        for name in REFERENCE + PROVISIONAL:
+            rate, quantum = name.rsplit("-", 2)[1:]
+            self.assertEqual(sets.cell(name), f"{rate}/{quantum}", name)
+            if "cell" in provenance(name):
+                self.assertEqual(provenance(name)["cell"], {"rate": int(rate), "quantum": int(quantum)}, name)
 
 
 if __name__ == "__main__":

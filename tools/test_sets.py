@@ -279,6 +279,134 @@ class Check(Tree):
             del os.environ["GITHUB_OUTPUT"]
 
 
+class Import(Tree):
+    """`tools/sets.py import <class> <set> <out-dir> [--provenance <file>]`: a plugin-qualify --out directory into
+    records/<class>/<set>/, by name, refusing what is not a record or has no pair."""
+    SRC = os.path.join(ROOT, "records", "x86-64", "fedora44-48000-512")
+
+    def setUp(self):
+        super().setUp()
+        shutil.copy2(os.path.join(HERE, "check-records.py"), self.path("tools", "check-records.py"))
+        self.out = os.path.join(self.tmp.name, "out")
+        os.makedirs(self.out)
+        names = sorted(f for f in os.listdir(self.SRC) if f.endswith(".qualification.json"))[:2]
+        for n in names:
+            shutil.copy2(os.path.join(self.SRC, n), self.out)
+            with open(os.path.join(self.SRC, n)) as f:
+                shutil.copy2(os.path.join(self.SRC, json.load(f)["probe"]["file"]), self.out)
+        self.prov = os.path.join(self.tmp.name, "provenance.json")
+        self.write_prov("fedora45-48000-512")
+
+    def write_prov(self, set_, **over):
+        prov = {"schema": "plugin-qualify.distributed-provenance/1", "set": set_, "hostClass": "x86-64",
+                "package": {"name": f"plugin-db-qualification-x86-64-{set_}"}, "hostProfile": "omx-clap-host", "grid": "48000/512"}
+        prov.update(over)
+        with open(self.prov, "w") as f:
+            json.dump(prov, f)
+
+    def snapshot(self):
+        return sorted((d, f) for d, _, fs in os.walk(self.root) for f in fs for d in [os.path.relpath(d, self.root)])
+
+    def imp(self, cls="x86-64", set_="fedora45-48000-512", out=None, prov=True):
+        argv = ["import", cls, set_, out or self.out] + (["--provenance", self.prov] if prov else [])
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf), contextlib.redirect_stdout(io.StringIO()):
+            rc = sets.main(argv, root=self.root)
+        return rc, buf.getvalue()
+
+    def refused(self, name, **kw):
+        before = self.snapshot()
+        rc, err = self.imp(**kw)
+        self.assertEqual(rc, 1, err)
+        self.assertIn(f"import: {name}:", err)
+        self.assertEqual(self.snapshot(), before, "a refusal changed the tree")
+        return err
+
+    def test_the_records_and_probes_are_copied_and_the_check_passes(self):
+        before = self.snapshot()
+        rc, err = self.imp()
+        self.assertEqual(rc, 0, err)
+        dest = self.path("records", "x86-64", "fedora45-48000-512")
+        self.assertEqual(sorted(os.listdir(dest)), sorted(os.listdir(self.out) + ["provenance.json"]))
+        for f in os.listdir(self.out):
+            self.assertTrue(filecmp.cmp(os.path.join(self.out, f), os.path.join(dest, f), shallow=False), f)
+        added = [x for x in self.snapshot() if x not in before]
+        self.assertTrue(all(d == os.path.join("records", "x86-64", "fedora45-48000-512") for d, _ in added), added)
+        self.assertEqual([x for x in before if x not in self.snapshot()], [])
+
+    def test_any_other_file_is_refused(self):
+        with open(os.path.join(self.out, "notes.txt"), "w") as f:
+            f.write("x")
+        self.assertIn("notes.txt", self.refused("file-other"))
+
+    def test_a_directory_in_the_out_dir_is_refused(self):
+        os.makedirs(os.path.join(self.out, "sub"))
+        self.refused("file-other")
+
+    def test_an_unknown_class_is_refused(self):
+        self.assertIn("pi4", self.refused("class-unknown", cls="pi4"))
+
+    def test_a_set_that_exists_is_refused(self):
+        self.imp()
+        self.refused("set-exists")
+
+    def test_an_empty_directory_is_refused(self):
+        empty = os.path.join(self.tmp.name, "empty")
+        os.makedirs(empty)
+        self.refused("dir-empty", out=empty)
+
+    def test_a_missing_directory_is_refused(self):
+        self.refused("dir-absent", out=os.path.join(self.tmp.name, "nope"))
+
+    def test_a_record_without_its_probe_is_refused(self):
+        probe = next(f for f in os.listdir(self.out) if f.endswith(".probe.json"))
+        os.remove(os.path.join(self.out, probe))
+        self.assertIn(probe, self.refused("probe-missing"))
+
+    def test_a_probe_without_its_record_is_refused(self):
+        rec = next(f for f in os.listdir(self.out) if f.endswith(".qualification.json"))
+        os.remove(os.path.join(self.out, rec))
+        self.assertIn(rec.replace(".qualification.json", ".probe.json"), self.refused("qualification-missing"))
+
+    def test_a_set_that_fails_the_records_check_is_refused_and_leaves_nothing(self):
+        self.write_prov("another-set")
+        err = self.refused("set-check-failed")
+        self.assertIn("provenance.json", err)
+        self.assertFalse(os.path.exists(self.path("records", "x86-64", "fedora45-48000-512")))
+
+    def test_without_a_provenance_the_check_refuses(self):
+        self.refused("set-check-failed", prov=False)
+
+    def test_the_usage_names_it(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            sets.main([], root=self.root)
+        self.assertIn("tools/sets.py import", buf.getvalue())
+
+
+class ReleaseArches(unittest.TestCase):
+    """What this repository's own packaging/release-arches offers: no amd64 deb."""
+
+    def test_the_deb_is_arm64_alone_and_the_rpm_is_x86_64_and_aarch64(self):
+        self.assertEqual(sets.release_arches(ROOT), {"deb": ["arm64"], "rpm": ["x86_64", "aarch64"]})
+
+    def test_every_consumer_still_passes(self):
+        self.assertEqual(sets.problems(ROOT), [])
+        out = os.path.join(tempfile.mkdtemp(prefix="pdq-gho-"), "out")
+        os.environ["GITHUB_OUTPUT"] = out
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sets.main(["github-output"], root=ROOT), 0)
+        finally:
+            del os.environ["GITHUB_OUTPUT"]
+        with open(out) as f:
+            written = f.read().splitlines()
+        self.assertIn('deb-arches=["arm64"]', written)
+        self.assertIn('rpm-arches=["x86_64", "aarch64"]', written)
+        self.assertIn("deb-prove=true", written)
+        self.assertIn("rpm-prove=true", written)
+
+
 class Substvars(Tree):
     def vars(self, arch):
         rc, out = self.run_main("substvars", arch)

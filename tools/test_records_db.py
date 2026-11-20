@@ -362,12 +362,12 @@ class DdlColumns(Base):
         def put(r):
             rt = r["measurements"]["grid"][0]["rtSafety"]
             rt["ownThreads"] = 2
-            rt["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+            rt["otherThreads"] = {"allocations": 5, "locks": 0, "syscalls": 7}
         d, f = self.made(put)
         got = self.same(d, f)
         rt = got["measurements"]["grid"][0]["rtSafety"]
         self.assertEqual((rt["ownThreads"], rt["otherThreads"]),
-                         (2, {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}))
+                         (2, {"allocations": 5, "locks": 0, "syscalls": 7}))
         self.assertEqual(self.rows("SELECT rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls FROM cell "
                                    "WHERE ord = 0 AND rt_own_threads IS NOT NULL"), [(2, 5, 0, 7)])
 
@@ -381,7 +381,7 @@ class DdlColumns(Base):
 
     def test_24_other_threads_with_one_count_only_is_refused_by_the_schema(self):
         def put(r):
-            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locksInRun": 1}
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locks": 1}
         d, f = self.made(put)
         self.refused("schema-refused", f)
 

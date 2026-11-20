@@ -72,8 +72,43 @@ pk=$("$cmd" query --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --con
 c=$("$cmd" check --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$c" = "ok" ] || note "check: exit $rc, output '$c'"
 c=$("$cmd" check --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
-case "$c" in qualification-db.absent*) ;; *) note "check of an absent base printed '$c'" ;; esac
-[ $rc -eq 1 ] || note "check of an absent base exited $rc, expected 1"
+[ $rc -eq 0 ] && [ "$c" = "ok base-absent" ] || note "check of an absent base: exit $rc, output '$c'"
+
+# an absent base is an empty base layer: exit 0, the answer says so, the user layer answers alone
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
+[ $rc -eq 0 ] || note "query with an absent base exited $rc: $a"
+[ "$(printf '%s\n' "$a" | head -n 1)" = '{"base":"absent"}' ] || note "query with an absent base does not say so: $(printf '%s\n' "$a" | head -n 1)"
+u=$("$cmd" query --json --layer user --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1 | tail -n +2)
+[ "$(printf '%s\n' "$a" | tail -n +2)" = "$u" ] && [ -n "$u" ] || note "query with an absent base is not the user layer's alone"
+a=$("$cmd" counts --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
+[ $rc -eq 0 ] || note "counts with an absent base exited $rc: $a"
+[ "$(printf '%s\n' "$a" | head -n 1)" = '{"base":"absent"}' ] || note "counts with an absent base does not say so"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+[ $rc -eq 0 ] && [ "$a" = '{"base":"absent"}' ] || note "no layer at all: exit $rc, output '$a'"
+a=$("$cmd" query --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1 | head -n 1)
+case "$a" in '{"base":'*) note "a present base is said absent" ;; esac
+# a base that exists and cannot be used is refused by name
+mkdir -p "$fx/base-dir.sqlite"
+for arm in "base-dir.sqlite" ; do
+    c=$("$cmd" query --json --base "$fx/$arm" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
+    case "$c" in qualification-db.unreadable*) ;; *) note "a directory as the base printed '$c'" ;; esac
+    [ $rc -eq 1 ] || note "a directory as the base exited $rc"
+done
+printf 'not sqlite' > "$fx/junk.sqlite"
+c=$("$cmd" counts --json --base "$fx/junk.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+case "$c" in qualification-db.unreadable*) ;; *) note "a junk base printed '$c'" ;; esac
+[ $rc -eq 1 ] || note "a junk base exited $rc"
+c=$("$cmd" check --base "$fx/base-v2.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+case "$c" in qualification-db.schema-other*) ;; *) note "a base of version 2 printed '$c'" ;; esac
+[ $rc -eq 1 ] || note "a base of version 2 exited $rc"
+if [ "$(id -u)" -ne 0 ]; then
+    cp "$fx/base.sqlite" "$fx/denied.sqlite"; chmod 000 "$fx/denied.sqlite"
+    c=$("$cmd" query --json --base "$fx/denied.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+    case "$c" in qualification-db.unreadable*) ;; *) note "an unreadable base printed '$c'" ;; esac
+    [ $rc -eq 1 ] || note "an unreadable base exited $rc"
+else
+    echo "skip   unreadable base: running as root, a mode 000 file is readable"
+fi
 c=$("$cmd" check --base "$fx/base.sqlite" --contract-dir "$ct/contract-no-conditional" --user '' 2>&1); rc=$?
 case "$c" in qualification-db.word-unknown*) ;; *) note "check with a missing word printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "check with a missing word exited $rc"

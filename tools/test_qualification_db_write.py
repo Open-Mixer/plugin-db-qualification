@@ -457,6 +457,21 @@ class Put(Layer):
         self.assertEqual(sorted(d for (d,) in self.rows("SELECT domain FROM store_domain")), sorted(q.DOMAINS))
         self.assertGreater(self.rows("SELECT count(*) FROM word_check")[0][0], 50)
 
+    def test_a_layer_is_written_with_no_base_anywhere(self):
+        """An absent base is a valid empty base layer (store spec, section 6): the writer never looks for one, and
+        writes the user and the system layer whether or not a base exists."""
+        for scope in ("user", "system"):
+            root = os.path.join(self.tmp, scope)
+            os.makedirs(root)
+            self.assertEqual(os.listdir(root), [])
+            self.put(scope=scope, root=root)
+            found = [os.path.join(d, f) for d, _, fs in os.walk(root) for f in fs if f.endswith(".sqlite")]
+            self.assertEqual(len(found), 1, found)
+            with contextlib.closing(sqlite3.connect(found[0])) as db:
+                self.assertEqual(db.execute("SELECT user_layer FROM store_info").fetchall(), [(1,)])
+                self.assertEqual(db.execute("SELECT count(*) FROM record").fetchone(), (1,))
+            self.assertFalse([f for f in found if "base" in os.path.basename(f)])
+
     def test_the_record_reads_back_equal(self):
         self.put()
         got = self.export()

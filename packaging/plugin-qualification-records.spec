@@ -36,10 +36,11 @@ BuildRequires: sqlite-devel >= 3.37.0
 BuildRequires: libomx-domain-devel >= 3.20.0
 # tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
 BuildRequires: python3-jsonschema
-BuildRequires: plugin-qualify-contract >= 0.20.7
-BuildRequires: plugin-hostd-contract >= 0.20.8
 BuildRequires: plugin-db-contract >= 0.4.7
 BuildRequires: omx-clap-core-contract >= 0.33.1
+# the qualification domain (plugin-hostd's) and the machine and probe domains: the base database and the record check read
+# them from this package (a floor only; the package the domain left is pruned from the channel, so no relation to it stands)
+BuildRequires: plugin-hostd-contract >= 0.21.0
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64

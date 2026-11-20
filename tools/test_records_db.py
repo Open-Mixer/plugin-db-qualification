@@ -814,7 +814,7 @@ class MinDomain(Base):
 
 class Packaging(unittest.TestCase):
     """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
-    CONTRACTS = ("plugin-qualify-contract", "plugin-hostd-contract", "plugin-db-contract", "omx-clap-core-contract")
+    CONTRACTS = ("plugin-hostd-contract", "plugin-db-contract", "omx-clap-core-contract")
 
     def read(self, *path):
         with open(os.path.join(REPO, *path), encoding="utf-8") as f:

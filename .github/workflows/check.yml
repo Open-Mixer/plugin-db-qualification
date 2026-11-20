@@ -25,11 +25,18 @@ jobs:
   records:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # the words of a provenance are the qualification domain's, plugin-hostd's: read from its main (the records job
+    # installs no package), where check-records.py looks first, OMX_CONTRACT_PATH
+    env:
+      OMX_CONTRACT_PATH: ${{ github.workspace }}/siblings/plugin-hostd/contract.d
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-hostd, path: siblings/plugin-hostd}
       - run: python3 tools/check-records.py
       - run: python3 -m unittest tools/test_check_records.py
       - run: python3 -m unittest tools/test_rewrite_records.py
+      - run: python3 -m unittest tools/test_provenance_packaging.py
       - run: python3 -m unittest tools/test_fedora44_channel_check.py
       - run: python3 -m unittest tools/test_fedora44_deliver.py
       - run: python3 -m unittest tools/test_build_package.py
@@ -87,8 +94,6 @@ jobs:
       PDQ_SIBLINGS: ${{ github.workspace }}/siblings
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with: {repository: Open-Mixer/plugin-qualify, path: siblings/plugin-qualify, fetch-depth: 0}
       - uses: actions/checkout@v4
         with: {repository: Open-Mixer/plugin-hostd, path: siblings/plugin-hostd, fetch-depth: 0}
       - uses: actions/checkout@v4

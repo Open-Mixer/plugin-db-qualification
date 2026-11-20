@@ -121,6 +121,62 @@ def cell(set_):
     return f"{m.group(1)}/{m.group(2)}" if m else "-"
 
 
+def _records_db():
+    """tools/records-db.py, which holds the rule that settles a cell two sets hold (spec section 4): the proof reads it
+    from there, with no second copy."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("records_db", os.path.join(HERE, "records-db.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def set_cells(root, cls, set_):
+    """{(rate, quantum)} a set holds: the cell its name gives, or, for a set not named for one, every cell its
+    records' grids hold."""
+    c = cell(set_)
+    if c != "-":
+        rate, quantum = c.split("/")
+        return {(int(rate), int(quantum))}
+    held = set()
+    d = os.path.join(root, "records", cls, set_)
+    for name in sorted(os.listdir(d)):
+        if name.endswith(".qualification.json"):
+            with open(os.path.join(d, name), encoding="utf-8") as f:
+                grid = (json.load(f).get("measurements") or {}).get("grid") or []
+            held.update((p["rate"], p["quantum"]) for p in grid)
+    return held
+
+
+def expected_winner(root, cls, set_, run_cell):
+    """The set the sync is to take the plugins of <set_>'s run from: of the sets of the class that hold every cell the
+    run is at (its cell, or, with none, the cells of <set_>), the one the store's claim rule settles on (tier, then
+    provenance `measured`; tools/records-db.py `_takes_claim`). A cell the rule refuses (the same tier and date, no
+    date, neither tier the reference) is refused here by the rule's own name."""
+    rdb = _records_db()
+    want = set_cells(root, cls, set_) if run_cell == "-" else {tuple(int(x) for x in run_cell.split("/"))}
+    if not want:
+        return set_  # a set that holds no cell is superseded at none
+    won = None
+    for name in sorted(os.listdir(os.path.join(root, "records", cls))):
+        if not want <= set_cells(root, cls, name):
+            continue
+        with open(os.path.join(root, "records", cls, name, "provenance.json"), encoding="utf-8") as f:
+            prov = json.load(f)
+        mine = (prov.get("tier"), prov.get("measured"))
+        if won is None:
+            won = (name, mine)
+            continue
+        rate, quantum = min(want)
+        try:
+            takes = rdb.Writer._takes_claim(f"{cls}/{name}", mine, f"{cls}/{won[0]}", won[1], {"rate": rate, "quantum": quantum})
+        except rdb.Refusal as e:
+            raise Refused(f"{cls}/{set_}: {e}") from e
+        if takes:
+            won = (name, mine)
+    return won[0]
+
+
 def carried(root, kind, arch):
     """[(class, set)] the package of <arch> carries; refused when <arch> has no class or a class has no set."""
     cls = classes(root, kind, arch)
@@ -413,7 +469,14 @@ def prove(root, kind, pkgs):
             print(f"::warning::proved 0 of {len(unmatched)} sets: none is a set of the {here} class", flush=True)
         for cls, set_ in sets:
             print(f"::group::{cls}/{set_}", flush=True)
-            r = subprocess.run(["bash", script, "set", kind, cls, set_, cell(set_)], cwd=root)
+            try:
+                winner = expected_winner(root, cls, set_, cell(set_))
+            except Refused as e:
+                print(f"::error::{e}", flush=True)
+                print("::endgroup::", flush=True)
+                failed.append(set_)
+                continue
+            r = subprocess.run(["bash", script, "set", kind, cls, set_, cell(set_), winner], cwd=root)
             print("::endgroup::", flush=True)
             if r.returncode != 0:
                 print(f"::error::{cls}/{set_}: the sync did not take it from the records", flush=True)

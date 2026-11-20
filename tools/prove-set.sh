@@ -10,7 +10,11 @@
 # image it was measured on is called; a set of another class is named and reported as not proven.
 #
 #   tools/prove-set.sh install deb|rpm <pkg dir> <arch>    the one package of <arch> from the build artifact
-#   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or ->
+#   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or -> <winner>
+#
+# <winner> is the set the sync is to take the plugins from at that cell: of the class's sets that hold it, the one the
+# store's claim rule settles on (tools/sets.py expected_winner: tier, then date). A set another set supersedes there is
+# proven by the sync taking the winner; a plugin taken from any other set fails.
 #   tools/prove-set.sh remove deb|rpm
 #
 # deb: the package from <pkg dir>/trixie/, with Debian's own lv2vocoder, whose bytes are the ones the Zynthian image
@@ -50,7 +54,7 @@ case $step in
         echo "$pkg ($arch): plugin-qualify $have"
         ;;
     set)
-        class=$3 set_=$4 cell=${5:--}
+        class=$3 set_=$4 cell=${5:--} winner=${6:?the expected winner set}
         installed=$r/usr/share/omx/qualification/$class/$set_
         tree=records/$class/$set_
         # the next set starts from nothing, whether this one passed or not: no record the sync copied from this one
@@ -80,12 +84,13 @@ case $step in
         } > "$r/etc/omx/qualify.conf"
         log=$(mktemp)
         plugin-qualify-sync --system 2>&1 | tee "$log"
-        # every plugin taken comes from this set: the class's other sets are installed beside it
-        applied=$(grep -c "distributed: .*: applied ($set_)\$" "$log" || true)
-        other=$(grep 'distributed: .*: applied (' "$log" | grep -vc "applied ($set_)\$" || true)
-        echo "$class/$set_: applied $applied, from another set $other"
-        [ "$applied" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from its records"; exit 1; }
-        [ "$other" -eq 0 ] || { echo "::error::$class/$set_: the sync took plugins from another set"; exit 1; }
+        # every plugin taken comes from the set the store's rule says holds the cell: this set, or the set that supersedes it
+        applied=$(grep -c "distributed: .*: applied ($winner)\$" "$log" || true)
+        other=$(grep 'distributed: .*: applied (' "$log" | grep -vc "applied ($winner)\$" || true)
+        echo "$class/$set_: expected winner $winner; applied $applied, from another set $other"
+        [ "$applied" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from $winner, the set the store's rule gives the cell"; exit 1; }
+        [ "$other" -eq 0 ] || { echo "::error::$class/$set_: the sync took plugins from a set other than $winner, the set the store's rule gives the cell"; exit 1; }
+        [ "$winner" = "$set_" ] || echo "$class/$set_: superseded at its cell by $winner; proven by the sync taking $winner"
         if grep -E 'distributed: .*(binary differs|not applied|measured here)' "$log"; then
             echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
         fi

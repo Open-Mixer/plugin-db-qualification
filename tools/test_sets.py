@@ -61,6 +61,8 @@ case $(basename "$0") in
         [ -z "$hconf" ] || cat "$hconf" >> "$STUB_LOG"
         grid=$(sed -n 's/^grid //p' "$conf")
         if [ -n "$grid" ]; then set_=${STUB_HOST:-fedora44}-${grid%/*}-${grid#*/}; else set_=zynthian-vangelis; fi
+        # STUB_AT_<rate>_<quantum>: the set the sync takes that cell from, when it is not the one named for it
+        if [ -n "$grid" ]; then at=STUB_AT_${grid%/*}_${grid#*/}; [ -z "${!at:-}" ] || set_=${!at}; fi
         if [ "$grid" = "${BAD_GRID:-none}" ]; then
             echo "plugin-qualify-sync: distributed: urn:a: binary differs"
         else
@@ -94,13 +96,16 @@ class Tree(unittest.TestCase):
     def path(self, *p):
         return os.path.join(self.root, *p)
 
-    def add_set(self, cls, name, under=None):
+    def add_set(self, cls, name, under=None, tier=None, measured=None, cells=()):
         d = os.path.join(under or self.root, *(["usr", "share", "omx", "qualification"] if under else ["records"]), cls, name)
         os.makedirs(d)
+        prov = {"set": name, "packages": {"omx-plugins-clap": "0.18.0-1.fc44"}}
+        if tier is not None:
+            prov.update({"tier": tier, "measured": measured})
         with open(os.path.join(d, "provenance.json"), "w") as f:
-            json.dump({"set": name, "packages": {"omx-plugins-clap": "0.18.0-1.fc44"}}, f)
+            json.dump(prov, f)
         with open(os.path.join(d, "a.qualification.json"), "w") as f:
-            f.write(json.dumps({"set": name}))
+            f.write(json.dumps({"set": name, "measurements": {"grid": [{"rate": r, "quantum": q} for r, q in cells]}}))
 
     def with_two_cells(self):
         for s in CELLS:
@@ -640,6 +645,50 @@ class Prove(Tree):
         rc, out, log = self.prove("rpm", "x86_64", WRONG_SET="fedora44-48000-512")
         self.assertEqual(rc, 1)
         self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class); failed: fedora44-96000-256", out)
+
+    def two_tiers_at_a_cell(self):
+        """x86-64 as the release carries it: the provisional set and the reference set of one cell."""
+        self.add_set("x86-64", "fedora44-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])
+        self.add_set("x86-64", "fedora44-rt-48000-64", tier="reference", measured="2026-11-09", cells=[(48000, 64)])
+        self.respec()
+
+    def test_a_set_another_set_supersedes_at_its_cell_is_proven_by_the_winner_being_taken(self):
+        self.two_tiers_at_a_cell()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_AT_48000_64="fedora44-rt-48000-64")
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("2 of 2 sets proven", out)
+
+    def test_the_sync_taking_the_superseded_set_fails_both_sets_of_the_cell(self):
+        self.two_tiers_at_a_cell()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_AT_48000_64="fedora44-48000-64")
+        self.assertEqual(rc, 1)
+        self.assertIn("failed: fedora44-48000-64 fedora44-rt-48000-64", out)
+
+    def test_the_cell_sets_of_a_pi_win_their_cells_over_the_base_set_of_an_earlier_date(self):
+        # the dry run: all three sets hardware, the base measured earlier; the sync took the base at the cells
+        for name, measured, cells in (("zynthian-vangelis", "2026-11-06", [(48000, 128), (48000, 256), (96000, 256)]),
+                                      ("zynthian-vangelis-48000-256", "2026-11-08", [(48000, 256)]),
+                                      ("zynthian-vangelis-96000-256", "2026-11-08", [(96000, 256)])):
+            if name == "zynthian-vangelis":
+                shutil.rmtree(self.path("records", "rpi5", name))
+            self.add_set("rpi5", name, tier="hardware", measured=measured, cells=cells)
+        self.respec()
+        rc, out, log = self.prove("deb", "arm64", STUB_HOST="zynthian-vangelis")
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("3 of 3 sets proven", out)
+        shutil.rmtree(os.path.join(self.tmp.name, "root"))
+        rc, out, log = self.prove("deb", "arm64", STUB_HOST="zynthian-vangelis", STUB_AT_48000_256="zynthian-vangelis")
+        self.assertEqual(rc, 1)
+        self.assertIn("failed: zynthian-vangelis-48000-256", out)
+
+    def test_two_sets_of_one_tier_and_date_at_a_cell_fail_the_proof_by_the_rules_name(self):
+        self.add_set("x86-64", "fedora44-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])
+        self.add_set("x86-64", "fedora44-b-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])
+        self.respec()
+        rc, out, log = self.prove("rpm", "x86_64")
+        self.assertEqual(rc, 1)
+        self.assertIn("claim-duplicate", out)
+        self.assertNotIn("plugin-qualify-sync", log)
 
     def test_the_arm64_deb_is_proven_with_no_grid(self):
         self.with_two_cells()

@@ -778,6 +778,15 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 must be two integers equal to the cell of the set's name (`<set>-<rate>-<quantum>`), else the set is refused
 (`field-type`, `cell-mismatch`); `record_set.name` and the set's `cell` rows hold it.
 
+**The console key is held back** (issue #5's ruling, 2026-11-11: the console key waits for its desk run; applied to
+the store 2026-11-20). The base holds no judgment of the `openmixer-console` profile. A record judged under
+`omx-clap-host` that also carries one is kept, and its `verdicts[]` and `cost[]` entries whose `host` is
+`openmixer-console`, and a `tiers.inProcess` or `tiers.isolated` that profile hosts, are left out as the migration reads
+the file: the record file is not edited, and the rest of the record is stored whole. A record whose only verdict is the
+console's is kept, with no verdict. A set whose `provenance.hostProfile` is `openmixer-console` is refused
+(`console-profile`). `tiers.dimmed`, a sentence, is not stored either way. The round trip compares each record with
+its file less those judgments.
+
 **The package fields, field by field.** No current record or provenance holds the package of a binary, so the
 migration writes NULL in all six for every one of the 12,953 records:
 

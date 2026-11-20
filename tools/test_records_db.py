@@ -334,7 +334,7 @@ class DdlColumns(Base):
 
     def same(self, d, name):
         got = self.exported(d, name)
-        want = RoundTrip.strip(load(os.path.join(d, name)))
+        want = RoundTrip.strip(held_back(load(os.path.join(d, name))))
         self.assertIsNone(RoundTrip.first_difference(want, got), name)
         return got
 

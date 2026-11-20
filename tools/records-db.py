@@ -29,6 +29,27 @@ from qualification_db import (  # noqa: E402
     _insert_tree, parse_record, schema_version)
 
 PROVENANCE_SCHEMA = "plugin-qualify.distributed-provenance/1"
+# Issue #5's ruling (2026-11-11, applied to the store 2026-11-20): the console key waits for its desk run. The base
+# holds no judgment of the openmixer-console profile: a record judged under omx-clap-host that also carries one is
+# kept without it (held_back), and a set measured for that profile is refused (console-profile). The record files
+# are not edited; the base leaves the judgments out as it reads them.
+CONSOLE_PROFILE = "openmixer-console"
+
+
+def held_back(rec):
+    """The record without its openmixer-console judgments: the verdict, the cost entries and a tier that profile
+    hosts. Everything else is the file's, untouched (a copy; the file is never written)."""
+    rec = dict(rec)
+    if isinstance(rec.get("verdicts"), list):
+        rec["verdicts"] = [v for v in rec["verdicts"] if not (isinstance(v, dict) and v.get("host") == CONSOLE_PROFILE)]
+    if isinstance(rec.get("cost"), list):
+        rec["cost"] = [c for c in rec["cost"] if not (isinstance(c, dict) and c.get("host") == CONSOLE_PROFILE)]
+    if isinstance(rec.get("tiers"), dict):
+        rec["tiers"] = {k: v for k, v in rec["tiers"].items()
+                        if not (k in ("inProcess", "isolated") and isinstance(v, dict) and v.get("host") == CONSOLE_PROFILE)}
+    return rec
+
+
 # a set of one cell is named <set>-<rate>-<quantum> (tools/sets.py)
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 # the set tier whose record claims a cell another tier's set also holds (section 4, ruling 2026-11-20)
@@ -141,6 +162,8 @@ class Writer:
                 em.refuse("cell-mismatch", "cell", f"{c['rate']}/{c['quantum']}, not {m.group(1)}/{m.group(2)}, the cell of the set's name")
         em.obj(PROVENANCE, {k: v for k, v in prov.items() if k not in ("settings", "cell")}, scope, "")
         s = scope.rows["record_set"]
+        if s["host_profile"] == CONSOLE_PROFILE:
+            em.refuse("console-profile", "hostProfile", f"{CONSOLE_PROFILE}: the console key waits for its desk run (issue #5's ruling)")
         if s["name"] != name or s["host_class"] != cls:
             em.refuse("set-mismatch", "set", f"provenance names {s['host_class']}/{s['name']}, the directory is {cls}/{name}")
         if prov["schema"] != PROVENANCE_SCHEMA:
@@ -169,7 +192,7 @@ class Writer:
         recname, dot, offer = stem.rpartition(".")
         if not dot or not recname:
             raise Refusal("file-name", f"{label}: the name is <name>.<offer>.qualification.json")
-        rec = _load(os.path.join(d, fname))
+        rec = held_back(_load(os.path.join(d, fname)))
         em, scope = parse_record(self.checker, label, rec)
         r, p = scope.rows["record"], scope.rows["plugin"]
         if not self.checker.ok("record", "offer", offer):

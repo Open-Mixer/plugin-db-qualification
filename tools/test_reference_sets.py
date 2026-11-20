@@ -94,6 +94,29 @@ class ReferenceSets(unittest.TestCase):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, (r.stdout + r.stderr)[-2000:])
 
+    def test_the_raspberry_pi_re_measure(self):
+        """Ruling 2026-11-20: samplv1 and drumkv1, measured again on the Raspberry Pi 5 on 2026-11-08
+        (records/rpi5/20261109), are sets of their own, one per cell, tier hardware, beside zynthian-vangelis, which
+        stays as it is; at their cells the newer set claims (the store spec, section 4)."""
+        rpi5 = os.path.join(ROOT, "records", "rpi5")
+        self.assertEqual(sorted(os.listdir(rpi5)),
+                         ["zynthian-vangelis", "zynthian-vangelis-48000-256", "zynthian-vangelis-96000-256"])
+        for name, rate in (("zynthian-vangelis-48000-256", 48000), ("zynthian-vangelis-96000-256", 96000)):
+            d = os.path.join(rpi5, name)
+            with open(os.path.join(d, "provenance.json"), encoding="utf-8") as f:
+                p = json.load(f)
+            self.assertEqual((p["set"], p["hostClass"], p["tier"], p["measured"]), (name, "rpi5", "hardware", "2026-11-08"))
+            self.assertEqual(p["cell"], {"rate": rate, "quantum": 256})
+            self.assertIn("records/rpi5/20261109", " ".join(p["sources"]))
+            files = sorted(os.listdir(d))
+            self.assertEqual([f for f in files if f.endswith(".qualification.json")],
+                             ["http___drumkv1.sourceforge.net_lv2@0.2-7d179bdcf9e5.default.qualification.json",
+                              "http___samplv1.sourceforge.net_lv2@0.2-c9cd8fb3102f.default.qualification.json"])
+            self.assertEqual(len(files), 5)
+            r = subprocess.run([sys.executable, "-B", os.path.join(HERE, "check-records.py"), d],
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, (r.stdout + r.stderr)[-2000:])
+
     def test_the_sets_read(self):
         """tools/check-records.py reads every reference set with no refusal."""
         r = subprocess.run([sys.executable, "-B", os.path.join(HERE, "check-records.py")]

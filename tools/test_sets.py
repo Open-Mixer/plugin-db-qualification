@@ -179,8 +179,19 @@ class Check(Tree):
         self.edit("debian/control", "Architecture: amd64 arm64", "Architecture: all")
         self.assertIn("Architecture is 'all', not the Debian architectures of packaging/arch-classes: amd64 arm64", self.problems())
         self.edit("debian/control", "Architecture: all", "Architecture: amd64 arm64")
-        self.edit("debian/control", "Breaks: ${records:Breaks}", "Breaks: foo")
-        self.assertIn("Breaks does not carry ${records:Breaks}", self.problems())
+
+    def test_a_relation_in_debian_control_is_refused(self):
+        """No package of this source Provides, Replaces, Breaks or Conflicts another: the old names are pruned from the channel."""
+        for field in ("Provides", "Replaces", "Breaks", "Conflicts"):
+            self.edit("debian/control", "Architecture: amd64 arm64\n", f"Architecture: amd64 arm64\n{field}: foo\n")
+            self.assertTrue(any("relation" in p and field in p for p in self.problems()), (field, self.problems()))
+            self.edit("debian/control", f"{field}: foo\n", "")
+
+    def test_a_relation_in_the_spec_is_refused(self):
+        for field in ("Provides", "Obsoletes", "Conflicts"):
+            self.edit(SPEC, "\n%description\n", f"\n{field}: foo = 1\n\n%description\n")
+            self.assertTrue(any("relation" in p and field in p for p in self.problems()), (field, self.problems()))
+            self.edit(SPEC, f"\n{field}: foo = 1\n", "")
 
     def layout(self, deb=None, rpm=None):
         """The tree's debian/control and spec with the records package and the reader's three, or the given names."""
@@ -281,31 +292,18 @@ class Substvars(Tree):
     def test_arm64_takes_plugin_qualify_0_20_0_and_folds_the_rpi5_names(self):
         self.with_two_cells()
         v = self.vars("arm64")
-        self.assertEqual(v["qualify:Depends"], "plugin-qualify (>= 0.20.0~)")
-        self.assertEqual(v["records:Provides"],
-                         f"omx-qualification-rpi5-zynthian-vangelis (= {VERSION}), plugin-db-qualification-rpi5-zynthian-vangelis (= {VERSION})")
-        for field in ("records:Replaces", "records:Breaks"):
-            self.assertEqual(v[field], f"omx-qualification-rpi5-zynthian-vangelis (<< {VERSION}), "
-                                       f"plugin-db-qualification-rpi5-zynthian-vangelis (<< {VERSION})")
+        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.0~)"})
 
     def test_amd64_takes_plugin_qualify_0_20_1_and_folds_every_cell(self):
         self.with_two_cells()
         v = self.vars("amd64")
-        self.assertEqual(v["qualify:Depends"], "plugin-qualify (>= 0.20.1~)")
-        want = ["omx-qualification-rpi5-zynthian-vangelis", "omx-qualification-x86-64-fedora44",
-                "plugin-db-qualification-rpi5-zynthian-vangelis", "plugin-db-qualification-x86-64-fedora44",
-                "plugin-db-qualification-x86-64-fedora44-48000-512", "plugin-db-qualification-x86-64-fedora44-96000-256"]
-        for field, op in (("records:Provides", "="), ("records:Replaces", "<<"), ("records:Breaks", "<<")):
-            self.assertEqual(self.names(v[field]), want)
-            self.assertTrue(all(n.endswith(f"({op} {VERSION})") for n in v[field].split(", ")), v[field])
+        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.1~)"})
 
     def test_the_rpm_folds_its_classes_names(self):
         self.with_two_cells()
         block = sets.spec_block(self.root)
         self.assertIn("%ifarch x86_64\nRequires: plugin-qualify >= 0.20.1\n", block)
-        for n in ("plugin-db-qualification-x86-64-fedora44", "omx-qualification-x86-64-fedora44",
-                  "plugin-db-qualification-x86-64-fedora44-48000-512", "plugin-db-qualification-x86-64-fedora44-96000-256"):
-            self.assertIn(f"Provides: {n} = %{{version}}-%{{release}}\nObsoletes: {n} < %{{version}}-%{{release}}\n", block)
+        self.assertNotRegex(block, r"(?m)^(Provides|Obsoletes|Conflicts):")
         # each architecture's block names its own classes only
         self.assertNotIn("rpi5", block.split("%endif")[0])
         self.assertIn("%ifarch aarch64\nRequires: plugin-qualify >= 0.20.0\n", block)
@@ -315,7 +313,7 @@ class Substvars(Tree):
                 return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
                                       capture_output=True, text=True, check=True).stdout
             self.assertIn("plugin-qualify >= 0.20.1", q("--requires"))
-            self.assertIn("plugin-db-qualification-x86-64-fedora44-48000-512 <", q("--obsoletes"))
+            self.assertEqual(q("--obsoletes").split(), [])
             self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
     def test_an_architecture_with_no_class_or_no_set_is_refused(self):

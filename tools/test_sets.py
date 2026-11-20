@@ -528,7 +528,7 @@ class Rules(Tree):
 
 
 class Prove(Tree):
-    def prove(self, kind, arch, extra_classes=(), image=None, os_release=None, **env_extra):
+    def prove(self, kind, arch, extra_classes=(), image=None, os_release=None, base=b"SQLite format 3\x00", **env_extra):
         bin_ = os.path.join(self.tmp.name, "bin")
         os.makedirs(bin_, exist_ok=True)
         for tool in ("apt-get", "dpkg", "dpkg-query", "dnf", "rpm", "plugin-qualify-sync"):
@@ -541,6 +541,12 @@ class Prove(Tree):
             self.add_set(cls, s, under=fake)
         for cls, s in extra_classes:
             self.add_set(cls, s, under=fake)
+        # and the base database beside the classes, as the spec and debian/rules install it (None: a package without it)
+        if base is not None:
+            qual = os.path.join(fake, "usr", "share", "omx", "qualification")
+            os.makedirs(qual, exist_ok=True)
+            with open(os.path.join(qual, "qualification.sqlite"), "wb") as f:
+                f.write(base)
         # the image's own identity: /etc/os-release under PROVE_ROOT (a Fedora 44 container, or Debian 13 for the deb)
         image = image or ("fedora", "44") if kind == "rpm" else image or ("debian", "13")
         os.makedirs(os.path.join(fake, "etc"), exist_ok=True)
@@ -582,6 +588,24 @@ class Prove(Tree):
             "plugin-qualify-sync --system", "host_class x86-64", "grid 96000/256",
             "dnf remove -y omx-plugins-clap omx-plugins-lv2",
             f"dnf remove -y {PKG}"])
+
+    def test_the_base_database_beside_the_classes_is_no_class(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64")
+        self.assertEqual(rc, 0, out + log)
+        self.assertNotIn("installs the classes", out)
+
+    def test_a_package_without_its_base_database_fails_the_proof(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", base=None)
+        self.assertEqual(rc, 1)
+        self.assertIn("installs no base database qualification.sqlite", out)
+
+    def test_an_empty_base_database_fails_the_proof(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", base=b"")
+        self.assertEqual(rc, 1)
+        self.assertIn("installs no base database qualification.sqlite", out)
 
     def test_a_set_the_sync_does_not_take_fails_the_proof(self):
         self.with_two_cells()

@@ -75,18 +75,33 @@ c=$("$cmd" check --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract
 [ $rc -eq 0 ] && [ "$c" = "ok base-absent" ] || note "check of an absent base: exit $rc, output '$c'"
 
 # an absent base is an empty base layer: exit 0, the answer says so, the user layer answers alone
-a=$("$cmd" query --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
-[ $rc -eq 0 ] || note "query with an absent base exited $rc: $a"
-[ "$(printf '%s\n' "$a" | head -n 1)" = '{"base":"absent"}' ] || note "query with an absent base does not say so: $(printf '%s\n' "$a" | head -n 1)"
-u=$("$cmd" query --json --layer user --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1 | tail -n +2)
-[ "$(printf '%s\n' "$a" | tail -n +2)" = "$u" ] && [ -n "$u" ] || note "query with an absent base is not the user layer's alone"
-a=$("$cmd" counts --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
-[ $rc -eq 0 ] || note "counts with an absent base exited $rc: $a"
-[ "$(printf '%s\n' "$a" | head -n 1)" = '{"base":"absent"}' ] || note "counts with an absent base does not say so"
-a=$("$cmd" query --json --base "$fx/missing.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
-[ $rc -eq 0 ] && [ "$a" = '{"base":"absent"}' ] || note "no layer at all: exit $rc, output '$a'"
-a=$("$cmd" query --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1 | head -n 1)
-case "$a" in '{"base":'*) note "a present base is said absent" ;; esac
+# stdout holds records only (each line a stored record, or none); stderr carries the one named line
+want="plugin-qualification-db: base-absent: $fx/missing.sqlite: the base layer is empty"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] || note "query with an absent base exited $rc"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "query with an absent base: stderr is '$(cat "$fx/abs.err")'"
+u=$("$cmd" query --json --layer user --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>/dev/null)
+[ "$a" = "$u" ] && [ -n "$u" ] || note "query with an absent base is not the user layer's alone"
+printf '%s\n' "$a" | python3 -I -c '
+import json, sys
+for l in sys.stdin.read().splitlines():
+    o = json.loads(l)
+    assert "sha256" in o and "layer" in o and "base" not in o, l' || note "stdout of query with an absent base holds a line that is no record"
+a=$("$cmd" counts --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] || note "counts with an absent base exited $rc"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "counts with an absent base: stderr is '$(cat "$fx/abs.err")'"
+printf '%s\n' "$a" | python3 -I -c '
+import json, sys
+for l in sys.stdin.read().splitlines():
+    o = json.loads(l)
+    assert "format" in o and "plugins" in o and "base" not in o, l' || note "stdout of counts with an absent base holds a line that is no count"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user '' --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] && [ -z "$a" ] || note "no layer at all: exit $rc, stdout '$a'"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "no layer at all: stderr is '$(cat "$fx/abs.err")'"
+for v in query counts; do
+    "$cmd" $v --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" >/dev/null 2>"$fx/abs.err"
+    [ ! -s "$fx/abs.err" ] || note "$v with a base present wrote to stderr: $(cat "$fx/abs.err")"
+done
 # a base that exists and cannot be used is refused by name
 mkdir -p "$fx/base-dir.sqlite"
 for arm in "base-dir.sqlite" ; do

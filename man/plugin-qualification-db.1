@@ -175,16 +175,17 @@ as stored: relative to the install root, case-sensitive, no suffix match.
 including a record the user layer shadows. Without it, the merged answer.
 .SH ABSENT BASE
 A base file that does not exist is an empty base layer, not a refusal: the answer is the user layer's alone and the exit
-status 0. The command says so: the first line of
+status 0. The command says so on standard error, never on standard output, which holds records only: one line,
+.BR "plugin-qualification-db: base-absent: <path>: the base layer is empty" ,
+is written by
 .B query \-\-json
 and
-.B counts \-\-json
-is
-.BR {"base":"absent"} ,
+.BR "counts \-\-json" ,
 and
 .B check
 prints
 .BR "ok base-absent" .
+A present base writes no such line.
 Only a missing file is absent; a base that exists and cannot be used (a directory, no read permission, not a SQLite
 database, another schema version) is refused by name.
 .SH ENVIRONMENT

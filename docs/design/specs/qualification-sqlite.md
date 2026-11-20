@@ -1147,9 +1147,11 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     exit 2), because a record is not a cell;
   - `counts [--layer user|base] --json`: one JSON object per line per format, in format order:
     `{"format": "clap", "plugins": 248, "offered": 224, "not_offered": 24}`;
-  - an absent base is told, never silent: `query --json` and `counts --json` print `{"base":"absent"}` as their FIRST
-    line when `pqdb_base_absent` is 1 (and exit 0, the other lines the user layer's alone, none when it has none); a
-    present base prints no such line, so every other line is as before;
+  - an absent base is told, never silent, and stdout stays records only (a reader parses each line as a record, and a
+    box with no base must not meet a line a box with a base never prints): when `pqdb_base_absent` is 1, `query --json`
+    and `counts --json` exit 0, print the user layer's lines alone (none when it has none) and write ONE line to
+    stderr, `plugin-qualification-db: base-absent: <path>: the base layer is empty`; a present base writes nothing to
+    stderr;
   - `check`: opens both layers, verifies section 3.7's key rule for every record of both, and prints `ok` (`ok base-absent` when the base is absent), or the code and message; exit 0, or 1 with the code;
   - `--base`, `--user`, `--contract-dir` and their variables, as section 2 says; and `--scope user|system` (default
     `user`), which opens the production places of that scope (`pqdb_open`) when neither `--base` nor `--user` is given.
@@ -1361,7 +1363,7 @@ makes it fail.
 
 ### Change 3: the reader
 
-1. **Absent base** → open succeeds, `pqdb_base_absent` is 1, the results are the user layer's alone, a `base`-layer query and `pqdb_counts` give none, no file is created; the command exits 0, prints `{"base":"absent"}` first (`ok base-absent` for `check`). Fails when open is refused, when the base is said present, or when a base appears. A base that exists and cannot be used is still refused by name, one arm each: a permission-denied file (skipped as root) and a directory and a short non-SQLite file (`qualification-db.unreadable`), a file at another `user_version` (`schema-other`), an empty file (`not-a-store`), a path through a file (`ENOTDIR`, `unreadable`). Fails when any of them reads as absent. The writer puts the user and the system layer with no base anywhere.
+1. **Absent base** → open succeeds, `pqdb_base_absent` is 1, the results are the user layer's alone, a `base`-layer query and `pqdb_counts` give none, no file is created; the command exits 0 with records only on stdout and the one `base-absent` line on stderr (`ok base-absent` for `check`), and a present base writes no such line. Fails when open is refused, when the base is said present, when stdout holds a line that is no record, or when a base appears. A base that exists and cannot be used is still refused by name, one arm each: a permission-denied file (skipped as root) and a directory and a short non-SQLite file (`qualification-db.unreadable`), a file at another `user_version` (`schema-other`), an empty file (`not-a-store`), a path through a file (`ENOTDIR`, `unreadable`). Fails when any of them reads as absent. The writer puts the user and the system layer with no base anywhere.
 2. **Absent user layer** → open succeeds; results are the base's. Fails when an absent user file is refused or created.
 3. **One schema version.** A base at `user_version` 2 (and a reader at 1) → `schema-other`; a base at 1 with a user
    layer at 2 → `schema-mismatch`, naming both files; **0** → `not-a-store`; a user file opened as the base →

@@ -260,9 +260,9 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    /* no silent hole: an absent base is an empty base layer, and the answer says so (a line a consumer reads first) */
+    /* no silent hole: an absent base is an empty base layer, and the answer says so (on stderr: stdout holds records only) */
     if (pqdb_base_absent(db) && !is_check)
-        puts("{\"base\":\"absent\"}");
+        fprintf(stderr, "plugin-qualification-db: base-absent: %s: the base layer is empty\n", base ? base : INSTALLED_BASE);
     if (is_check) {
         checker c;
         const char *layers[2] = { "user", "base" };

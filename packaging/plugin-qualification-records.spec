@@ -43,10 +43,10 @@ BuildRequires: omx-clap-core-contract >= 0.33.1
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
-Requires: plugin-qualify >= 0.20.1
+Requires: plugin-qualify >= 0.20.7
 %endif
 %ifarch aarch64
-Requires: plugin-qualify >= 0.20.0
+Requires: plugin-qualify >= 0.20.7
 %endif
 # END per-architecture
 

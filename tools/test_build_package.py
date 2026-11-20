@@ -151,7 +151,10 @@ class BuildPackage(unittest.TestCase):
         self.assertEqual(sets.problems(self.tree), [])
         out = subprocess.run(["python3", os.path.join(self.tree, "tools", "sets.py"), "substvars", "arm64"],
                              capture_output=True, text=True, check=True).stdout
-        self.assertEqual(out, "qualify:Depends=plugin-qualify (>= 0.20.0~)\n")
+        # the floor is packaging/arch-classes' value for arm64, not a number written here
+        floor = [c["from"] for c in sets.arch_classes(self.tree) if c["deb"] == "arm64"]
+        self.assertEqual(len(floor), 1)
+        self.assertEqual(out, f"qualify:Depends=plugin-qualify (>= {floor[0]}~)\n")
 
     def test_the_version_goes_where_it_lives(self):
         r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101")

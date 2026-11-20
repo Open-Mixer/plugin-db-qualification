@@ -932,8 +932,19 @@ and no key changes. After that commit:
 - **No tombstone.** A user cannot hide a base record except by measuring the same key, which shadows it. Removing a
   user record brings the base records back. Hiding without measuring would need a new word and a new
   rule; nothing asks for it today.
-- **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell. In the
-  base, the migration refuses a second claim, naming both files (no current set has one). In the user layer, a newer
+- **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell, and a layer
+  answers for a cell with the record that claims it: `pqdb_each` (and so `query` and every reader on it, plugin-hostd's
+  among them), the files and verdicts of a result, and `pqdb_counts` read claimed records only; a cell of a record
+  that does not claim it is no result, and a record that claims no cell is not counted.
+- **Two tiers at one cell: the reference tier answers** (ruling 2026-11-20). In the base, a set of the reference tier
+  (`record_set.tier` `reference`: measured with real-time priority) and a set of another tier (`provisional`, measured
+  without it) may hold one key, offer and class at one cell: the x86-64 sets `fedora44-rt-<rate>-<quantum>` beside
+  `fedora44-<rate>-<quantum>`. The migration gives the claim to the record of the reference tier, whichever set comes
+  first in byte order, and keeps the other record whole in the base, without the claim at that cell. So every read
+  answers with the reference tier's record; nothing is dropped and no record changes. The rule lives in the claim the
+  base build writes, and the reader follows the claim (the query of `pqdb_each` joins `claim` on its primary key); no
+  column is added. A second claim at one key and cell from two sets of one tier, or of two tiers neither of which is
+  `reference`, is refused, naming both files. In the user layer, a newer
   user record for a shadow key replaces the user's earlier record for that key, whole, in one transaction, even when it
   holds fewer cells. Decided (#17): a newer user record shadows the whole base record (the user-first merge), and the
   base is never deleted. Across layers there is no conflict: the user's record wins and each result says its `layer`.
@@ -1311,8 +1322,9 @@ makes it fail.
    pass), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
-   from the record's, an empty object, and a second claim on one key and cell each refuse by name and leave no output
-   file. Fails when a partial file is left at `--out`.
+   from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by
+   name and leave no output file. A reference-tier set and a provisional set at one key and cell give the claim to the
+   reference record, in either byte order of the sets (section 4). Fails when a partial file is left at `--out`.
 10. **Key constraints.** A record with a 63-character SHA-256 or a format `vst3` is refused by the schema. Fails when
     the `CHECK`s are dropped.
 11. **Package contents.** The built `plugin-qualification-records` (deb and rpm) holds `qualification.sqlite` and every
@@ -1437,6 +1449,12 @@ makes it fail.
 25. **The row judge, from the reader.** The case C6b, run over the reader: a base built from `records/` is read through
     `pqdb_record_json` and judged; every record's verdicts, tiers and cost equal the probe judge's. Fails with the same
     sabotages as C6b, and when `pqdb_record_json` drops a cell, a column of section 6.2 or the cells' order.
+26. **The reference tier answers where two tiers hold a cell.** Two fixture bases hold one plugin at 48000/256 from a
+    provisional set and from a reference set, the sets in both orders, each record with its own figures, verdict,
+    file list and offer, the claim on the reference record (section 4). `pqdb_each` (no filter, the key at its cell,
+    the base layer by name), `query --json`, `pqdb_files` and `pqdb_verdict_of` of the result, and `pqdb_counts` answer
+    with the reference record alone, in both orders. Fails when the reader reads a cell without its claim (two
+    results, and in one order the provisional set's first) or counts a record that claims no cell.
 
 ### The consumer switch (red-first tests of plugin-qualify's repository)
 

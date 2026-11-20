@@ -1,0 +1,200 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "io.github.sjoerdvankreel.firefly_synth56AFFFF7565F48348C4359D5E6C856A4"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/firefly_synth_1.clap/Contents/x86_64-linux/firefly_synth_1.clap",
+    "sha256": "359197a719d37cdcc08fdeda2d53256c702d409867915516c8c8b75f75cd99ad",
+    "files": [
+      {
+        "path": "firefly_synth_1.clap",
+        "sha256": "359197a719d37cdcc08fdeda2d53256c702d409867915516c8c8b75f75cd99ad"
+      }
+    ],
+    "unpinnable": "more parameters than the host accepts (2048)"
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 2,
+            "syscalls": 20,
+            "locks": 70
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-under-notes",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 66
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "clap",
+          "allocations": 2,
+          "locks": 70,
+          "syscalls": 20
+        },
+        "memory": {
+          "afterInstantiateKb": 25636,
+          "afterActivateKb": 225480,
+          "atRestKb": 225872,
+          "secondInstanceKb": 211192,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no count of notes to hold for the footprint"
+        }
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.0",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-09T14:09:51+00:00",
+  "probe": {
+    "file": "io.github.sjoerdvankreel.firefly_synth56AFFFF7565F48348C4359D5E6C856A4@unversioned-359197a719d3.custom.probe.json",
+    "sha256": "555dd8b4ce2c673c1e29774eb36639a3dac8e7e21a3fe6d1e0b2df4eb8e91c81",
+    "bytes": 10551,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 8.09,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261109T140951Z-342f-50cf3195",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 72.66666666666667,
+          "xruns": 76,
+          "midiInputsLinked": 1
+        }
+      },
+      {
+        "step": "pool",
+        "result": "off",
+        "code": "pool.not-rt-safe",
+        "detail": "1 allocations, 35 locks and 10 system calls while its tasks ran on 2 helper threads",
+        "pool": {
+          "allocationsOn": 1,
+          "locksOn": 35,
+          "syscallsOn": 10,
+          "tasksOnHelpers": 42598
+        }
+      }
+    ]
+  }
+}

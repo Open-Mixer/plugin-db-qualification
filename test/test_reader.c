@@ -805,6 +805,56 @@ static void spec20_counts(void)
     pqdb_close(db);
 }
 
+/* ruling 2026-11-20: when the base holds one plugin at one cell from a set of the reference tier and from a set of
+ * another tier, every read answers with the reference tier's record (the store spec, section 4). The fixtures hold the
+ * provisional record and the reference one in both orders; neither the order of the sets nor of the records decides. */
+static void tier_pick(void)
+{
+    static const char *const files[] = { "base-tiers-ref-last.sqlite", "base-tiers-ref-first.sqlite" };
+    for (int i = 0; i < 2; i++) {
+        pqdb *db;
+        rows o;
+        tally t;
+        flist f;
+        pqdb_verdict v;
+        pqdb_result r;
+        pqdb_query q = any();
+        const char *in = files[i];
+        memset(&v, 0, sizeof v);
+        if (open_ok(fx(in), NULL, GOOD, &db)) { CHECK(0, "open %s", in); continue; }
+        /* pqdb_each, as plugin-hostd reads: no filter, the cell's filter, the key's filter, the base layer by name */
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1, "%s: %d results for one plugin at one cell", in, o.n);
+        CHECK(o.n >= 1 && strcmp(o.r[0].set, "fedora44-rt-48000-256") == 0 && o.r[0].median == 100.0 && o.r[0].p_ns == 110.0 &&
+              o.r[0].latency == 128 && o.r[0].mem_first == 2048 && strcmp(o.r[0].bpath, "ref/p1.clap") == 0,
+              "%s: the first result is set %s (median %g, binary %s), not the reference tier's", in, o.n ? o.r[0].set : "-",
+              o.n ? o.r[0].median : 0.0, o.n ? o.r[0].bpath : "-");
+        q.sha256 = SHA('a'); q.format = "clap"; q.uri = "urn:p1"; q.offer = "default"; q.host_class = "x86-64";
+        q.rate = 48000; q.quantum = 256;
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].set, "fedora44-rt-48000-256") == 0,
+              "%s: the key at its cell gives %d results, the first of set %s", in, o.n, o.n ? o.r[0].set : "-");
+        q.layer = "base";
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].set, "fedora44-rt-48000-256") == 0,
+              "%s: the base layer by name gives %d results", in, o.n);
+        /* what a result leads to is the same record: its file list and its verdict */
+        if (o.n >= 1) {
+            memset(&r, 0, sizeof r);
+            r.layer = o.r[0].layer; r.sha256 = o.r[0].sha; r.format = o.r[0].format; r.uri = o.r[0].uri;
+            r.offer = o.r[0].offer; r.host_class = o.r[0].cls; r.rate = o.r[0].rate; r.quantum = o.r[0].quantum;
+            memset(&f, 0, sizeof f);
+            CHECK(pqdb_files(db, &r, collect_file, &f) == 0 && f.n == 1 && strcmp(f.path[0], "ref/p1.clap") == 0,
+                  "%s: the file list is %s (%d entries), not the reference record's", in, f.n ? f.path[0] : "-", f.n);
+            CHECK(pqdb_verdict_of(db, &r, "omx-clap-host", &v) == 0 && strcmp(v.rating, "qualified") == 0,
+                  "%s: the verdict is %s, not the reference record's", in, v.rating ? v.rating : "-");
+        }
+        /* the counts: one plugin, offered only by the provisional record, which answers for no cell */
+        memset(&t, 0, sizeof t);
+        CHECK(pqdb_counts(db, "base", collect_count, &t) == 0 && t.n == 1 && strcmp(t.fmt[0], "clap") == 0 &&
+              t.plugins[0] == 1 && t.offered[0] == 0 && t.not_offered[0] == 1,
+              "%s: counts %d formats, clap %ld plugins, %ld offered, %ld not", in, t.n, t.plugins[0], t.offered[0], t.not_offered[0]);
+        pqdb_close(db);
+    }
+}
+
 typedef struct { pqdb *db; int docs, bad, last_n; char last_key[200]; char *last_doc; } jwalk;
 static int check_json(const pqdb_result *x, void *ctx)
 {
@@ -1148,6 +1198,7 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
+    { "the reference tier answers where two tiers hold a cell", tier_pick, 0 },
     { "hosting words passed over, nothing else narrowed", hosting_columns, 0 }, { "hosting-skip-ends", hosting_skip_ends, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
     { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 },
     { "pqdb_each refuses a non-finite figure", each_non_finite, 0 }, { "pqdb_number", number_writer, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },

@@ -64,7 +64,7 @@ def doc(domain, version, items):
             "components": {"schemas": schemas}}
 
 def write(root, variant):
-    # no hosting domain: this pass the hosting codes stay in omx-clap-core's data/hosting*.json (the store's hosting
+    # no hosting domain: this pass the hosting codes stay in omx-clap's data/hosting*.json (the store's hosting
     # exception); the reader skips them, and hosting-skip-ends fails if a hosting domain document is written here
     for domain, (version, items) in WORDS.items():
         items = {k: list(v) for k, v in items.items()}

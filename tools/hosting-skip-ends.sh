@@ -1,10 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
-# The end of the hosting exception of this repository's qualification store spec (section 3.4): while omx-clap-core keeps
+# The end of the hosting exception of this repository's qualification store spec (section 3.4): while omx-clap keeps
 # data/hosting*.json and has no `hosting` domain, the reader (src/pqdb.c, hosting_exception) does not open that domain.
-# Once omx-clap-core ships it, the exception must go. This fails when both are true.
-#   hosting-skip-ends.sh <omx-clap-core tree, or an installed contract directory> <pqdb.c>
+# Once omx-clap ships it, the exception must go. This fails when both are true.
+#   hosting-skip-ends.sh <omx-clap tree, or an installed contract directory> <pqdb.c>
 #   hosting-skip-ends.sh --self-test
 # Exit 0: the exception may stand, or is gone; 1: the domain exists and the reader still skips it; 2: usage.
 set -u
@@ -18,7 +18,7 @@ check() {
         [ -f "$p" ] && doc=$p
     done
     if [ -n "$doc" ] && grep -q 'hosting_exception *(' "$src"; then
-        echo "hosting-skip-ends: $doc exists, so omx-clap-core ships a hosting domain, and $src still holds hosting_exception: remove the exception (section 3.4)" >&2
+        echo "hosting-skip-ends: $doc exists, so omx-clap ships a hosting domain, and $src still holds hosting_exception: remove the exception (section 3.4)" >&2
         return 1
     fi
     echo "hosting-skip-ends: ok ($([ -n "$doc" ] && echo 'a hosting domain exists' || echo 'no hosting domain'); $(grep -q 'hosting_exception *(' "$src" && echo 'the reader skips it' || echo 'the reader does not skip it'))"
@@ -46,5 +46,5 @@ if [ "${1:-}" = "--self-test" ]; then
     if [ $bad -eq 0 ]; then echo "ok     hosting-skip-ends.sh self-test"; else echo "not ok hosting-skip-ends.sh self-test"; fi
     exit $bad
 fi
-[ $# -eq 2 ] || { echo "usage: hosting-skip-ends.sh <omx-clap-core tree or contract directory> <pqdb.c> | --self-test" >&2; exit 2; }
+[ $# -eq 2 ] || { echo "usage: hosting-skip-ends.sh <omx-clap tree or contract directory> <pqdb.c> | --self-test" >&2; exit 2; }
 check "$1" "$2"

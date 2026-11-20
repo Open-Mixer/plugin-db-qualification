@@ -38,6 +38,24 @@ sets = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sets)
 
 
+_gspec = importlib.util.spec_from_file_location("golden_domain", os.path.join(HERE, "golden_domain.py"))
+golden = importlib.util.module_from_spec(_gspec)
+_gspec.loader.exec_module(golden)
+_DOMAIN = []
+
+
+def setUpModule():
+    """the golden domain, where the record check reads it (OMX_CONTRACT_PATH): the tests read no installed one"""
+    tmp = tempfile.TemporaryDirectory()
+    _DOMAIN.append(tmp)
+    os.environ["OMX_CONTRACT_PATH"] = golden.write_domain(tmp.name)
+
+
+def tearDownModule():
+    os.environ.pop("OMX_CONTRACT_PATH", None)
+    _DOMAIN.pop().cleanup()
+
+
 class BuildPackage(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

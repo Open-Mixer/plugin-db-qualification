@@ -75,7 +75,7 @@ host_facts() {
   echo "ulimit -r $(ulimit -r) -l $(ulimit -l)" > $out/rt.txt
   chrt -f 10 true && echo "SCHED_FIFO: yes" >> $out/rt.txt || echo "SCHED_FIFO: refused" >> $out/rt.txt
   grep Cap /proc/self/status >> $out/rt.txt
-  rpm -q plugin-qualify plugin-hostd omx-clap-host omx-clap-core mod-host-protocol omx-plugins-clap omx-plugins-lv2 jack-audio-connection-kit > $out/versions.txt; plugin-hostd --version >> $out/versions.txt 2>&1; omx-clap-host --version >> $out/versions.txt 2>&1
+  rpm -q plugin-qualify plugin-hostd omx-clap-host omx-clap mod-host-protocol omx-plugins-clap omx-plugins-lv2 jack-audio-connection-kit > $out/versions.txt; plugin-hostd --version >> $out/versions.txt 2>&1; omx-clap-host --version >> $out/versions.txt 2>&1
   cat $out/versions.txt
 }
 

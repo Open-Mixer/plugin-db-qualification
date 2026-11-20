@@ -73,8 +73,8 @@ column against the owner's installed domain. Nothing is copied into this reposit
 - `machine` and `probe`: plugin-hostd.
 - plugin-db's own domain: the plugin formats.
 
-The hosting words are the one exception, until omx-clap-core publishes a `hosting` domain.
-They are the codes of the installed omx-clap-core contract package
+The hosting words are the one exception, until omx-clap publishes a `hosting` domain.
+They are the codes of the installed omx-clap contract package
 (`hosting.json` and `hosting/*.json` under its contract directory). The writer reads them from there and refuses a hosting
 word that package does not hold. The store records them as the domain `hosting`, at that package's version. The reader
 passes over the hosting columns this pass.

@@ -218,6 +218,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -235,5 +236,12 @@ jobs:
           [ "${#files[@]}" -gt 0 ] || { echo "the proofs found nothing to note"; exit 0; }
           body=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body) || { echo "::notice::no release $TAG to carry the proofs' findings; they are in the job summaries"; exit 0; }
           body=${body%%$'\n## Install and sync proof'*}
-          { printf '%s\n' "$body"; for f in "${files[@]}"; do printf '\n'; cat "$f"; done; } > notes.md
+          printf '%s\n' "$body" > body.md
+          # the UNPROVEN records lists go to release assets proof-notes-<kind>-records.md; notes still over the 125000
+          # characters a release body may hold fail by name
+          python3 tools/release-notes.py body.md notes notes.md assets
+          for a in assets/proof-notes-*-records.md; do
+            [ -e "$a" ] || continue
+            gh release upload "$TAG" "$a" --repo "$GITHUB_REPOSITORY" --clobber
+          done
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md

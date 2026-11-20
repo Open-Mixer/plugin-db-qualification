@@ -8,9 +8,9 @@ and 8, change 2). The round trip runs over every record of records/; the refusal
 
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones:
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
-(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
-PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them (<contractdir>/3/omx-clap-core/ and its MANIFEST.json), the hosting exception of the spec. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
+(plugin-qualify, plugin-hostd, plugin-db, omx-clap); each domain is read from `contract.d/<domain>/` at
+PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap at the same ref, laid out as its
+`make install-contract` lays them (<contractdir>/3/omx-clap/ and its MANIFEST.json), the hosting exception of the spec. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
 """
 import contextlib
 import copy
@@ -67,13 +67,13 @@ def git_show(clone, ref, path):
 
 def contract_dir():
     """The contract directory assembled from the sibling clones, once; skips the test when they are not given. The
-    domains are documents (<domain>/<domain>.json); the hosting words are the package omx-clap-core's data/, installed as
-    `make install-contract` does: <schema major>/omx-clap-core/ with the files as they are and a MANIFEST.json."""
+    domains are documents (<domain>/<domain>.json); the hosting words are the package omx-clap's data/, installed as
+    `make install-contract` does: <schema major>/omx-clap/ with the files as they are and a MANIFEST.json."""
     if "dir" in _contract:
         return _contract["dir"]
     if not SIBLINGS:
         raise unittest.SkipTest("PDQ_SIBLINGS is not set: no sibling clones to read the owners' words from "
-                                "(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core)")
+                                "(plugin-qualify, plugin-hostd, plugin-db, omx-clap)")
     root = tempfile.mkdtemp(prefix="pdq-contract-")
     for dom, repo in DOMAIN_REPO.items():
         clone = os.path.join(SIBLINGS, repo)
@@ -98,19 +98,19 @@ def contract_dir():
                                                               "no-change", "not-liftable")]})
         with open(os.path.join(root, dom, dom + ".json"), "w") as f:
             json.dump(doc, f)
-    core = os.path.join(SIBLINGS, "omx-clap-core")
+    core = os.path.join(SIBLINGS, "omx-clap")
     if not os.path.isdir(core):
         raise unittest.SkipTest(f"{core}: no such sibling clone")
     names = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", REF, "data"], capture_output=True, text=True,
                            check=True).stdout.split("\n")
-    dest = os.path.join(root, "3", "omx-clap-core")
+    dest = os.path.join(root, "3", "omx-clap")
     for n in sorted(x for x in names if x.endswith(".json")):
         rel = n[len("data/"):]
         os.makedirs(os.path.join(dest, os.path.dirname(rel)), exist_ok=True)
         with open(os.path.join(dest, rel), "wb") as f:
             f.write(git_show(core, REF, n))
     with open(os.path.join(dest, "MANIFEST.json"), "w") as f:
-        json.dump({"package": "omx-clap-core", "version": git_show(core, REF, "VERSION").decode().strip(),
+        json.dump({"package": "omx-clap", "version": git_show(core, REF, "VERSION").decode().strip(),
                    "schemaMajor": 3, "files": {}}, f)
     _contract["dir"] = root
     return root
@@ -814,7 +814,7 @@ class MinDomain(Base):
 
 class Packaging(unittest.TestCase):
     """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
-    CONTRACTS = ("plugin-qualify-contract", "plugin-hostd-contract", "plugin-db-contract", "omx-clap-core-contract")
+    CONTRACTS = ("plugin-hostd-contract", "plugin-db-contract", "omx-clap-contract")
 
     def read(self, *path):
         with open(os.path.join(REPO, *path), encoding="utf-8") as f:
@@ -833,11 +833,11 @@ class Packaging(unittest.TestCase):
         self.assertNotRegex(deps, r"\(<|<<|<=")
         self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)", "", deps), r"\(=")
 
-    def test_the_omx_clap_core_floor_is_the_release_this_pass_pairs_with(self):
-        """omx-clap-core 0.33.1 is the release this pass pairs with: the floor is that release (floors only)."""
+    def test_the_omx_clap_floor_is_the_release_this_pass_pairs_with(self):
+        """omx-clap 0.34.0 is the release this pass pairs with: the floor is that release (floors only)."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
-        self.assertRegex(control, r"omx-clap-core-contract \(>= 0\.33\.1~\)")
-        self.assertRegex(self.read("packaging", "plugin-qualification-records.spec"), r"BuildRequires: omx-clap-core-contract >= 0\.33\.1\n")
+        self.assertRegex(control, r"omx-clap-contract \(>= 0\.34\.0~\)")
+        self.assertRegex(self.read("packaging", "plugin-qualification-records.spec"), r"BuildRequires: omx-clap-contract >= 0\.34\.0\n")
 
     def test_rpm_build_requires_hold_floors_only(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")
@@ -890,7 +890,7 @@ class SmallStore(Base):
         self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["hosting"]))
         for dom, version in domains.items():
             if dom == "hosting":
-                self.assertEqual(version, load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))["version"])
+                self.assertEqual(version, load(os.path.join(contract_dir(), "3", "omx-clap", "MANIFEST.json"))["version"])
             else:
                 self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
         checked = {(t, c) for t, c in self.rows("SELECT DISTINCT tbl, col FROM word_check")}

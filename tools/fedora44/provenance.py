@@ -10,8 +10,8 @@ import os
 import sys
 
 # the packages of the measuring stack, named in every provenance; the plugin set comes from plugin-packages.tsv
-HOST = ["jack-audio-connection-kit", "lilv", "mod-host", "mod-host-protocol", "nodejs22", "omx-clap-core",
-        "omx-clap-core-contract", "omx-clap-host", "omx-contract-data", "omx-plugins-clap", "omx-plugins-lv2",
+HOST = ["jack-audio-connection-kit", "lilv", "mod-host", "mod-host-protocol", "nodejs22", "omx-clap",
+        "omx-clap-contract", "omx-clap-host", "omx-contract-data", "omx-plugins-clap", "omx-plugins-lv2",
         "plugin-hostd", "plugin-hostd-contract", "plugin-qualify", "python3-lilv"]
 ORDER = ["image", "board", "kernel", "measured", "hostProfile", "realtime", "jack", "settings", "sources",
          "repositories", "packages"]

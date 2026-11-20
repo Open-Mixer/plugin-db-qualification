@@ -123,6 +123,21 @@ serial, `YYYYMMDDXX`, for example `2026103001`. A number is never used twice. Th
 
 A manual run with `publish=false` builds everything and publishes nothing.
 
+### When the qualification runs land
+
+The runs come as `plugin-qualify --out` directories: `*.qualification.json` and `*.probe.json` files. Put each set's
+directory at `<runs>/<set>/` and its provenance at `<runs>/<set>.provenance.json`. Then, for each class:
+
+```
+tools/replace-sets.sh x86-64 <runs> fedora45-48000-128 fedora45-48000-256 ...   # one name per cell
+tools/replace-sets.sh rpi5 <runs> zynthian-default
+```
+
+The script removes the class's old sets with `git rm`, imports each new set with `tools/sets.py import` (which checks it),
+rewrites the spec's per-architecture block with `tools/sets.py spec`, checks the packaging, builds the base database from
+`records/`, and runs the suite. It commits nothing. Commit the removal, the imports and the spec each on their own. The
+deb is released for arm64 only; the rpm for x86_64 and aarch64.
+
 ## Measuring a class again
 
 `tools/build-package.sh` takes a run's qualification directories and replaces the sets of one class in `records/`:

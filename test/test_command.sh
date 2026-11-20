@@ -282,5 +282,14 @@ for order in ref-last ref-first; do
     case "$out" in *'"set":"fedora44-48000-256"'*) note "query --json of base-tiers-$order answers with the provisional set" ;; esac
     case "$out" in *'"set":"fedora44-rt-48000-256"'*) ;; *) note "query --json of base-tiers-$order does not answer with the reference tier's set" ;; esac
 done
+# ruling 2026-11-20: one plugin at one cell from two sets of one tier answers once, from the set measured later, in
+# either order of the sets (the store spec, section 4)
+for order in new-last new-first; do
+    out=$("$cmd" query --json --base "$fx/base-newer-$order.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+    [ $rc -eq 0 ] || note "query --json of base-newer-$order exited $rc: $out"
+    n=$(printf '%s\n' "$out" | grep -c '"sha256"')
+    [ "$n" -eq 1 ] || note "query --json of base-newer-$order gave $n results for one plugin at one cell"
+    case "$out" in *'"set":"zynthian-vangelis-48000-256"'*) ;; *) note "query --json of base-newer-$order does not answer with the newer set" ;; esac
+done
 if [ $fail -eq 0 ]; then echo "ok     14, 22 and 23 the command"; else echo "not ok 14, 22 and 23 the command"; fi
 exit $fail

@@ -303,8 +303,8 @@ static void cell(buf *b, ctx *c, sqlite3_stmt *st)
         LEAVES(b, st, { "interposer", "rt_interposer", 'B' }, { "swept", "rt_swept", 'B' }, { "sweepApplicable", "rt_sweep_applicable", 'B' },
                { "blocks", "rt_blocks", 'I' }, { "allocations", "rt_allocations", 'I' }, { "locks", "rt_locks", 'I' }, { "syscalls", "rt_syscalls", 'I' },
                { "threadViolations", "rt_thread_violations", 'I' }, { "processErrors", "rt_process_errors", 'I' }, { "ownThreads", "rt_own_threads", 'I' });
-        OBJ(b, "otherThreads", 0, LEAVES(b, st, { "allocationsInRun", "rt_other_allocations", 'I' }, { "locksInRun", "rt_other_locks", 'I' },
-                                          { "syscallsInRun", "rt_other_syscalls", 'I' }));
+        OBJ(b, "otherThreads", 0, LEAVES(b, st, { "allocations", "rt_other_allocations", 'I' }, { "locks", "rt_other_locks", 'I' },
+                                          { "syscalls", "rt_other_syscalls", 'I' }));
         strings(b, c, "events", 1, "SELECT event FROM cell_event WHERE record_id = ?1 AND cell_ord = ?2 ORDER BY ord", 2, c->rid, ord);
     });
     OBJ(b, "noteSweep", 0, LEAVES(b, st, { "applicable", "note_sweep_applicable", 'B' }, { "dialect", "note_sweep_dialect", 'T' },

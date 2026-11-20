@@ -54,6 +54,8 @@ def held_back(rec):
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 # the set tier whose record claims a cell another tier's set also holds (section 4, ruling 2026-11-20)
 REFERENCE = "reference"
+# record_set.measured, as the claim rule compares it (section 4)
+DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 def _provenance():
@@ -169,7 +171,7 @@ class Writer:
         if prov["schema"] != PROVENANCE_SCHEMA:
             em.refuse("field-unmapped", "schema", f"expected {PROVENANCE_SCHEMA}")
         sid = _insert(cur, "record_set", s)
-        tier = s["tier"]
+        tier = (s["tier"], s["measured"])
         for k, v in settings.items():
             if k == "note":
                 if not isinstance(v, str):
@@ -185,6 +187,29 @@ class Writer:
         files = sorted((f for f in os.listdir(d) if f.endswith(".qualification.json")), key=os.fsencode)
         for f in files:
             self._record(cur, cls, name, d, sid, tier, f, plugins, claims)
+
+    @staticmethod
+    def _takes_claim(label, tier, held, held_tier, cols):
+        """Whether the record `label` (its set's (tier, measured)) takes a cell `held` claims, or leaves it (section 4).
+        Ruling 2026-11-20, two tiers: the reference tier's record claims the cell, whichever set comes first; two tiers
+        of which neither is the reference tier are refused. Ruling 2026-11-20, one tier: the record of the set measured
+        later (provenance `measured`, record_set.measured, YYYY-MM-DD) claims it, whichever comes first; an equal date
+        is refused (claim-duplicate), and so is a set with no date to compare (claim-undated)."""
+        (t, m), (ht, hm) = tier, held_tier
+        where = f"the cell {cols['rate']}/{cols['quantum']} of this key, offer and class"
+        if t != ht:
+            if REFERENCE in (t, ht):
+                return t == REFERENCE
+            raise Refusal("claim-duplicate", f"{label}: {where} is already claimed by {held}, of tier {ht}; "
+                          f"neither tier is {REFERENCE}")
+        for lab, date in ((held, hm), (label, m)):
+            if not DATE.fullmatch(date or ""):
+                raise Refusal("claim-undated", f"{lab}: {where} is held by two sets of tier {t}, and this one's provenance "
+                              f"measured {date!r} is no date to tell the newer by")
+        if m == hm:
+            raise Refusal("claim-duplicate", f"{label}: {where} is already claimed by {held}, of tier {t}, "
+                          f"measured on one date ({m})")
+        return m > hm
 
     def _record(self, cur, cls, setname, d, sid, tier, fname, plugins, claims):
         label = f"{cls}/{setname}/{fname}"
@@ -213,21 +238,14 @@ class Writer:
             rid = _insert_record(cur, scope, pid, dict(set_id=sid, host_class=cls, offer=offer, name=recname))
             for cell in (k for k in scope.kids if k.table == "cell"):
                 ck = (pid, offer, cls, cell.cols["rate"], cell.cols["quantum"])
-                # one claim per key, offer, class and cell (section 4). Ruling 2026-11-20: where a set of the reference
-                # tier and a set of another tier hold one, the reference tier's record claims it, whichever set comes
-                # first; the other record stays whole, without the claim. Two of one tier, or two of which neither is
-                # of the reference tier, are refused.
+                # one claim per key, offer, class and cell (section 4). The other record stays whole, without the claim.
                 if ck in claims:
                     held, held_tier = claims[ck]
-                    if tier == REFERENCE and held_tier != REFERENCE:
+                    if self._takes_claim(label, tier, held, held_tier, cell.cols):
                         cur.execute("UPDATE claim SET record_id = ? WHERE plugin_id = ? AND offer = ? AND host_class = ? "
                                     "AND rate = ? AND quantum = ?", (rid,) + ck)
                         claims[ck] = (label, tier)
-                        continue
-                    if held_tier == REFERENCE and tier != REFERENCE:
-                        continue
-                    raise Refusal("claim-duplicate", f"{label}: the cell {cell.cols['rate']}/{cell.cols['quantum']} of this key, "
-                                  f"offer and class is already claimed by {held}")
+                    continue
                 claims[ck] = (label, tier)
                 cur.execute("INSERT INTO claim (record_id, plugin_id, offer, host_class, rate, quantum) VALUES (?, ?, ?, ?, ?, ?)",
                             (rid,) + ck)

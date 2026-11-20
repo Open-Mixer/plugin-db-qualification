@@ -127,7 +127,8 @@ def word_checks(c):
 def claimants(records):
     """{record index: the cells it claims} by the base's rule (the store spec, section 4): one record per key, offer, class
     and cell; when a set of the reference tier and a set of another tier both hold a cell, the reference tier's record
-    claims it, whichever comes first; two of one tier at one cell are refused (claim-duplicate)."""
+    claims it, whichever comes first; when two sets of one tier hold it, the record of the set measured later claims it
+    (an equal date is refused, claim-duplicate)."""
     held = {}
     for n, r in enumerate(records):
         for ce in r["cells"]:
@@ -135,9 +136,14 @@ def claimants(records):
     out = {n: set() for n in range(len(records))}
     for (key, offer, cls, rate, quantum), ns in held.items():
         ref = [n for n in ns if records[n]["tier"] == "reference"]
-        if len(ns) > 1 and len(ref) != 1:
+        pool = ref or ns
+        if len({records[n]["tier"] for n in pool}) > 1:
             raise SystemExit("claim-duplicate: %s %s %s at %d/%d" % (key[2], offer, cls, rate, quantum))
-        out[ref[0] if ref else ns[0]].add((rate, quantum))
+        newest = max(records[n]["measured"] for n in pool)
+        top = [n for n in pool if records[n]["measured"] == newest]
+        if len(top) != 1:
+            raise SystemExit("claim-duplicate: %s %s %s at %d/%d" % (key[2], offer, cls, rate, quantum))
+        out[top[0]].add((rate, quantum))
     return out
 
 def build(path, layer, records, version=VERSION, adapter_code_override=None, filler=False):

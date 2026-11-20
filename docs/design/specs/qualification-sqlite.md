@@ -783,7 +783,8 @@ the store 2026-11-20). The base holds no judgment of the `openmixer-console` pro
 `omx-clap-host` that also carries one is kept, and its `verdicts[]` and `cost[]` entries whose `host` is
 `openmixer-console`, and a `tiers.inProcess` or `tiers.isolated` that profile hosts, are left out as the migration reads
 the file: the record file is not edited, and the rest of the record is stored whole. A record whose only verdict is the
-console's is kept, with no verdict. A set whose `provenance.hostProfile` is `openmixer-console` is refused
+console's is kept as a row with no verdict (ruling 2026-11-20: nothing is dropped; its console verdict is held back
+like any other, and it answers with no verdict until the console key's desk run). A set whose `provenance.hostProfile` is `openmixer-console` is refused
 (`console-profile`). `tiers.dimmed`, a sentence, is not stored either way. The round trip compares each record with
 its file less those judgments.
 
@@ -954,8 +955,16 @@ and no key changes. After that commit:
   first in byte order, and keeps the other record whole in the base, without the claim at that cell. So every read
   answers with the reference tier's record; nothing is dropped and no record changes. The rule lives in the claim the
   base build writes, and the reader follows the claim (the query of `pqdb_each` joins `claim` on its primary key); no
-  column is added. A second claim at one key and cell from two sets of one tier, or of two tiers neither of which is
-  `reference`, is refused, naming both files. In the user layer, a newer
+  column is added. A claim at one key and cell from two tiers neither of which is `reference` is refused
+  (`claim-duplicate`), naming both files.
+- **One tier at one cell: the set measured later answers** (ruling 2026-11-20). Two sets of one tier may hold one key,
+  offer and class at one cell: the rpi5 set `zynthian-vangelis`, measured 2026-11-06 over its whole grid, beside
+  `zynthian-vangelis-48000-256` and `-96000-256`, samplv1 and drumkv1 measured again on 2026-11-08. The migration gives
+  the claim to the record of the set whose provenance `measured` (`record_set.measured`, `YYYY-MM-DD`) is later,
+  whichever set comes first in byte order, and keeps the other record whole without the claim; every read answers
+  with the newer record. An equal `measured` is refused (`claim-duplicate`, "measured on one date", naming both
+  files), and a contending set whose `measured` is not a date is refused (`claim-undated`); neither is guessed. No
+  column is added. In the user layer, a newer
   user record for a shadow key replaces the user's earlier record for that key, whole, in one transaction, even when it
   holds fewer cells. Decided (#17): a newer user record shadows the whole base record (the user-first merge), and the
   base is never deleted. Across layers there is no conflict: the user's record wins and each result says its `layer`.
@@ -1340,8 +1349,10 @@ makes it fail.
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
    from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by
-   name and leave no output file. A reference-tier set and a provisional set at one key and cell give the claim to the
-   reference record, in either byte order of the sets (section 4). Fails when a partial file is left at `--out`.
+   name and leave no output file; so do two sets of one tier measured on one date at one key and cell
+   (`claim-duplicate`), and such a set without a date (`claim-undated`). A reference-tier set and a provisional set at
+   one key and cell give the claim to the reference record, and two sets of one tier to the one measured later, in
+   either byte order of the sets (section 4). Fails when a partial file is left at `--out`.
 10. **Key constraints.** A record with a 63-character SHA-256 or a format `vst3` is refused by the schema. Fails when
     the `CHECK`s are dropped.
 11. **Package contents.** The built `plugin-qualification-records` (deb and rpm) holds `qualification.sqlite` and every
@@ -1473,6 +1484,11 @@ makes it fail.
     the base layer by name), `query --json`, `pqdb_files` and `pqdb_verdict_of` of the result, and `pqdb_counts` answer
     with the reference record alone, in both orders. Fails when the reader reads a cell without its claim (two
     results, and in one order the provisional set's first) or counts a record that claims no cell.
+27. **The newer set answers where two sets of one tier hold a cell.** Two fixture bases hold one plugin at 48000/256
+    from two rpi5 sets of tier hardware, measured 2026-11-06 and 2026-11-08, the sets in both orders, the claim on
+    the newer record (section 4). `pqdb_each` (no filter, the key at its cell), `query --json`, and `pqdb_files` and
+    `pqdb_verdict_of` of the result answer with the newer record alone, once. Fails when the claim follows the order of
+    the sets or the reader reads a cell without its claim.
 
 ### The consumer switch (red-first tests of plugin-qualify's repository)
 

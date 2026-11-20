@@ -158,11 +158,10 @@ jobs:
     secrets: inherit
 
   # The x86_64 RPM installed where it is used, each set in turn: Fedora 45 x86_64 with plugin-qualify and the
-  # channel's omx-plugins at the version the set measured (its provenance.json). A container has no device tree, and
-  # an x86_64 machine never has one, so the host class is the settings file's. The sync takes the omx plugins from the
-  # records and measures nothing. When the channel's omx-plugins of that version is rebuilt with other bytes this
-  # step fails with `binary differs`: the channel's build is not the one the set was measured with, and that is reported; the
-  # set stays, as qualification results are stable.
+  # channel's current omx-plugins (the channel keeps the newest only; the proof logs the version each set measured
+  # beside the one installed). A container has no device tree, and an x86_64 machine never has one, so the host class
+  # is the settings file's. A record of bytes the channel no longer serves (`binary differs`, another omx-plugins
+  # version than the measured one) is UNPROVEN: it stays as measured and the release notes name it (proof-notes).
   rpm-installed:
     name: Install and sync (Fedora 45, x86_64)
     needs: [plan, rpm]

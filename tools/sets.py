@@ -425,15 +425,16 @@ def machine_arch(root, kind):
 NOTE_SECTIONS = (
     ("wrong", "WRONG WINNER: cells where the sync takes another set than the store's rule gives them"),
     ("unproven-set", "UNPROVEN sets: the sync never takes them"),
+    ("unproven-record", "UNPROVEN records: binary differs, the channel serves another omx-plugins version than the one they were measured with"),
     ("pick", "Cells where the sync takes the set the store's rule gives them"),
 )
 
 
 def write_notes(path):
     """The findings tools/prove-set.sh appended to <path> as "<kind>|<text>", written back as the sections of the
-    release notes, each line once. The number of WRONG WINNER lines."""
+    release notes, each line once. The numbers of WRONG WINNER and UNPROVEN record lines."""
     if not path or not os.path.isfile(path):
-        return 0
+        return 0, 0
     with open(path, encoding="utf-8") as f:
         found = [l.rstrip("\n").split("|", 1) for l in f if "|" in l]
     out = []
@@ -443,7 +444,7 @@ def write_notes(path):
             out += [f"### {title}", ""] + [f"- {t}" for t in lines] + [""]
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out))
-    return len({t for k, t in found if k == "wrong"})
+    return len({t for k, t in found if k == "wrong"}), len({t for k, t in found if k == "unproven-record"})
 
 
 def prove(root, kind, pkgs):
@@ -515,7 +516,9 @@ def prove(root, kind, pkgs):
                 failed.append(set_)
     finally:
         subprocess.run(["bash", script, "remove", kind], cwd=root)
-    wrong = write_notes(notes_file)
+    wrong, unproven = write_notes(notes_file)
+    if unproven:
+        print(f"::warning::{unproven} records UNPROVEN: binary differs, the omx-plugins the channel serves is not the version they were measured with; they stay as measured and the release notes name them", flush=True)
     if wrong:
         print(f"::warning::{wrong} cells where plugin-qualify takes another set than the store's rule gives them (named in the notes)", flush=True)
     print(f"{len(sets) - len(failed) - len(unproven_sets)} of {total} sets proven, {len(unmatched)} not proven (measured on another host class)"

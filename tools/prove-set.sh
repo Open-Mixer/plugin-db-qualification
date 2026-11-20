@@ -25,9 +25,13 @@
 # deb: the package from <pkg dir>/trixie/, with Debian's own lv2vocoder, whose bytes are the ones the Zynthian image
 #      holds (if Debian rebuilds it this fails with "binary differs": pick another plugin whose installed files still
 #      hash as a record's).
-# rpm: the package from <pkg dir>/; each set installs the channel's omx-plugins at the version it measured (its
-#      provenance.json), removed again after it; when the channel's omx-plugins of that version is rebuilt with other
-#      bytes this fails with "binary differs", and that is reported; the set stays, as qualification results are stable. python3 must be installed.
+# rpm: the package from <pkg dir>/; each set installs the channel's current omx-plugins (the channel keeps the newest
+#      only), removed again after it, and logs the omx-plugins version the set measured (its provenance.json) beside
+#      the one installed. A record the sync reports "binary differs" for, where the installed version differs from the
+#      measured one, is UNPROVEN: the bytes the record names are no longer published, and the record stays as measured.
+#      It is named (a line "UNPROVEN record ..." and a note "unproven-record|<text>" for the release notes), not
+#      failed; a set none of whose plugins applied for that reason is UNPROVEN too (exit 3). A "binary differs" at the
+#      same version, and every other refusal, still fails. python3 must be installed.
 # A container has no device tree, so the host class is the settings file's. No plugin-hostd listens. PROVE_ROOT
 # prefixes every system path (the tests).
 set -euo pipefail
@@ -73,9 +77,11 @@ case $step in
         case $kind in
             deb) hostd='' ;; # no extra folder: plugin-hostd's own LV2 list holds the standard ones
             rpm)
-                ver=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1].rsplit("-",1)[0])' "$tree/provenance.json")
-                dnf install -y --setopt=install_weak_deps=False "omx-plugins-clap-$ver" "omx-plugins-lv2-$ver"
+                measured=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["packages"]["omx-plugins-clap"].split(":")[-1])' "$tree/provenance.json")
+                dnf install -y --setopt=install_weak_deps=False omx-plugins-clap omx-plugins-lv2
                 rpm -q omx-plugins-clap omx-plugins-lv2
+                have_omx=$(rpm -q --qf '%{VERSION}-%{RELEASE}' omx-plugins-clap)
+                echo "$class/$set_: omx-plugins measured $measured, installed $have_omx"
                 hostd='clap_path /usr/lib64/clap' # plugin-hostd has no clap_extra
                 ;;
         esac
@@ -98,7 +104,27 @@ case $step in
         taken=$(sed -n 's/.*distributed: .*: applied (\(.*\))$/\1/p' "$log" | sort -u | paste -sd,)
         applied=$(grep -c 'distributed: .*: applied (' "$log" || true)
         echo "$class/$set_: applied $applied from $taken; the store's rule gives the cell to $winner"
-        [ "$applied" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from its records"; exit 1; }
+        # a record of other bytes: UNPROVEN when the omx-plugins installed is another version than the one measured
+        # (rpm only: those bytes are no longer published), a failure at the same version or for a deb
+        unproven=0
+        if grep -q 'distributed: .*: binary differs' "$log"; then
+            if [ "$kind" = rpm ] && [ "${have_omx%-*}" != "${measured%-*}" ]; then
+                while IFS= read -r uri; do
+                    echo "UNPROVEN record $class/$set_: $uri: binary differs (omx-plugins measured $measured, installed $have_omx)"
+                    note unproven-record "$class/$set_: $uri (omx-plugins measured $measured, the channel serves $have_omx)"
+                    unproven=$((unproven + 1))
+                done < <(sed -n 's/.*distributed: \(.*\): binary differs.*/\1/p' "$log" | sort -u)
+            else
+                grep 'distributed: .*: binary differs' "$log"
+                echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
+            fi
+        fi
+        if [ "$applied" -eq 0 ]; then
+            [ "$unproven" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from its records"; exit 1; }
+            note unproven-set "$class/$set_: every record is of omx-plugins bytes the channel no longer serves (measured $measured, the channel serves $have_omx)"
+            echo "UNPROVEN $class/$set_: every record is of bytes the channel no longer serves"
+            rm -f "$log"; exit 3
+        fi
         where=$class
         [ "$cell" = - ] && where="$class, the cells of $set_" || where="$class $cell"
         if [ "$taken" = "$winner" ]; then
@@ -113,7 +139,7 @@ case $step in
                note unproven-set "$class/$set_: never taken by the sync at its cell ($where: it takes $taken)"
                unproven_set=1 ;;
         esac
-        if grep -E 'distributed: .*(binary differs|not applied|measured here)' "$log"; then
+        if grep -E 'distributed: .*(not applied|measured here)' "$log"; then
             echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
         fi
         rm -f "$log"

@@ -45,7 +45,8 @@ with open(os.path.join(ROOT, "debian", "changelog"), encoding="utf-8") as _f:
 STUB = """#!/bin/bash
 echo "$(basename "$0") $*" >> "$STUB_LOG"
 case $(basename "$0") in
-    dpkg-query|rpm) echo 0.20.1 ;;
+    dpkg-query) echo 0.20.1 ;;
+    rpm) case "$*" in *omx-plugins*) echo "${STUB_OMX_VERSION:-0.18.0}" ;; *) echo 0.20.1 ;; esac ;;
     plugin-qualify-sync)
         conf=$PROVE_ROOT/etc/omx/qualify.conf
         cat "$conf" >> "$STUB_LOG"
@@ -64,9 +65,10 @@ case $(basename "$0") in
         # STUB_AT_<rate>_<quantum>: the set the sync takes that cell from, when it is not the one named for it
         if [ -n "$grid" ]; then at=STUB_AT_${grid%/*}_${grid#*/}; [ -z "${!at:-}" ] || set_=${!at}; fi
         if [ "$grid" = "${BAD_GRID:-none}" ]; then
-            echo "plugin-qualify-sync: distributed: urn:a: binary differs"
+            echo "plugin-qualify-sync: ${BAD_LINE:-distributed: urn:a: binary differs}"
         else
             echo "plugin-qualify-sync: distributed: urn:a: applied ($set_)"
+            [ -z "${ALSO_DIFFERS:-}" ] || echo "plugin-qualify-sync: distributed: $ALSO_DIFFERS: binary differs"
             [ -z "${WRONG_SET:-}" ] || echo "plugin-qualify-sync: distributed: urn:b: applied ($WRONG_SET)"
         fi ;;
 esac
@@ -608,10 +610,10 @@ class Prove(Tree):
         self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
         self.assertEqual(self.steps(log), [
             f"dnf install -y --setopt=install_weak_deps=False ./pkgs/{PKG}-[0-9]*.x86_64.rpm",
-            "dnf install -y --setopt=install_weak_deps=False omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
+            "dnf install -y --setopt=install_weak_deps=False omx-plugins-clap omx-plugins-lv2",
             "plugin-qualify-sync --system", "host_class x86-64", "grid 48000/512",
             "dnf remove -y omx-plugins-clap omx-plugins-lv2",
-            "dnf install -y --setopt=install_weak_deps=False omx-plugins-clap-0.18.0 omx-plugins-lv2-0.18.0",
+            "dnf install -y --setopt=install_weak_deps=False omx-plugins-clap omx-plugins-lv2",
             "plugin-qualify-sync --system", "host_class x86-64", "grid 96000/256",
             "dnf remove -y omx-plugins-clap omx-plugins-lv2",
             f"dnf remove -y {PKG}"])
@@ -711,6 +713,45 @@ class Prove(Tree):
         self.assertEqual(rc, 1)
         self.assertIn("claim-duplicate", out)
         self.assertNotIn("plugin-qualify-sync", log)
+
+    def notes_path(self):
+        return os.path.join(self.tmp.name, "notes.md")
+
+    def test_a_channel_that_serves_another_omx_plugins_version_leaves_the_records_unproven_not_failed(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_OMX_VERSION="0.19.3-1.fc45", BAD_GRID="96000/256", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class), 1 UNPROVEN (never taken by the sync): fedora44-96000-256", out)
+        with open(self.notes_path()) as f:
+            notes = f.read()
+        self.assertIn("### UNPROVEN records", notes)
+        self.assertIn("- x86-64/fedora44-96000-256: urn:a (omx-plugins measured 0.18.0-1.fc44, the channel serves 0.19.3-1.fc45)", notes)
+        self.assertIn("- x86-64/fedora44-96000-256: every record is of omx-plugins bytes the channel no longer serves", notes)
+        # the channel's omx-plugins, whatever its version: never pinned to the one a set measured
+        self.assertEqual(log.count("dnf install -y --setopt=install_weak_deps=False omx-plugins-clap omx-plugins-lv2"), 2)
+        self.assertNotIn("omx-plugins-clap-0.", log)
+
+    def test_one_unproven_record_beside_an_applied_one_leaves_the_set_proven_and_names_it(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_OMX_VERSION="0.19.3-1.fc45", ALSO_DIFFERS="urn:c", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("2 of 2 sets proven", out)
+        self.assertIn("2 records UNPROVEN: binary differs", out)
+        with open(self.notes_path()) as f:
+            self.assertEqual(f.read().count("urn:c"), 2)
+
+    def test_binary_differs_at_the_same_omx_plugins_version_still_fails(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", BAD_GRID="96000/256", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 1)
+        self.assertIn("failed: fedora44-96000-256", out)
+
+    def test_any_other_refusal_still_fails_when_the_versions_differ(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_OMX_VERSION="0.19.3-1.fc45", BAD_GRID="96000/256",
+                                  BAD_LINE="distributed: urn:a: measured here", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 1)
+        self.assertIn("failed: fedora44-96000-256", out)
 
     def test_the_arm64_deb_is_proven_with_no_grid(self):
         self.with_two_cells()

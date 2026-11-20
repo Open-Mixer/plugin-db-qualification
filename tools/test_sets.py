@@ -613,18 +613,34 @@ class Prove(Tree):
         self.assertNotIn("plugin-qualify-sync", log)
         self.assertIn(f"apt-get remove -y {PKG}", log)
 
-    def test_a_set_measured_on_another_host_class_is_named_and_not_proven(self):
+    def with_an_rpi5_set(self):
+        """x86_64's package carrying a set of the rpi5 class too (the proof names it, it does not prove it)."""
+        real = sets.carried
+        self.addCleanup(setattr, sets, "carried", real)
+        sets.carried = lambda root, kind, arch: real(root, kind, arch) + [("rpi5", "zynthian-vangelis")]
+
+    def test_a_fedora44_set_is_proven_on_a_fedora45_image(self):
+        # qualification results are stable: x86-64 is a host class, not an operating system
         self.with_two_cells()
-        self.add_set("x86-64", "fedora45-48000-64")
-        self.respec()
-        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), STUB_HOST="fedora45")
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
         self.assertEqual(rc, 0, out + log)
-        for s in CELLS:
-            self.assertIn(f"::notice::x86-64/{s}: measured on fedora44, not proven in fedora45", out)
-        self.assertIn("2 sets measured on another host class, not proven in fedora45", out)
-        self.assertIn("1 of 3 sets proven, 2 not proven (measured on another host class)", out)
-        self.assertEqual(log.count("plugin-qualify-sync --system"), 1)
+        self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
+        self.assertEqual(log.count("plugin-qualify-sync --system"), 2)
+        self.assertNotIn("::notice::", out)
         self.assertNotIn("::warning::", out)
+
+    def test_a_set_of_another_host_class_is_named_and_not_proven_whatever_the_os(self):
+        self.with_two_cells()
+        self.with_an_rpi5_set()
+        for image in (("fedora", "44"), ("fedora", "45")):
+            shutil.rmtree(os.path.join(self.tmp.name, "root"), ignore_errors=True)
+            rc, out, log = self.prove("rpm", "x86_64", image=image)
+            self.assertEqual(rc, 0, out + log)
+            self.assertIn("::notice::rpi5/zynthian-vangelis: a set of the rpi5 class, not proven on an x86-64 machine", out)
+            self.assertIn("1 sets of another host class, not proven on an x86-64 machine", out)
+            self.assertIn("2 of 3 sets proven, 1 not proven (measured on another host class)", out)
+            self.assertEqual(log.count("plugin-qualify-sync --system"), 2)
+            self.assertNotIn("::warning::", out)
 
     def test_a_set_measured_on_this_host_class_is_proven(self):
         self.with_two_cells()
@@ -633,21 +649,15 @@ class Prove(Tree):
         self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
         self.assertNotIn("::notice::", out)
 
-    def test_a_matching_set_that_fails_still_fails(self):
+    def test_no_set_of_this_host_class_warns_and_does_not_fail(self):
         self.with_two_cells()
-        self.add_set("x86-64", "fedora45-48000-64")
-        self.respec()
-        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), BAD_GRID="48000/64", STUB_HOST="fedora45")
-        self.assertEqual(rc, 1, out)
-        self.assertIn("0 of 3 sets proven, 2 not proven (measured on another host class); failed: fedora45-48000-64", out)
-
-    def test_no_matching_set_warns_and_does_not_fail(self):
-        self.with_two_cells()
+        real = sets.carried
+        self.addCleanup(setattr, sets, "carried", real)
+        sets.carried = lambda root, kind, arch: [("rpi5", "zynthian-vangelis")]
         rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("::warning::proved 0 of 2 sets: none was measured on fedora45", out)
-        self.assertIn("0 of 2 sets proven, 2 not proven (measured on another host class)", out)
-        self.assertNotIn("0 of 0", out)
+        self.assertIn("::warning::proved 0 of 1 sets: none is a set of the x86-64 class", out)
+        self.assertIn("0 of 1 sets proven, 1 not proven (measured on another host class)", out)
         self.assertNotIn("plugin-qualify-sync", log)
 
     def test_a_set_without_a_host_class_in_its_name_is_always_proven(self):

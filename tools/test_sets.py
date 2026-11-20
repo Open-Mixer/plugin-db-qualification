@@ -66,6 +66,16 @@ case $(basename "$0") in
         if [ -n "$grid" ]; then at=STUB_AT_${grid%/*}_${grid#*/}; [ -z "${!at:-}" ] || set_=${!at}; fi
         if [ "$grid" = "${BAD_GRID:-none}" ]; then
             echo "plugin-qualify-sync: ${BAD_LINE:-distributed: urn:a: binary differs}"
+            if [ -n "${STUB_NO_JACK:-}" ]; then
+                # the real log's shape: a record of other bytes is measured, and with no JACK server left unmeasured
+                echo "plugin-qualify-sync: urn:a: unmeasured (qualify.sync.not-measured): no JACK server: omx-clap-host could not open a JACK client (resp -201)"
+                [ -z "${STUB_EXTRA_LINE:-}" ] || echo "plugin-qualify-sync: $STUB_EXTRA_LINE"
+                echo "plugin-qualify-sync: plugin-db: 0 plugins stored in the system store, 0 already there, 1 without a pin, 0 without a judged layer, 0 refused"
+                echo "plugin-qualify-sync: ${STUB_UNMEASURED:-1} plugins unmeasured by the machine (no JACK server); the first is listed above"
+                echo "plugin-qualify-sync: every plugin this run measured was left unmeasured by the machine (no JACK server): the run failed"
+                echo "qualified 0, skipped 0, refused 0, crashed ${STUB_CRASHED:-0}, hung 0, unmeasured ${STUB_UNMEASURED:-1}, distributed 0, 13.5 s"
+                exit 1
+            fi
         else
             echo "plugin-qualify-sync: distributed: urn:a: applied ($set_)"
             [ -z "${ALSO_DIFFERS:-}" ] || echo "plugin-qualify-sync: distributed: $ALSO_DIFFERS: binary differs"
@@ -739,6 +749,36 @@ class Prove(Tree):
         self.assertIn("2 records UNPROVEN: binary differs", out)
         with open(self.notes_path()) as f:
             self.assertEqual(f.read().count("urn:c"), 2)
+
+    def test_every_differing_record_left_unmeasured_for_want_of_a_jack_server_is_unproven_not_failed(self):
+        # (a) the combined dry run's log: the sync measures what it refused and, with no JACK server, exits non-zero
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_OMX_VERSION="0.19.3-1.fc45", BAD_GRID="96000/256", STUB_NO_JACK="1", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class), 1 UNPROVEN (never taken by the sync): fedora44-96000-256", out)
+        with open(self.notes_path()) as f:
+            self.assertIn("- x86-64/fedora44-96000-256: urn:a (omx-plugins measured 0.18.0-1.fc44, the channel serves 0.19.3-1.fc45)", f.read())
+
+    def test_an_unmeasured_plugin_the_sync_did_not_refuse_as_binary_differs_fails(self):
+        # (b) one differs, one unrelated plugin is left unmeasured too
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_OMX_VERSION="0.19.3-1.fc45", BAD_GRID="96000/256", STUB_NO_JACK="1", STUB_UNMEASURED="2",
+                                  STUB_EXTRA_LINE="urn:other: unmeasured (qualify.sync.not-measured): no JACK server", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 1)
+        self.assertIn("failed: fedora44-96000-256", out)
+
+    def test_a_crash_beside_a_differing_record_fails(self):
+        # (c) one differs, and a plugin crashed
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", STUB_OMX_VERSION="0.19.3-1.fc45", BAD_GRID="96000/256", STUB_NO_JACK="1", STUB_UNMEASURED="1",
+                                  STUB_CRASHED="1", PROVE_NOTES=self.notes_path())
+        self.assertEqual(rc, 1)
+        self.assertIn("failed: fedora44-96000-256", out)
+
+    def test_a_failing_sync_with_no_differing_record_fails(self):
+        self.with_two_cells()
+        rc, out, log = self.prove("rpm", "x86_64", BAD_GRID="96000/256", BAD_LINE="distributed: urn:a: applied (fedora44-96000-256)", STUB_NO_JACK="1")
+        self.assertEqual(rc, 1)
 
     def test_binary_differs_at_the_same_omx_plugins_version_still_fails(self):
         self.with_two_cells()

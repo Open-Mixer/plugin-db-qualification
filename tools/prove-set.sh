@@ -99,7 +99,10 @@ case $step in
             [ "$cell" = - ] || printf 'grid %s\n' "$cell"
         } > "$r/etc/omx/qualify.conf"
         log=$(mktemp)
-        plugin-qualify-sync --system 2>&1 | tee "$log"
+        # the sync's own exit status is judged below: it exits non-zero when it could measure none of what it was left to measure
+        sync_rc=0
+        plugin-qualify-sync --system > "$log" 2>&1 || sync_rc=$?
+        cat "$log"
         # the sets the sync took plugins from
         taken=$(sed -n 's/.*distributed: .*: applied (\(.*\))$/\1/p' "$log" | sort -u | paste -sd,)
         applied=$(grep -c 'distributed: .*: applied (' "$log" || true)
@@ -117,6 +120,27 @@ case $step in
             else
                 grep 'distributed: .*: binary differs' "$log"
                 echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
+            fi
+        fi
+        # plugin-qualify 0.20.7 has no flag that takes the distributed records and measures nothing (--refresh-pins and
+        # --rejudge return before the layer is read, src/qualify-sync.ts:1577-1613 and 1613), so a record of other
+        # bytes is then measured; with no JACK server that is left unmeasured and the run exits non-zero. That is
+        # explained only when every plugin the sync tried to measure is one whose record it refused with "binary
+        # differs": the run's plugin lines name no other key, and its summary counts exactly those plugins as
+        # measured or unmeasured, none refused, crashed or hung. Anything else fails. (The sync lists the first
+        # unmeasured plugin only; the count in its summary covers the rest.)
+        summary=$(grep -E '^qualified [0-9]+, skipped [0-9]+' "$log" | tail -1 || true)
+        field() { printf '%s' "$summary" | sed -n "s/.*[ ,]$1 \([0-9][0-9]*\).*/\1/p"; }
+        qualified_n=$(field qualified); refused_n=$(field refused); crashed_n=$(field crashed); hung_n=$(field hung); unmeasured_n=$(field unmeasured)
+        tried=$(( ${qualified_n:-0} + ${refused_n:-0} + ${crashed_n:-0} + ${hung_n:-0} + ${unmeasured_n:-0} ))
+        if [ "$sync_rc" -ne 0 ] || [ "$tried" -ne 0 ]; then
+            keys=$(sed -n 's/.*distributed: \(.*\): binary differs.*/\1/p' "$log" | sort -u)
+            stray=$(sed -n -E 's/^plugin-qualify-sync: ([^ ]+): (unmeasured|refused|crashed|hung|qualified)( .*)?$/\1/p' "$log" | sort -u | grep -vxF -f <(printf '%s\n' "$keys") || true)
+            if [ "$unproven" -gt 0 ] && [ "$tried" -eq "$unproven" ] && [ "${refused_n:-0}" -eq 0 ] && [ "${crashed_n:-0}" -eq 0 ] && [ "${hung_n:-0}" -eq 0 ] \
+               && [ -z "$stray" ] && ! grep -E ': unmeasured \(' "$log" | grep -vq 'no JACK server'; then
+                echo "$class/$set_: the sync tried to measure only the $unproven UNPROVEN records, and could not ($unmeasured_n unmeasured), as expected"
+            else
+                echo "::error::$class/$set_: the sync exited $sync_rc after trying to measure $tried plugins ($crashed_n crashed, $hung_n hung, $refused_n refused${stray:+; not records it refused: $stray}), which the $unproven UNPROVEN records do not explain"; exit 1
             fi
         fi
         if [ "$applied" -eq 0 ]; then

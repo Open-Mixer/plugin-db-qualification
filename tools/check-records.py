@@ -239,12 +239,14 @@ def check_set(path):
         files = binary.get("files")
         if not isinstance(binary.get("path"), str) or not isinstance(files, list) or not files:
             bad(name, "names no binary with its files")
+        elif any(isinstance(p, str) and p.startswith(DRY_DIR)
+                 for p in [binary["path"]] + [x.get("path") for x in files if isinstance(x, dict)]):
+            # before path-absolute: a dry run's record is refused as one, whatever form its path has
+            bad(name, f"its binary is under {DRY_DIR}: a record of a dry run stays out")
         elif binary["path"].startswith("/"):
             bad(name, f"path-absolute: binary.path {binary['path']!r} is not relative to the item's install root (section 3.7)")
         elif any(not isinstance(x.get("path"), str) or len(str(x.get("sha256", ""))) != 64 for x in files):
             bad(name, "a file of its binary has no path or no SHA-256")
-        elif any(p.startswith(DRY_DIR) for p in [binary["path"]] + [x["path"] for x in files]):
-            bad(name, f"its binary is under {DRY_DIR}: a record of a dry run stays out")
         if isinstance(host, str) and not any(v.get("host") == host for v in rec.get("verdicts") or []):
             without_verdict += 1
         probe = rec.get("probe") or {}

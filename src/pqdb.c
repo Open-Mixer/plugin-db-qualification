@@ -4,12 +4,14 @@
  * It reads no environment variable: the command and the tests do. Never called from a real-time path. */
 #define _GNU_SOURCE
 #include <plugin-qualification-db/pqdb.h>
+#include "pqdb_record.h"
 
 #include <omxcontract/omx_domain.h>
 #include <sqlite3.h>
 
 #include <ctype.h>
 #include <errno.h>
+#include <math.h>
 #include <pwd.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -25,20 +27,27 @@
 
 /* the statuses: negative, named by pqdb_code(); a callback of pqdb_each returns a positive value of its own */
 enum { S_OK = 0, S_ABSENT = -1, S_UNREADABLE = -2, S_NOT_A_STORE = -3, S_SCHEMA_MISMATCH = -4, S_SCHEMA_OTHER = -5,
-       S_DOMAIN_TOO_OLD = -6, S_WORD_UNKNOWN = -7, S_HOT_JOURNAL = -8, S_BUSY = -9, S_CONTRACT = -10 };
+       S_DOMAIN_TOO_OLD = -6, S_WORD_UNKNOWN = -7, S_HOT_JOURNAL = -8, S_BUSY = -9, S_CONTRACT = -10, S_LAYER = -11 };
 static const char *const CODES[] = {
     NULL, "qualification-db.absent", "qualification-db.unreadable", "qualification-db.not-a-store",
     "qualification-db.schema-mismatch", "qualification-db.schema-other", "qualification-db.domain-too-old",
-    "qualification-db.word-unknown", "qualification-db.hot-journal", "qualification-db.busy", NULL };
+    "qualification-db.word-unknown", "qualification-db.hot-journal", "qualification-db.busy", NULL,
+    "qualification-db.layer-unknown" };
 
 struct pqdb {
     sqlite3 *base, *user;
     char verdict_rating[64], verdict_deciding[64];
+    char msg[256];                  /* what the last refusal of pqdb_each said */
 };
+
+const char *pqdb_message(const pqdb *db)
+{
+    return db->msg[0] ? db->msg : NULL;
+}
 
 const char *pqdb_code(int status)
 {
-    if (status >= 0 || status < S_CONTRACT)
+    if (status >= 0 || status < S_LAYER)
         return NULL;
     return CODES[-status];   /* NULL for S_CONTRACT: the loader's own code is in the error's code */
 }
@@ -167,6 +176,14 @@ static int check_store(sqlite3 *db, const char *path, int want_user, pqdb_error 
     return S_OK;
 }
 
+/* The hosting exception (section 3.4, this pass only): there is no `hosting` domain. The reader does not open its
+ * store_domain row and does not check the words `hosting.*` of the word_check columns that have an item of it (the
+ * writer checked them against omx-clap-core's package); the other words of such a column are checked as any. Removing the exception is this one function's removal (and its two calls). */
+static int hosting_exception(const char *domain)
+{
+    return strcmp(domain, "hosting") == 0;
+}
+
 /* ---- the word check ---- */
 typedef struct { omx_domain *d[16]; char name[16][64]; int n; } domains;
 
@@ -195,6 +212,8 @@ static int open_domains(sqlite3 *db, const char *path, const char *cdir, domains
         const char *name = (const char *)sqlite3_column_text(st, 0), *ver = (const char *)sqlite3_column_text(st, 1);
         omx_domain_error e;
         int lrc;
+        if (hosting_exception(name))
+            continue;
         if (ds->n >= 16 || strlen(name) >= 64) {
             domains_close(ds); sqlite3_finalize(st);
             return fail(err, S_NOT_A_STORE, "%s: store_domain holds too many or too long domains", path);
@@ -262,7 +281,7 @@ static int adapter_code_ok(const item_set *s, const char *word)
     if (!dot || (size_t)(dot - word) >= sizeof host || !has_item(s, "ADAPTER_CODE_KINDS"))
         return 0;
     snprintf(host, sizeof host, "%.*s", (int)(dot - word), word);
-    if (!in_items(s, host, "HOST_PROFILES"))
+    if (!in_items(s, host, "ADAPTER_HOSTS"))
         return 0;
     for (int i = 0; i < s->n; i++) {
         size_t l = strlen(s->it[i].item);
@@ -305,11 +324,38 @@ static int ident_ok(const char *s)
     return 1;
 }
 
+/* the distinct words of one column, each looked up in the column's items. A column that has an item of the hosting
+ * domain (`hosting_col`) skips only the words that begin `hosting.`; any other word of it must be in its other items. */
+static int check_column(sqlite3 *db, const char *path, const char *tbl, const char *col, const item_set *set, int hosting_col,
+                        pqdb_error *err)
+{
+    sqlite3_stmt *words;
+    char sql[300];
+    int wrc, status = S_OK;
+    snprintf(sql, sizeof sql, "SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL", col, tbl, col);
+    if (sqlite3_prepare_v2(db, sql, -1, &words, NULL) != SQLITE_OK)
+        return fail(err, S_NOT_A_STORE, "%s: word_check names %s.%s, which is no column of the store", path, tbl, col);
+    while ((wrc = sqlite3_step(words)) == SQLITE_ROW) {
+        const char *w = (const char *)sqlite3_column_text(words, 0);
+        if (hosting_col && strncmp(w, "hosting.", 8) == 0)
+            continue;
+        if (!in_items(set, w, NULL) && !adapter_code_ok(set, w)) {
+            status = fail(err, S_WORD_UNKNOWN, "%s: %s.%s holds the word %s, which none of its items in the "
+                          "installed domains holds", path, tbl, col, w);
+            break;
+        }
+    }
+    if (status == S_OK && wrc != SQLITE_DONE)
+        status = fail_sql(err, db, path, "cannot read the words");
+    sqlite3_finalize(words);
+    return status;
+}
+
 static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_error *err)
 {
-    sqlite3_stmt *wc, *words;
+    sqlite3_stmt *wc;
     int rc = sqlite3_prepare_v2(db, "SELECT tbl, col, domain, item FROM word_check ORDER BY tbl, col, domain, item", -1, &wc, NULL);
-    int pending = 0, status = S_OK;
+    int pending = 0, status = S_OK, skip = 0;
     char tbl[64] = "", col[64] = "";
     item_set set;
     if (rc != SQLITE_OK)
@@ -326,26 +372,10 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
             break;
         }
         if (pending && (rc == SQLITE_DONE || strcmp(t, tbl) != 0 || strcmp(c, col) != 0)) {
-            char sql[300];
-            int wrc;
-            snprintf(sql, sizeof sql, "SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL", col, tbl, col);
-            if (sqlite3_prepare_v2(db, sql, -1, &words, NULL) != SQLITE_OK) {
-                status = fail(err, S_NOT_A_STORE, "%s: word_check names %s.%s, which is no column of the store", path, tbl, col);
-                break;
-            }
-            while ((wrc = sqlite3_step(words)) == SQLITE_ROW) {
-                const char *w = (const char *)sqlite3_column_text(words, 0);
-                if (!in_items(&set, w, NULL) && !adapter_code_ok(&set, w)) {
-                    status = fail(err, S_WORD_UNKNOWN, "%s: %s.%s holds the word %s, which none of its items in the "
-                                  "installed domains holds", path, tbl, col, w);
-                    break;
-                }
-            }
-            if (status == S_OK && wrc != SQLITE_DONE)
-                status = fail_sql(err, db, path, "cannot read the words");
-            sqlite3_finalize(words);
+            status = check_column(db, path, tbl, col, &set, skip, err);
             if (status != S_OK)
                 break;
+            skip = 0;
             set.n = 0;
             pending = 0;
         }
@@ -357,6 +387,13 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
         }
         {
             omx_domain *d = domain_named(ds, (const char *)sqlite3_column_text(wc, 2));
+            if (hosting_exception((const char *)sqlite3_column_text(wc, 2))) {
+                snprintf(tbl, sizeof tbl, "%s", t);
+                snprintf(col, sizeof col, "%s", c);
+                skip = 1;
+                pending = 1;
+                continue;
+            }
             if (!d) {
                 status = fail(err, S_NOT_A_STORE, "%s: word_check names the domain %s, which store_domain does not list",
                               path, sqlite3_column_text(wc, 2));
@@ -473,7 +510,8 @@ static const char *const SELECT =
     "SELECT p.sha256, p.format, p.uri, r.offer, r.host_class, s.name, "
     "r.pkg_format, r.pkg_name, r.pkg_version, r.pkg_release, r.pkg_distro, r.pkg_arch, "
     "c.rate, c.quantum, c.outcome, c.cost_median, c.cost_percentile_p, c.cost_percentile_value, "
-    "c.latency_measured_frames, c.latency_declared_frames, c.mem_first_instance_kb, c.mem_per_instance_kb "
+    "c.latency_measured_frames, c.latency_declared_frames, c.mem_first_instance_kb, c.mem_per_instance_kb, "
+    "r.binary_path, r.layout_scheme, r.layout_sha256, r.tested_version, r.unpinnable "
     "FROM cell c JOIN record r ON r.record_id = c.record_id JOIN plugin p ON p.plugin_id = r.plugin_id "
     "LEFT JOIN record_set s ON s.set_id = r.set_id "
     "WHERE (?1 IS NULL OR p.sha256 = ?1) AND (?2 IS NULL OR p.format = ?2) AND (?3 IS NULL OR p.uri = ?3) "
@@ -481,13 +519,14 @@ static const char *const SELECT =
     "AND (?7 < 0 OR c.quantum = ?7) AND (?8 IS NULL OR r.pkg_format = ?8) AND (?9 IS NULL OR r.pkg_name = ?9) "
     "AND (?10 IS NULL OR r.pkg_version = ?10) AND (?11 IS NULL OR r.pkg_release = ?11) "
     "AND (?12 IS NULL OR r.pkg_distro = ?12) AND (?13 IS NULL OR r.pkg_arch = ?13) "
+    "AND (?14 IS NULL OR r.binary_path = ?14) "
     "ORDER BY p.sha256, p.format, p.uri, r.offer, r.host_class, c.rate, c.quantum";
 
 static const char *const SHADOWED =
     "SELECT 1 FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id "
     "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND r.offer = ?4 AND r.host_class = ?5 LIMIT 1";
 
-static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const pqdb_query *q,
+static int walk_layer(pqdb *owner, sqlite3 *h, const char *layer, sqlite3 *shadow_db, const pqdb_query *q,
                       int (*each)(const pqdb_result *, void *), void *ctx)
 {
     sqlite3_stmt *st, *sh = NULL;
@@ -510,6 +549,8 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
     for (int i = 0; i < 2; i++)
         if (qs2[i])
             sqlite3_bind_text(st, 12 + i, qs2[i], -1, SQLITE_STATIC);
+    if (q->binary_path)
+        sqlite3_bind_text(st, 14, q->binary_path, -1, SQLITE_STATIC);
     while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
         pqdb_result r;
         const char *t[6];
@@ -540,6 +581,12 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
             r.cost_median_ns = sqlite3_column_double(st, 15);
             r.cost_p = sqlite3_column_type(st, 16) == SQLITE_NULL ? 0 : sqlite3_column_int(st, 16);
             r.cost_p_ns = sqlite3_column_double(st, 17);
+            if (!isfinite(r.cost_median_ns) || !isfinite(r.cost_p_ns)) {     /* JSON has no Infinity: refused by name */
+                snprintf(owner->msg, sizeof owner->msg, "%s layer, %s %s (offer %s, class %s): the column %s holds a number that is not finite",
+                         layer, r.format, r.uri, r.offer, r.host_class, isfinite(r.cost_median_ns) ? "cost_percentile_value" : "cost_median");
+                ret = S_NOT_A_STORE;
+                break;
+            }
         }
         if (sqlite3_column_type(st, 18) != SQLITE_NULL || sqlite3_column_type(st, 19) != SQLITE_NULL) {
             r.has_latency = 1;
@@ -550,6 +597,11 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
             r.mem_first_kb = (long)sqlite3_column_int64(st, 20);
             r.mem_per_instance_kb = (long)sqlite3_column_int64(st, 21);
         }
+        r.binary_path = (const char *)sqlite3_column_text(st, 22);
+        r.layout_scheme = (const char *)sqlite3_column_text(st, 23);
+        r.layout_sha256 = (const char *)sqlite3_column_text(st, 24);
+        r.tested_version = (const char *)sqlite3_column_text(st, 25);
+        r.unpinnable = sqlite3_column_int(st, 26) == 1;
         if ((ret = each(&r, ctx)) != 0)
             break;
     }
@@ -562,10 +614,43 @@ static int walk_layer(sqlite3 *h, const char *layer, sqlite3 *shadow_db, const p
 
 int pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result *, void *), void *ctx)
 {
-    int ret = 0;
-    if (db->user && (ret = walk_layer(db->user, "user", NULL, q, each, ctx)) != 0)
+    int ret = 0, want_user = 1, want_base = 1;
+    sqlite3 *shadow = db->user;
+    if (q->layer) {
+        /* a named layer is that layer's records alone, none shadowed (section 8, change 3, case 19) */
+        if (strcmp(q->layer, "user") == 0) want_base = 0;
+        else if (strcmp(q->layer, "base") == 0) want_user = 0, shadow = NULL;
+        else return S_LAYER;
+    }
+    if (want_user && db->user && (ret = walk_layer((pqdb *)db, db->user, "user", NULL, q, each, ctx)) != 0)
         return ret;
-    return walk_layer(db->base, "base", db->user, q, each, ctx);
+    return want_base ? walk_layer((pqdb *)db, db->base, "base", shadow, q, each, ctx) : 0;
+}
+
+/* the list of the record a result is a cell of: the record_file rows in ord order (section 3.7) */
+int pqdb_files(const pqdb *db, const pqdb_result *r, int (*each)(const char *path, const char *sha256, void *), void *ctx)
+{
+    sqlite3 *h = strcmp(r->layer, "user") == 0 ? db->user : db->base;
+    sqlite3_stmt *st;
+    int rc, ret = 0;
+    if (!h)
+        return 0;
+    if (sqlite3_prepare_v2(h, "SELECT f.path, f.sha256 FROM record_file f "
+                           "JOIN claim cl ON cl.record_id = f.record_id JOIN plugin p ON p.plugin_id = cl.plugin_id "
+                           "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND cl.offer = ?4 AND cl.host_class = ?5 "
+                           "AND cl.rate = ?6 AND cl.quantum = ?7 ORDER BY f.ord", -1, &st, NULL) != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_text(st, 1, r->sha256, -1, SQLITE_STATIC); sqlite3_bind_text(st, 2, r->format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, r->uri, -1, SQLITE_STATIC); sqlite3_bind_text(st, 4, r->offer, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 5, r->host_class, -1, SQLITE_STATIC); sqlite3_bind_int(st, 6, r->rate);
+    sqlite3_bind_int(st, 7, r->quantum);
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW)
+        if ((ret = each((const char *)sqlite3_column_text(st, 0), (const char *)sqlite3_column_text(st, 1), ctx)) != 0)
+            break;
+    if (ret == 0 && rc != SQLITE_DONE && rc != SQLITE_ROW)
+        ret = status_of(h);
+    sqlite3_finalize(st);
+    return ret;
 }
 
 int pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char *host, const pqdb_verdict *, void *), void *ctx)
@@ -634,4 +719,141 @@ int pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb
     }
     sqlite3_finalize(st);
     return rc;
+}
+
+/* ---- whole records ---- */
+int pqdb_record_json(const pqdb *db, const pqdb_result *r, char **json, pqdb_error *err)
+{
+    sqlite3 *h = strcmp(r->layer, "user") == 0 ? db->user : db->base;
+    sqlite3_stmt *st;
+    long long rid = 0;
+    int rc, found = 0;
+    char why[200];
+    *json = NULL;
+    if (!h)
+        return fail(err, S_UNREADABLE, "the %s layer is not open: no record to read", r->layer);
+    if (sqlite3_prepare_v2(h, "SELECT cl.record_id FROM claim cl JOIN plugin p ON p.plugin_id = cl.plugin_id "
+                           "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND cl.offer = ?4 AND cl.host_class = ?5 "
+                           "AND cl.rate = ?6 AND cl.quantum = ?7", -1, &st, NULL) != SQLITE_OK) {
+        rc = status_of(h);
+        return fail(err, rc, "cannot read the record of %s: %s", r->uri, sqlite3_errmsg(h));
+    }
+    sqlite3_bind_text(st, 1, r->sha256, -1, SQLITE_STATIC); sqlite3_bind_text(st, 2, r->format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, r->uri, -1, SQLITE_STATIC); sqlite3_bind_text(st, 4, r->offer, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 5, r->host_class, -1, SQLITE_STATIC); sqlite3_bind_int(st, 6, r->rate);
+    sqlite3_bind_int(st, 7, r->quantum);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) { found = 1; rid = sqlite3_column_int64(st, 0); }
+    sqlite3_finalize(st);
+    if (!found)
+        return fail(err, S_UNREADABLE, "no record of %s %s (offer %s, class %s) at %d/%d in the %s layer", r->format, r->uri,
+                    r->offer, r->host_class, r->rate, r->quantum, r->layer);
+    rc = pqdb_record_document(h, rid, json, why, sizeof why);
+    if (rc == -2)     /* a value no document can hold: the store is not what the writer writes */
+        return fail(err, S_NOT_A_STORE, "%s layer: %s", r->layer, why);
+    if (rc != 0)
+        return fail(err, S_UNREADABLE, "%s", why);
+    return S_OK;
+}
+
+/* ---- counts ---- */
+typedef struct { char *format, *uri; int offered; } plug;
+typedef struct { plug *p; size_t n, cap; } plugs;
+
+static int plug_cmp(const void *a, const void *b)
+{
+    const plug *x = a, *y = b;
+    int c = strcmp(x->format, y->format);
+    return c ? c : strcmp(x->uri, y->uri);
+}
+static int collect_plugins(sqlite3 *h, sqlite3 *shadow_db, plugs *out)
+{
+    sqlite3_stmt *st, *sh = NULL;
+    int rc, ret = S_OK;
+    if (sqlite3_prepare_v2(h, "SELECT p.format, p.uri, r.offer, r.host_class, p.sha256, "
+                           "EXISTS (SELECT 1 FROM tier_offered t WHERE t.record_id = r.record_id) "
+                           "FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id", -1, &st, NULL) != SQLITE_OK)
+        return status_of(h);
+    if (shadow_db && sqlite3_prepare_v2(shadow_db, SHADOWED, -1, &sh, NULL) != SQLITE_OK) {
+        ret = status_of(shadow_db);
+        sqlite3_finalize(st);
+        return ret;
+    }
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+        plug *p;
+        if (sh) {     /* a base record the user layer has a record of the shadow key for is hidden (section 4) */
+            int hit;
+            sqlite3_reset(sh);
+            sqlite3_bind_text(sh, 1, (const char *)sqlite3_column_text(st, 4), -1, SQLITE_STATIC);
+            sqlite3_bind_text(sh, 2, (const char *)sqlite3_column_text(st, 0), -1, SQLITE_STATIC);
+            sqlite3_bind_text(sh, 3, (const char *)sqlite3_column_text(st, 1), -1, SQLITE_STATIC);
+            sqlite3_bind_text(sh, 4, (const char *)sqlite3_column_text(st, 2), -1, SQLITE_STATIC);
+            sqlite3_bind_text(sh, 5, (const char *)sqlite3_column_text(st, 3), -1, SQLITE_STATIC);
+            hit = sqlite3_step(sh);
+            if (hit == SQLITE_ROW)
+                continue;
+            if (hit != SQLITE_DONE) { ret = status_of(shadow_db); break; }
+        }
+        if (out->n == out->cap) {
+            size_t cap = out->cap ? out->cap * 2 : 256;
+            plug *np = realloc(out->p, cap * sizeof *np);
+            if (!np) { ret = S_UNREADABLE; break; }
+            out->p = np; out->cap = cap;
+        }
+        p = &out->p[out->n];
+        p->format = strdup((const char *)sqlite3_column_text(st, 0));
+        p->uri = strdup((const char *)sqlite3_column_text(st, 1));
+        p->offered = sqlite3_column_int(st, 5);
+        if (!p->format || !p->uri) { free(p->format); free(p->uri); ret = S_UNREADABLE; break; }
+        out->n++;
+    }
+    if (ret == S_OK && rc != SQLITE_DONE && rc != SQLITE_ROW)
+        ret = status_of(h);
+    sqlite3_finalize(sh);
+    sqlite3_finalize(st);
+    return ret;
+}
+
+int pqdb_counts(const pqdb *db, const char *layer, int (*each)(const char *format, long plugins, long offered, long not_offered, void *),
+                void *ctx)
+{
+    plugs all = { NULL, 0, 0 };
+    int ret = S_OK, want_user = 1, want_base = 1;
+    sqlite3 *shadow = db->user;
+    if (layer) {
+        if (strcmp(layer, "user") == 0) want_base = 0;
+        else if (strcmp(layer, "base") == 0) want_user = 0, shadow = NULL;
+        else return S_LAYER;
+    }
+    if (want_user && db->user)
+        ret = collect_plugins(db->user, NULL, &all);
+    if (ret == S_OK && want_base)
+        ret = collect_plugins(db->base, shadow, &all);
+    if (ret == S_OK && all.n > 0) {
+        size_t i = 0, w = 0;
+        qsort(all.p, all.n, sizeof *all.p, plug_cmp);
+        /* a plugin is a format and a uri: records of one count once, and it is offered when any of them is */
+        for (i = 0; i < all.n; i++) {
+            if (w > 0 && plug_cmp(&all.p[w - 1], &all.p[i]) == 0) {
+                all.p[w - 1].offered |= all.p[i].offered;
+                free(all.p[i].format); free(all.p[i].uri);
+            } else {
+                all.p[w++] = all.p[i];
+            }
+        }
+        for (i = 0; i < w && ret == S_OK;) {
+            long plugins = 0, offered = 0;
+            size_t j = i;
+            while (j < w && strcmp(all.p[j].format, all.p[i].format) == 0) {
+                plugins++;
+                offered += all.p[j].offered != 0;
+                j++;
+            }
+            ret = each(all.p[i].format, plugins, offered, plugins - offered, ctx);
+            i = j;
+        }
+        for (i = 0; i < w; i++) { free(all.p[i].format); free(all.p[i].uri); }
+    }
+    free(all.p);
+    return ret;
 }

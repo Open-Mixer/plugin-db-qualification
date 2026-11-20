@@ -31,11 +31,32 @@ plugin-qualification-db \- query the OpenMixer qualification store
 .IR d ]
 .RB [ \-\-pkg\-arch
 .IR a ]
+.RB [ \-\-binary\-path
+.IR path ]
+.RB [ \-\-layer
+.IR user | base ]
+.RB [ \-\-records ]
+.B \-\-json
+.RI [ common\ options ]
+.br
+.B plugin-qualification-db counts
+.RB [ \-\-layer
+.IR user | base ]
 .B \-\-json
 .RI [ common\ options ]
 .br
 .B plugin-qualification-db check
 .RI [ common\ options ]
+.PP
+.IR "common options" :
+.RB [ \-\-base
+.IR path ]
+.RB [ \-\-user
+.IR path ]
+.RB [ \-\-contract\-dir
+.IR dir ]
+or
+.BR \-\-scope " " user | system
 .SH DESCRIPTION
 Reads the qualification store with libplugin-qualification-db: the base database installed by
 plugin-qualification-records and the user layer, merged by whole record (a user record shadows every base
@@ -43,14 +64,78 @@ record of its plugin, offer and host class). The command is the reader for progr
 .SH COMMANDS
 .TP
 .B query \-\-json
-Prints one JSON object per line for every result the filters match, user layer first: the layer, the plugin key,
-the offer, the host class, the set, the package fields (null when not known), the cell's rate, quantum and outcome,
-the cost, latency and memory figures with their has_ flags, and every verdict of the record. Words and numbers only.
+Prints one JSON object per line for every result the filters match, user layer first. The keys, in this order:
+.BR layer ,
+.BR sha256 ,
+.BR format ,
+.BR uri ,
+.BR offer ,
+.BR host_class ,
+.BR set ,
+.BR pkg_format ,
+.BR pkg_name ,
+.BR pkg_version ,
+.BR pkg_release ,
+.BR pkg_distro ,
+.BR pkg_arch ,
+.B binary_path
+(the main binary's path below its install root),
+.BR layout_scheme ,
+.BR layout_sha256 ,
+.B tested_version
+(strings, null when the record holds none),
+.B unpinnable
+(0 or 1),
+.B files
+(the record's per-file list in its order: an array of objects with
+.B path
+and
+.BR sha256 ,
+never empty), the cell's
+.BR rate ,
+.B quantum
+and
+.BR outcome ,
+the cost, latency and memory figures with their has_ flags, and
+.B verdicts
+(every verdict of the record). Words and numbers only.
+.TP
+.B query \-\-json \-\-records
+Prints one JSON object per line for every RECORD the filters match (the results of one record are one line):
+.BR layer ,
+.BR sha256 ,
+.BR format ,
+.BR uri ,
+.BR offer ,
+.B host_class
+and
+.BR record ,
+the whole record as a document of plugin-qualify.qualification-record/1. The same filters apply, but a record is not a
+cell:
+.B \-\-rate
+and
+.B \-\-quantum
+are refused (exit 2).
+.TP
+.B counts \-\-json
+Prints one JSON object per line for every format, in format order:
+.BR format ,
+.B plugins
+(the plugins of that format, a plugin being a format and a uri),
+.B offered
+(those with a record that has a tier_offered row) and
+.BR not_offered .
+The merged answer, or one layer with
+.BR \-\-layer .
 .TP
 .B check
-Opens both layers and checks every word column against the installed contract domains. Prints
+Opens both layers, checks every word column against the installed contract domains, and checks the key rule for
+every record of both layers: the key's SHA-256 is the SHA-256 of the entry of the record's list whose path is its
+binary_path. Prints
 .B ok
-and exits 0, or prints the refusal code and its message and exits 1.
+and exits 0, or prints the refusal code and its message and exits 1; a record that breaks the key rule gives
+.BR qualification-db.key-mismatch ,
+naming the key and the path.
 .SH OPTIONS
 .TP
 .BI \-\-base " path"
@@ -69,6 +154,25 @@ An absent user layer is an empty layer.
 The contract directory the word check reads. Default: the value of
 .BR OMX_CONTRACT_PATH ,
 else the installed contract directory.
+.TP
+.BI \-\-scope " user|system"
+Opens the production places of that scope as the library does (the installed base, and the user layer under the home
+of the effective user, or the system layer under /var/lib/omx/qualification), whatever the environment says. The
+default, with none of the options above, is the user scope's places, with the variables below. It is a usage error
+(exit 2) with
+.BR \-\-base ,
+.B \-\-user
+or
+.BR \-\-contract\-dir .
+.TP
+.BI \-\-binary\-path " path"
+(query) Only records whose main binary's path is exactly
+.IR path ,
+as stored: relative to the install root, case-sensitive, no suffix match.
+.TP
+.BI \-\-layer " user|base"
+(query, counts) Only that layer's records: the user layer's every record of the filters, none shadowed, or the base's,
+including a record the user layer shadows. Without it, the merged answer.
 .SH ENVIRONMENT
 .BR PLUGIN_QUALIFICATION_DB_BASE ,
 .BR PLUGIN_QUALIFICATION_DB_USER
@@ -85,7 +189,11 @@ are read by this command only, and a flag beats its variable. The library reads 
 .BR qualification-db.domain-too-old ,
 .BR qualification-db.word-unknown ,
 .BR qualification-db.hot-journal ,
-.B qualification-db.busy
+.BR qualification-db.busy ,
+.B qualification-db.layer-unknown
+(a library caller named another layer), for
+.B check
+.B qualification-db.key-mismatch ,
 or a code of the contract loader); 2 on a usage error.
 .SH FILES
 .TP

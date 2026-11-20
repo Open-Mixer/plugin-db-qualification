@@ -20,7 +20,7 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026111001
+Version: 2026111901
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
@@ -110,6 +110,8 @@ It reads figures at start-up, never in a real-time path.
 Summary: Reader of the OpenMixer qualification store, development files
 Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
 Requires: plugin-qualification-db-schema = %{version}-%{release}
+Requires: sqlite-devel >= 3.37.0
+Requires: libomx-domain-devel >= 3.20.0
 
 %description -n libplugin-qualification-db-devel
 The header, the shared library link and plugin-qualification-db.pc, whose

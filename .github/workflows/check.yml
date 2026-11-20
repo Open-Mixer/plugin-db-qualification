@@ -33,6 +33,7 @@ jobs:
       - run: python3 -m unittest tools/test_fedora44_channel_check.py
       - run: python3 -m unittest tools/test_fedora44_deliver.py
       - run: python3 -m unittest tools/test_build_package.py
+      - run: python3 -m unittest tools/test_dev_requires.py
       - run: python3 -m unittest tools/test_sets.py
       - run: python3 -m unittest tools/test_fedora44_rt.py
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
@@ -65,6 +66,13 @@ jobs:
           dnf repoquery --installed --qf '%{name} %{version} %{from_repo}\n' 'omx-*' 'libomx-*' | tee /tmp/from-repo
           if grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
       - run: make check
+      # the hosting exception of the store spec (section 3.4) ends when omx-clap-core ships a `hosting` domain: fail while
+      # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone)
+      - name: The hosting exception ends with omx-clap-core's hosting domain
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap-core
+          sh tools/hosting-skip-ends.sh /tmp/omx-clap-core src/pqdb.c
 
   # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the
   # owners' own, read from their main (the test assembles the contract directory from these clones); the hosting words

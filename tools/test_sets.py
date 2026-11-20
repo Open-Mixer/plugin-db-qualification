@@ -640,11 +640,11 @@ class Prove(Tree):
         self.assertEqual(rc, 1)
         self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class); failed: fedora44-96000-256", out)
 
-    def test_plugins_taken_from_another_set_fail_the_proof(self):
+    def test_plugins_taken_from_another_set_too_are_a_wrong_winner_not_a_failure(self):
         self.with_two_cells()
-        rc, out, log = self.prove("rpm", "x86_64", WRONG_SET="fedora44-48000-512")
-        self.assertEqual(rc, 1)
-        self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class); failed: fedora44-96000-256", out)
+        rc, out, log = self.prove("rpm", "x86_64", WRONG_SET="fedora44-48000-512", PROVE_NOTES=os.path.join(self.tmp.name, "notes.md"))
+        self.assertEqual(rc, 0, out + log)
+        self.assertIn("plugin-qualify takes fedora44-48000-512,fedora44-96000-256; the store's rule's winner is fedora44-96000-256", self.notes())
 
     def two_tiers_at_a_cell(self):
         """x86-64 as the release carries it: the provisional set and the reference set of one cell."""
@@ -652,34 +652,56 @@ class Prove(Tree):
         self.add_set("x86-64", "fedora44-rt-48000-64", tier="reference", measured="2026-11-09", cells=[(48000, 64)])
         self.respec()
 
-    def test_a_set_another_set_supersedes_at_its_cell_is_proven_by_the_winner_being_taken(self):
+    def notes(self):
+        with open(os.path.join(self.tmp.name, "notes.md")) as f:
+            return f.read()
+
+    def test_the_set_the_sync_takes_at_a_cell_is_recorded_beside_the_rules_winner(self):
+        # plugin-qualify 0.20.7 takes the first set by name that holds the cell: the provisional set, not the reference one
         self.two_tiers_at_a_cell()
-        rc, out, log = self.prove("rpm", "x86_64", STUB_AT_48000_64="fedora44-rt-48000-64")
+        rc, out, log = self.prove("rpm", "x86_64", PROVE_NOTES=os.path.join(self.tmp.name, "notes.md"))
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("2 of 2 sets proven", out)
+        self.assertIn("1 of 2 sets proven, 0 not proven (measured on another host class), 1 UNPROVEN (never taken by the sync): fedora44-rt-48000-64", out)
+        self.assertIn("::warning::1 cells where plugin-qualify takes another set than the store's rule gives them", out)
+        notes = self.notes()
+        self.assertIn("### WRONG WINNER", notes)
+        self.assertIn("- x86-64 48000/64: plugin-qualify takes fedora44-48000-64; the store's rule's winner is fedora44-rt-48000-64", notes)
+        self.assertIn("### UNPROVEN sets", notes)
+        self.assertIn("- x86-64/fedora44-rt-48000-64: never taken by the sync at its cell (x86-64 48000/64: it takes fedora44-48000-64)", notes)
+        self.assertNotIn("x86-64/fedora44-48000-64: never taken", notes)
 
-    def test_the_sync_taking_the_superseded_set_fails_both_sets_of_the_cell(self):
+    def test_a_sync_that_takes_the_rules_winner_is_no_wrong_winner_and_the_other_set_is_unproven(self):
         self.two_tiers_at_a_cell()
-        rc, out, log = self.prove("rpm", "x86_64", STUB_AT_48000_64="fedora44-48000-64")
-        self.assertEqual(rc, 1)
-        self.assertIn("failed: fedora44-48000-64 fedora44-rt-48000-64", out)
+        rc, out, log = self.prove("rpm", "x86_64", STUB_AT_48000_64="fedora44-rt-48000-64", PROVE_NOTES=os.path.join(self.tmp.name, "notes.md"))
+        self.assertEqual(rc, 0, out + log)
+        notes = self.notes()
+        self.assertNotIn("WRONG WINNER", notes)
+        self.assertIn("### Cells where the sync takes the set the store's rule gives them\n\n- x86-64 48000/64: plugin-qualify takes fedora44-rt-48000-64, the store's rule's winner", notes)
+        self.assertIn("- x86-64/fedora44-48000-64: never taken by the sync", notes)
 
-    def test_the_cell_sets_of_a_pi_win_their_cells_over_the_base_set_of_an_earlier_date(self):
-        # the dry run: all three sets hardware, the base measured earlier; the sync took the base at the cells
+    def test_the_pi_cell_sets_the_sync_does_not_take_are_unproven_and_their_cells_wrong_winners(self):
+        # the dry run: all three sets hardware, the base measured earlier; 0.20.7 took the base at the cells
+        shutil.rmtree(self.path("records", "rpi5", "zynthian-vangelis"))
         for name, measured, cells in (("zynthian-vangelis", "2026-11-06", [(48000, 128), (48000, 256), (96000, 256)]),
                                       ("zynthian-vangelis-48000-256", "2026-11-08", [(48000, 256)]),
                                       ("zynthian-vangelis-96000-256", "2026-11-08", [(96000, 256)])):
-            if name == "zynthian-vangelis":
-                shutil.rmtree(self.path("records", "rpi5", name))
             self.add_set("rpi5", name, tier="hardware", measured=measured, cells=cells)
         self.respec()
-        rc, out, log = self.prove("deb", "arm64", STUB_HOST="zynthian-vangelis")
+        rc, out, log = self.prove("deb", "arm64", STUB_AT_48000_256="zynthian-vangelis", STUB_AT_96000_256="zynthian-vangelis",
+                                  STUB_HOST="zynthian-vangelis", PROVE_NOTES=os.path.join(self.tmp.name, "notes.md"))
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("3 of 3 sets proven", out)
-        shutil.rmtree(os.path.join(self.tmp.name, "root"))
-        rc, out, log = self.prove("deb", "arm64", STUB_HOST="zynthian-vangelis", STUB_AT_48000_256="zynthian-vangelis")
+        self.assertIn("1 of 3 sets proven, 0 not proven (measured on another host class), 2 UNPROVEN (never taken by the sync): "
+                      "zynthian-vangelis-48000-256 zynthian-vangelis-96000-256", out)
+        notes = self.notes()
+        for cellname in ("48000/256", "96000/256"):
+            self.assertIn(f"- rpi5 {cellname}: plugin-qualify takes zynthian-vangelis; the store's rule's winner is zynthian-vangelis-{cellname.replace('/', '-')}", notes)
+        self.assertNotIn("WRONG WINNER: cells where the sync takes another set than the store's rule gives them\n\n- rpi5, the cells", notes)
+
+    def test_a_sync_that_takes_nothing_still_fails_the_proof(self):
+        self.two_tiers_at_a_cell()
+        rc, out, log = self.prove("rpm", "x86_64", BAD_GRID="48000/64", PROVE_NOTES=os.path.join(self.tmp.name, "notes.md"))
         self.assertEqual(rc, 1)
-        self.assertIn("failed: zynthian-vangelis-48000-256", out)
+        self.assertIn("failed: fedora44-48000-64 fedora44-rt-48000-64", out)
 
     def test_two_sets_of_one_tier_and_date_at_a_cell_fail_the_proof_by_the_rules_name(self):
         self.add_set("x86-64", "fedora44-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])

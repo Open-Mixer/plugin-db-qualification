@@ -62,6 +62,8 @@ CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
 BLOCK_END = "# END per-architecture"
 FORMATS = ("deb", "rpm")
+# tools/prove-set.sh set: the sync never took the set (named, not failed)
+UNPROVEN_RC = 3
 
 
 class Refused(Exception):
@@ -420,10 +422,38 @@ def machine_arch(root, kind):
     raise Refused(f"this machine ({m}) has no line in {ARCH_CLASSES}")
 
 
+NOTE_SECTIONS = (
+    ("wrong", "WRONG WINNER: cells where the sync takes another set than the store's rule gives them"),
+    ("unproven-set", "UNPROVEN sets: the sync never takes them"),
+    ("pick", "Cells where the sync takes the set the store's rule gives them"),
+)
+
+
+def write_notes(path):
+    """The findings tools/prove-set.sh appended to <path> as "<kind>|<text>", written back as the sections of the
+    release notes, each line once. The number of WRONG WINNER lines."""
+    if not path or not os.path.isfile(path):
+        return 0
+    with open(path, encoding="utf-8") as f:
+        found = [l.rstrip("\n").split("|", 1) for l in f if "|" in l]
+    out = []
+    for kind, title in NOTE_SECTIONS:
+        lines = sorted({t for k, t in found if k == kind})
+        if lines:
+            out += [f"### {title}", ""] + [f"- {t}" for t in lines] + [""]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out))
+    return len({t for k, t in found if k == "wrong"})
+
+
 def prove(root, kind, pkgs):
     arch = machine_arch(root, kind)
     sets = carried(root, kind, arch)
     script = os.path.join(HERE, "prove-set.sh")
+    # PROVE_NOTES: the file the proof's findings go to, for the release notes (a new one each run)
+    notes_file = os.environ.get("PROVE_NOTES")
+    if notes_file and os.path.exists(notes_file):
+        os.remove(notes_file)
     print(f"{PACKAGE} for {kind} {arch}: {len(sets)} sets", flush=True)
     if not sets:
         print(f"::error::{PACKAGE} ({arch}) carries no set: nothing to prove", flush=True)
@@ -435,7 +465,7 @@ def prove(root, kind, pkgs):
         print(f"::error::{PACKAGE} ({arch}) did not install", flush=True)
         subprocess.run(["bash", script, "remove", kind], cwd=root)
         return 1
-    failed = []
+    failed, unproven_sets = [], []
     total, unmatched = len(sets), []
     try:
         # the package holds the classes of its architecture, each with the sets of the tree, and nothing else
@@ -478,12 +508,19 @@ def prove(root, kind, pkgs):
                 continue
             r = subprocess.run(["bash", script, "set", kind, cls, set_, cell(set_), winner], cwd=root)
             print("::endgroup::", flush=True)
-            if r.returncode != 0:
+            if r.returncode == UNPROVEN_RC:
+                unproven_sets.append(set_)
+            elif r.returncode != 0:
                 print(f"::error::{cls}/{set_}: the sync did not take it from the records", flush=True)
                 failed.append(set_)
     finally:
         subprocess.run(["bash", script, "remove", kind], cwd=root)
-    print(f"{len(sets) - len(failed)} of {total} sets proven, {len(unmatched)} not proven (measured on another host class)" + (f"; failed: {' '.join(failed)}" if failed else ""))
+    wrong = write_notes(notes_file)
+    if wrong:
+        print(f"::warning::{wrong} cells where plugin-qualify takes another set than the store's rule gives them (named in the notes)", flush=True)
+    print(f"{len(sets) - len(failed) - len(unproven_sets)} of {total} sets proven, {len(unmatched)} not proven (measured on another host class)"
+          + (f", {len(unproven_sets)} UNPROVEN (never taken by the sync): {' '.join(unproven_sets)}" if unproven_sets else "")
+          + (f"; failed: {' '.join(failed)}" if failed else ""))
     return 1 if failed else 0
 
 

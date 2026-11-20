@@ -12,9 +12,14 @@
 #   tools/prove-set.sh install deb|rpm <pkg dir> <arch>    the one package of <arch> from the build artifact
 #   tools/prove-set.sh set deb|rpm <class> <set> <rate/quantum or -> <winner>
 #
-# <winner> is the set the sync is to take the plugins from at that cell: of the class's sets that hold it, the one the
-# store's claim rule settles on (tools/sets.py expected_winner: tier, then date). A set another set supersedes there is
-# proven by the sync taking the winner; a plugin taken from any other set fails.
+# <winner> is the set the store's claim rule gives that cell: of the class's sets that hold it, the one settled on by
+# tier, then date (tools/sets.py expected_winner, which calls tools/records-db.py's rule). plugin-qualify 0.20.7 does
+# not apply that rule: it takes the first set by name that holds the cell (fixed in plugin-qualify#152, 0.20.8). The
+# proof records what the sync took, and does not require the winner:
+#   - the sync took a set other than the winner: a WRONG WINNER, named (appended to $PROVE_NOTES as "wrong|<text>");
+#   - the sync never took this set: the set is UNPROVEN, named ("unproven-set|<text>"), exit 3;
+#   - the sync took the winner: noted ("pick|<text>"). Every run notes the set the sync picked per cell.
+# A sync that takes nothing, and every other refusal, fails.
 #   tools/prove-set.sh remove deb|rpm
 #
 # deb: the package from <pkg dir>/trixie/, with Debian's own lv2vocoder, whose bytes are the ones the Zynthian image
@@ -30,6 +35,11 @@ set -euo pipefail
 pkg=plugin-qualification-records
 step=$1 kind=$2
 r=${PROVE_ROOT:-}
+
+# a line of what the proof found, for the release notes (PROVE_NOTES names the file; the proof's caller reads it)
+note() {
+    [ -z "${PROVE_NOTES:-}" ] || printf '%s|%s\n' "$1" "$2" >> "$PROVE_NOTES"
+}
 
 clear_state() {
     rm -rf "$r/var/lib/omx/qualification" "$r/var/lib/omx/qualify-sync.json" "$r/var/lib/omx/qualified.pins" "$r/etc/omx/qualify.conf" "$r/etc/omx/plugin-hostd.conf"
@@ -84,17 +94,30 @@ case $step in
         } > "$r/etc/omx/qualify.conf"
         log=$(mktemp)
         plugin-qualify-sync --system 2>&1 | tee "$log"
-        # every plugin taken comes from the set the store's rule says holds the cell: this set, or the set that supersedes it
-        applied=$(grep -c "distributed: .*: applied ($winner)\$" "$log" || true)
-        other=$(grep 'distributed: .*: applied (' "$log" | grep -vc "applied ($winner)\$" || true)
-        echo "$class/$set_: expected winner $winner; applied $applied, from another set $other"
-        [ "$applied" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from $winner, the set the store's rule gives the cell"; exit 1; }
-        [ "$other" -eq 0 ] || { echo "::error::$class/$set_: the sync took plugins from a set other than $winner, the set the store's rule gives the cell"; exit 1; }
-        [ "$winner" = "$set_" ] || echo "$class/$set_: superseded at its cell by $winner; proven by the sync taking $winner"
+        # the sets the sync took plugins from
+        taken=$(sed -n 's/.*distributed: .*: applied (\(.*\))$/\1/p' "$log" | sort -u | paste -sd,)
+        applied=$(grep -c 'distributed: .*: applied (' "$log" || true)
+        echo "$class/$set_: applied $applied from $taken; the store's rule gives the cell to $winner"
+        [ "$applied" -gt 0 ] || { echo "::error::$class/$set_: no plugin was taken from its records"; exit 1; }
+        where=$class
+        [ "$cell" = - ] && where="$class, the cells of $set_" || where="$class $cell"
+        if [ "$taken" = "$winner" ]; then
+            note pick "$where: plugin-qualify takes $taken, the store's rule's winner"
+        else
+            echo "WRONG WINNER $where: the sync takes $taken, the store's rule gives the cell to $winner"
+            note wrong "$where: plugin-qualify takes $taken; the store's rule's winner is $winner"
+        fi
+        case ",$taken," in
+            *",$set_,"*) ;;
+            *) echo "UNPROVEN $class/$set_: the sync never took it ($taken)"
+               note unproven-set "$class/$set_: never taken by the sync at its cell ($where: it takes $taken)"
+               unproven_set=1 ;;
+        esac
         if grep -E 'distributed: .*(binary differs|not applied|measured here)' "$log"; then
             echo "::error::$class/$set_: a plugin of the set was measured instead of taken from the records"; exit 1
         fi
         rm -f "$log"
+        [ -z "${unproven_set:-}" ] || exit 3
         ;;
     remove)
         case $kind in

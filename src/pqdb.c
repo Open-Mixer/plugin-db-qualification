@@ -513,6 +513,9 @@ void pqdb_close(pqdb *db)
 }
 
 /* ---- results ---- */
+/* A layer answers for a cell with the record that claims it (section 4): a cell of a record without the claim is no
+   result. In the base, when a set of the reference tier and a set of another tier both hold a key at a cell, the
+   reference tier's record holds the claim; the join below reads it through claim's primary key. */
 static const char *const SELECT =
     "SELECT p.sha256, p.format, p.uri, r.offer, r.host_class, s.name, "
     "r.pkg_format, r.pkg_name, r.pkg_version, r.pkg_release, r.pkg_distro, r.pkg_arch, "
@@ -520,6 +523,8 @@ static const char *const SELECT =
     "c.latency_measured_frames, c.latency_declared_frames, c.mem_first_instance_kb, c.mem_per_instance_kb, "
     "r.binary_path, r.layout_scheme, r.layout_sha256, r.tested_version, r.unpinnable "
     "FROM cell c JOIN record r ON r.record_id = c.record_id JOIN plugin p ON p.plugin_id = r.plugin_id "
+    "JOIN claim cl ON cl.plugin_id = r.plugin_id AND cl.offer = r.offer AND cl.host_class = r.host_class "
+    "AND cl.rate = c.rate AND cl.quantum = c.quantum AND cl.record_id = r.record_id "
     "LEFT JOIN record_set s ON s.set_id = r.set_id "
     "WHERE (?1 IS NULL OR p.sha256 = ?1) AND (?2 IS NULL OR p.format = ?2) AND (?3 IS NULL OR p.uri = ?3) "
     "AND (?4 IS NULL OR r.offer = ?4) AND (?5 IS NULL OR r.host_class = ?5) AND (?6 < 0 OR c.rate = ?6) "
@@ -779,7 +784,10 @@ static int collect_plugins(sqlite3 *h, sqlite3 *shadow_db, plugs *out)
     int rc, ret = S_OK;
     if (sqlite3_prepare_v2(h, "SELECT p.format, p.uri, r.offer, r.host_class, p.sha256, "
                            "EXISTS (SELECT 1 FROM tier_offered t WHERE t.record_id = r.record_id) "
-                           "FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id", -1, &st, NULL) != SQLITE_OK)
+                           "FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id "
+                           /* a record that claims no cell answers for nothing and is not counted (section 4) */
+                           "WHERE EXISTS (SELECT 1 FROM claim cl WHERE cl.plugin_id = r.plugin_id AND cl.offer = r.offer "
+                           "AND cl.host_class = r.host_class AND cl.record_id = r.record_id)", -1, &st, NULL) != SQLITE_OK)
         return status_of(h);
     if (shadow_db && sqlite3_prepare_v2(shadow_db, SHADOWED, -1, &sh, NULL) != SQLITE_OK) {
         ret = status_of(shadow_db);

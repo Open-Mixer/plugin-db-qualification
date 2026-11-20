@@ -520,9 +520,48 @@ class TwoTiers(Base):
         self.two("fedora44-0rt-48000-512", "reference")
         self.assert_reference_claims("fedora44-0rt-48000-512")
 
-    def test_9_two_sets_of_one_tier_at_one_cell_are_refused(self):
+    def test_9_two_sets_of_one_tier_measured_on_one_date_are_refused(self):
         self.two("fedora44-rt-48000-512", "provisional")
-        self.refused("claim-duplicate", "fedora44-rt-48000-512", "fedora44-48000-512")
+        self.refused("claim-duplicate", "fedora44-rt-48000-512", "fedora44-48000-512", "measured on one date")
+
+
+class OneTierNewer(Base):
+    """Ruling 2026-11-20 (the store spec, section 4): at one cell and one tier, the record of the set measured later
+    (provenance `measured`, record_set.measured) claims it, whichever set comes first; the other stays whole. An equal
+    date is refused (claim-duplicate), and so is a set with no date to compare (claim-undated)."""
+
+    def two(self, base_measured, other_name, other_measured):
+        for name, measured in ((None, base_measured), (other_name, other_measured)):
+            d = make_set(self.tmp, n=2, name=name)
+            prov = load(os.path.join(d, "provenance.json"))
+            prov["tier"] = "hardware"
+            prov["measured"] = measured
+            dump(os.path.join(d, "provenance.json"), prov)
+
+    def assert_claims(self, newer):
+        build_ok(self, os.path.join(self.tmp, "records"), self.db)
+        self.assertEqual(self.rows("SELECT count(*) FROM record"), [(4,)], "a record was dropped")
+        cells = self.rows("SELECT count(*) FROM cell JOIN record USING (record_id) JOIN record_set s USING (set_id) "
+                          "WHERE s.name = ?", newer)[0][0]
+        self.assertGreater(cells, 0)
+        self.assertEqual(self.rows("SELECT s.name, count(*) FROM claim JOIN record USING (record_id) "
+                                   "JOIN record_set s USING (set_id) GROUP BY s.name"), [(newer, cells)])
+
+    def test_the_newer_set_claims_when_it_comes_last(self):
+        self.two("2026-11-06", "fedora44-x-48000-512", "2026-11-08")
+        self.assert_claims("fedora44-x-48000-512")
+
+    def test_the_newer_set_claims_when_it_comes_first(self):
+        self.two("2026-11-08", "fedora44-x-48000-512", "2026-11-06")
+        self.assert_claims("fedora44-48000-512")
+
+    def test_an_equal_date_is_refused(self):
+        self.two("2026-11-08", "fedora44-x-48000-512", "2026-11-08")
+        self.refused("claim-duplicate", "fedora44-x-48000-512", "fedora44-48000-512", "measured on one date")
+
+    def test_a_set_with_no_date_is_refused_where_it_contends(self):
+        self.two("2026-11-08", "fedora44-x-48000-512", "")
+        self.refused("claim-undated", "fedora44-x-48000-512", "measured")
 
 
 class ProvenanceCell(Base):
@@ -958,7 +997,8 @@ class RoundTrip(unittest.TestCase):
         order = sorted(ids, key=lambda k: os.fsencode("/".join(k)))
         self.assertEqual([ids[k] for k in order], list(range(1, len(ids) + 1)))
         sets = [(r["host_class"], r["name"]) for r in self.db.execute("SELECT host_class, name FROM record_set ORDER BY set_id")]
-        self.assertEqual(sets, sorted(sets, key=lambda k: os.fsencode("/".join(k))))
+        # the sets in the byte order of their directories' paths, as their records are
+        self.assertEqual(sets, sorted(sets, key=lambda k: os.fsencode("/".join(k) + "/")))
 
     def test_console_judgments_are_held_back(self):
         """No row of the openmixer-console profile anywhere in the base, and every record is in (issue #5)."""

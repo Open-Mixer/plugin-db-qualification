@@ -108,6 +108,14 @@ the same database.
 `<set>-<rate>-<quantum>`. `tools/check-records.py` checks every set the way `plugin-qualify-sync` reads it, and refuses
 an absolute `binary.path`. The records are rewritten once to the relative form, by `tools/rewrite-records.py`.
 
+The x86-64 sets are of two tiers. `fedora44-<rate>-<quantum>` (tier `provisional`) were measured without real-time
+priority; `fedora44-rt-<rate>-<quantum>` (tier `reference`) were measured with SCHED_FIFO granted. Both are kept. Where
+both hold one plugin at one cell, the base gives the claim to the reference tier and the reader answers with it (the
+store spec, section 4). A set is marked `rt` only when it is of the reference tier.
+
+The console key waits for its desk run (issue #5's ruling): a set of the `openmixer-console` profile is refused, and
+the base holds no openmixer-console verdict. The record files keep them; the base build leaves them out.
+
 ## Packaging rules
 
 - A package states its dependencies as floors. No upper limit is set anywhere.

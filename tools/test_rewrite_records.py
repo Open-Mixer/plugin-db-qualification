@@ -218,7 +218,9 @@ class Corpus(unittest.TestCase):
                     if b["path"].startswith("/") or "hostExtensions" in rec:
                         bad.append(f"{c}/{s}/{f}")
         self.assertEqual(bad[:3], [], f"{len(bad)} records are not in the form")
-        self.assertEqual((clap, lv2), (9262, 3691))
+        # the migration's sets (9262 CLAP, 3691 LV2), the 22 reference sets (19,228, 5170), fedora44-192000-128 (88, 32)
+        # and the Raspberry Pi re-measure (0, 4)
+        self.assertEqual((clap, lv2), (9262 + 19228 + 88, 3691 + 5170 + 32 + 4))
 
     def test_every_key_is_the_sha256_of_its_binary_entry_and_every_list_is_in_byte_order(self):
         for c, s in sets():

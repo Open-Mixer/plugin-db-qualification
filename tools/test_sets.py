@@ -305,7 +305,7 @@ class Import(Tree):
             json.dump(prov, f)
 
     def snapshot(self):
-        return sorted((d, f) for d, _, fs in os.walk(self.root) for f in fs for d in [os.path.relpath(d, self.root)])
+        return sorted((os.path.relpath(d, self.root), f) for d, _, fs in os.walk(self.root) for f in fs)
 
     def imp(self, cls="x86-64", set_="fedora45-48000-512", out=None, prov=True):
         argv = ["import", cls, set_, out or self.out] + (["--provenance", self.prov] if prov else [])

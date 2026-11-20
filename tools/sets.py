@@ -14,6 +14,11 @@ debian/rules and the spec read all of it from here.
     tools/sets.py install deb|rpm <arch> <dir>  copies records/<class>/ of every class of <arch> into <dir>/<class>/
                                                 (debian/rules and the spec's %install)
     tools/sets.py spec                          rewrites the spec's per-architecture block from arch-classes and records/
+    tools/sets.py import <class> <set> <out-dir> [--provenance <file>]
+                                                copies the *.qualification.json and *.probe.json files of a
+                                                `plugin-qualify --out` directory (and the provenance) into
+                                                records/<class>/<set>/, then runs tools/check-records.py on it; a
+                                                refusal is named and leaves the tree as it was
     tools/sets.py prove deb|rpm <pkg dir>       installs the package of this machine's architecture from <pkg dir> and
                                                 proves every set it carries that was measured on this image's host class
                                                 (tools/prove-set.sh), one after the other; the others are named, not proven
@@ -50,6 +55,8 @@ SPEC = os.path.join("packaging", f"{PACKAGE}.spec")
 ARCH_CLASSES = os.path.join("packaging", "arch-classes")
 RELEASE_ARCHES = os.path.join("packaging", "release-arches")
 QUALIFICATION = os.path.join("usr", "share", "omx", "qualification")
+RECORD = ".qualification.json"
+PROBE = ".probe.json"
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
 BLOCK_END = "# END per-architecture"
@@ -149,6 +156,56 @@ def substvars(root, arch):
     """The one substvar: the plugin-qualify floor. A package of this source carries no Provides, Replaces or Breaks."""
     carried(root, "deb", arch)
     return f"qualify:Depends=plugin-qualify (>= {qualify_floor(root, 'deb', arch)}~)\n"
+
+
+class ImportRefused(Refused):
+    def __init__(self, name, msg):
+        super().__init__(f"import: {name}: {msg}")
+
+
+def import_set(root, cls, set_, out, provenance=None):
+    """A `plugin-qualify --out` directory into records/<cls>/<set_>/: its *.qualification.json and *.probe.json files, byte
+    for byte, and the provenance given. Refused by name, and then nothing is written (a set that fails the records check is
+    removed again): file-other, class-unknown, set-exists, dir-absent, dir-empty, probe-missing, qualification-missing,
+    set-check-failed."""
+    if cls not in {line["class"] for line in arch_classes(root)}:
+        raise ImportRefused("class-unknown", f"{cls!r} is not a class of {ARCH_CLASSES}")
+    dest = os.path.join(root, "records", cls, set_)
+    if os.path.exists(dest):
+        raise ImportRefused("set-exists", f"records/{cls}/{set_}/ exists; a set is replaced by removing it first")
+    if not os.path.isdir(out):
+        raise ImportRefused("dir-absent", f"{out}: no such directory")
+    names = sorted(os.listdir(out), key=os.fsencode)
+    if not names:
+        raise ImportRefused("dir-empty", f"{out} holds no file")
+    for n in names:
+        if os.path.islink(os.path.join(out, n)) or not os.path.isfile(os.path.join(out, n)) or not n.endswith((RECORD, PROBE)):
+            raise ImportRefused("file-other", f"{n}: only *{RECORD} and *{PROBE} files are imported")
+    records = {n[: -len(RECORD)] for n in names if n.endswith(RECORD)}
+    probes = {n[: -len(PROBE)] for n in names if n.endswith(PROBE)}
+    for stem in sorted(records - probes):
+        raise ImportRefused("probe-missing", f"{stem}{RECORD} has no {stem}{PROBE}")
+    for stem in sorted(probes - records):
+        raise ImportRefused("qualification-missing", f"{stem}{PROBE} has no {stem}{RECORD}")
+    if provenance is not None and not os.path.isfile(provenance):
+        raise ImportRefused("file-other", f"{provenance}: no such provenance file")
+    os.makedirs(dest)
+    try:
+        for n in names:
+            shutil.copyfile(os.path.join(out, n), os.path.join(dest, n))
+        if provenance is not None:
+            shutil.copyfile(provenance, os.path.join(dest, "provenance.json"))
+        r = subprocess.run([sys.executable, "-B", os.path.join(root, "tools", "check-records.py"), dest], capture_output=True, text=True)
+    except BaseException:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+    if r.returncode:
+        shutil.rmtree(dest, ignore_errors=True)
+        parent = os.path.dirname(dest)
+        if not os.listdir(parent):
+            os.rmdir(parent)
+        raise ImportRefused("set-check-failed", f"records/{cls}/{set_}/ fails tools/check-records.py:\n{(r.stdout + r.stderr).strip()}")
+    return len(records)
 
 
 def install(root, kind, arch, dest):
@@ -423,6 +480,10 @@ def main(argv, root=os.path.dirname(HERE)):
         if cmd == "install" and len(argv) == 4 and argv[1] in FORMATS:
             for c in install(root, argv[1], argv[2], argv[3]):
                 print(f"records/{c}/ -> {os.path.join(argv[3], c)}/")
+            return 0
+        if cmd == "import" and len(argv) in (4, 6) and (len(argv) == 4 or argv[4] == "--provenance"):
+            n = import_set(root, argv[1], argv[2], argv[3], argv[5] if len(argv) == 6 else None)
+            print(f"records/{argv[1]}/{argv[2]}/: {n} record{'' if n == 1 else 's'} imported and checked")
             return 0
         if cmd == "spec" and len(argv) == 1:
             write_spec(root)

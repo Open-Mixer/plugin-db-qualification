@@ -49,6 +49,16 @@ case $(basename "$0") in
     plugin-qualify-sync)
         conf=$PROVE_ROOT/etc/omx/qualify.conf
         cat "$conf" >> "$STUB_LOG"
+        # plugin-qualify v0.20.7 refuses these four (src/qualify-sync.ts:88, MOVED_TO_HOSTD; the text is movedText, line 91)
+        for key in lv2_path lv2_extra clap_path clap_extra; do
+            n=$(grep -n -E "^$key( |$)" "$conf" | head -1 | cut -d: -f1)
+            if [ -n "$n" ]; then
+                echo "plugin-qualify-sync: $conf:$n: $key is plugin-hostd's setting now: write it in plugin-hostd's settings file (plugin-hostd.conf, named here by hostd_conf); the directories scanned are the ones plugin-hostd --search-path prints"
+                exit 1
+            fi
+        done
+        hconf=$(sed -n 's/^hostd_conf //p' "$conf")
+        [ -z "$hconf" ] || cat "$hconf" >> "$STUB_LOG"
         grid=$(sed -n 's/^grid //p' "$conf")
         if [ -n "$grid" ]; then set_=${STUB_HOST:-fedora44}-${grid%/*}-${grid#*/}; else set_=zynthian-vangelis; fi
         if [ "$grid" = "${BAD_GRID:-none}" ]; then
@@ -628,7 +638,9 @@ class Prove(Tree):
             f"apt-get install -y --no-install-recommends ./pkgs/trixie/{PKG}_*_arm64.deb lv2vocoder",
             "plugin-qualify-sync --system", "host_class rpi5",
             f"apt-get remove -y {PKG}"])
-        self.assertIn("host_class rpi5\nlv2_extra\nhostd_port 0\n", log)
+        hconf = os.path.join(self.tmp.name, "root", "etc", "omx", "plugin-hostd.conf")
+        self.assertIn(f"host_class rpi5\nhostd_conf {hconf}\nhostd_port 0\n", log)
+        self.assertNotIn("is plugin-hostd's setting now", out)
 
     def test_a_package_that_installs_another_class_fails_the_proof(self):
         self.with_two_cells()
@@ -650,6 +662,9 @@ class Prove(Tree):
         self.assertEqual(rc, 0, out + log)
         self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
         self.assertEqual(log.count("plugin-qualify-sync --system"), 2)
+        # plugin-hostd has no clap_extra: the lib64 folder goes in its clap_path
+        self.assertEqual(log.count("clap_path /usr/lib64/clap\n"), 2)
+        self.assertNotIn("is plugin-hostd's setting now", out)
         self.assertNotIn("::notice::", out)
         self.assertNotIn("::warning::", out)
 

@@ -111,7 +111,7 @@ def main(module, store, out_dir):
             if own is not None:
                 add["ownThreads"] = own
             if oa is not None:
-                add["otherThreads"] = {"allocationsInRun": oa, "locksInRun": ol, "syscallsInRun": osy}
+                add["otherThreads"] = {"allocations": oa, "locks": ol, "syscalls": osy}
             if add and interposer is not None:
                 c["rtSafety"] = before(c["rtSafety"], "events", add)
         name = "%s-%s.%s.%s.json" % (fmt, uri.split(":")[-1], offer, cls)

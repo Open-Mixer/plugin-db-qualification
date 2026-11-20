@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 """The records package, plugin-qualification-records, per architecture (beside the reader's three packages): which sets each architecture carries,
-what it depends on, which older package names it takes over, and which architectures a tag releases. The workflows,
+what it depends on, and which architectures a tag releases. The workflows,
 debian/rules and the spec read all of it from here.
 
     tools/sets.py check                         packaging/arch-classes, packaging/release-arches, debian/control,
@@ -10,7 +10,7 @@ debian/rules and the spec read all of it from here.
     tools/sets.py names deb|rpm                 the binary package names, space-separated (binary-names of the builds)
     tools/sets.py list deb|rpm <arch>           one line per set the package of <arch> carries: <class> <set> <cell or ->
     tools/sets.py github-output                 what release.yml's plan job needs, appended to $GITHUB_OUTPUT
-    tools/sets.py substvars <deb arch>          the substvars of the Debian package of <deb arch> (debian/rules)
+    tools/sets.py substvars <deb arch>          the substvar of the Debian package of <deb arch>: its plugin-qualify floor (debian/rules)
     tools/sets.py install deb|rpm <arch> <dir>  copies records/<class>/ of every class of <arch> into <dir>/<class>/
                                                 (debian/rules and the spec's %install)
     tools/sets.py spec                          rewrites the spec's per-architecture block from arch-classes and records/
@@ -23,12 +23,9 @@ floor of that architecture's package. Every set under records/<class>/ goes into
 architecture, at /usr/share/omx/qualification/<class>/<set>/; the sync chooses the set. A set is per machine class,
 per sample rate and per quantum: a set named <set>-<rate>-<quantum> holds that one cell.
 
-The package takes over the names the sets were published under before, one package per set: for every set,
-plugin-db-qualification-<class>-<set>, and for the set's name without its cell, plugin-db-qualification-<class>-<base>
-and omx-qualification-<class>-<base>. They are derived from records/ at build time, never written by hand. Debian
-folds the names of its architecture's classes, and on every architecture the names of the Debian packages that were
-Architecture: all (the rpi5 sets): Provides (= this version), Replaces and Breaks (<< this version). The RPM folds the
-names of its architecture's classes: Provides and Obsoletes (< this version-release), in the block `spec` writes.
+The package carries no relation to the names the sets were published under before, one package per set, and none to
+another package of this source: no Provides, Replaces, Breaks, Conflicts or Obsoletes. Those names are pruned from the
+channel. `check` refuses a relation in debian/control or the spec.
 """
 import json
 import os
@@ -54,9 +51,6 @@ ARCH_CLASSES = os.path.join("packaging", "arch-classes")
 RELEASE_ARCHES = os.path.join("packaging", "release-arches")
 QUALIFICATION = os.path.join("usr", "share", "omx", "qualification")
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
-# the classes whose Debian packages were Architecture: all, installable on any architecture: their names are folded
-# by the package of every Debian architecture
-DEB_ALL_CLASSES = ("rpi5",)
 BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
 BLOCK_END = "# END per-architecture"
 FORMATS = ("deb", "rpm")
@@ -141,22 +135,6 @@ def qualify_floor(root, kind, arch):
     return floors.pop()
 
 
-def folded_names(root, cls_list):
-    """The names the sets of these classes were published under, one package per set."""
-    names = set()
-    for c in cls_list:
-        for _, s in tree_sets(root, c):
-            names.add(f"plugin-db-qualification-{c}-{s}")
-            base = CELL.sub("", s)
-            names.add(f"plugin-db-qualification-{c}-{base}")
-            names.add(f"omx-qualification-{c}-{base}")
-    return sorted(names)
-
-
-def deb_folded(root, arch):
-    return folded_names(root, sorted(set(classes(root, "deb", arch)) | set(DEB_ALL_CLASSES)))
-
-
 def changelog_version(root):
     m = re.match(r"^\S+ \(([^)]*)\)", read(root, "debian", "changelog"))
     return m.group(1) if m else None
@@ -168,16 +146,9 @@ def spec_version(root):
 
 
 def substvars(root, arch):
+    """The one substvar: the plugin-qualify floor. A package of this source carries no Provides, Replaces or Breaks."""
     carried(root, "deb", arch)
-    low = qualify_floor(root, "deb", arch)
-    version = changelog_version(root)
-    names = deb_folded(root, arch)
-    return "\n".join([
-        f"qualify:Depends=plugin-qualify (>= {low}~)",
-        "records:Provides=" + ", ".join(f"{n} (= {version})" for n in names),
-        "records:Replaces=" + ", ".join(f"{n} (<< {version})" for n in names),
-        "records:Breaks=" + ", ".join(f"{n} (<< {version})" for n in names),
-    ]) + "\n"
+    return f"qualify:Depends=plugin-qualify (>= {qualify_floor(root, 'deb', arch)}~)\n"
 
 
 def install(root, kind, arch, dest):
@@ -205,14 +176,11 @@ def exclusive_arch(root):
 
 
 def spec_block(root):
-    """The spec's per-architecture block: for each architecture it builds, the Requires and the folded names."""
+    """The spec's per-architecture block: for each architecture it builds, the Requires."""
     out = [BLOCK_BEGIN]
     for arch in exclusive_arch(root):
         low = qualify_floor(root, "rpm", arch)
-        out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}"]
-        for n in folded_names(root, classes(root, "rpm", arch)):
-            out += [f"Provides: {n} = %{{version}}-%{{release}}", f"Obsoletes: {n} < %{{version}}-%{{release}}"]
-        out.append("%endif")
+        out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}", "%endif"]
     out.append(BLOCK_END)
     return "\n".join(out)
 
@@ -257,6 +225,11 @@ def problems(root):
             except Refused as e:
                 out.append(str(e))
 
+    for s in control_stanzas(root):
+        for field in ("Provides", "Replaces", "Breaks", "Conflicts"):
+            if field in s:
+                out.append(f"debian/control: {s.get('Package', 'the source')}: {field} is a relation; the packages of this source "
+                           "carry none (the older names are pruned from the channel)")
     binaries = [s for s in control_stanzas(root) if "Package" in s]
     names = [s["Package"] for s in binaries]
     if names != DEB_PACKAGES:
@@ -267,10 +240,8 @@ def problems(root):
         if sorted(b.get("Architecture", "").split()) != deb_arches:
             out.append(f"debian/control: Architecture is {b.get('Architecture')!r}, not the Debian architectures of "
                        f"{ARCH_CLASSES}: {' '.join(deb_arches)}")
-        for field, var in (("Depends", "qualify:Depends"), ("Provides", "records:Provides"),
-                           ("Replaces", "records:Replaces"), ("Breaks", "records:Breaks")):
-            if f"${{{var}}}" not in b.get(field, ""):
-                out.append(f"debian/control: {field} does not carry ${{{var}}}")
+        if "${qualify:Depends}" not in b.get("Depends", ""):
+            out.append("debian/control: Depends does not carry ${qualify:Depends}")
     for name in sorted(os.listdir(os.path.join(root, "debian"))):
         stem, ext = os.path.splitext(name)
         if name == "install" or (ext in PACKAGE_FILES and stem not in DEB_PACKAGES):
@@ -280,6 +251,9 @@ def problems(root):
         spec = read(root, SPEC)
     except OSError:
         return out + [f"{SPEC}: missing"]
+    for field in ("Provides", "Obsoletes", "Conflicts"):
+        if re.search(rf"^{field}:", spec, re.M):
+            out.append(f"{SPEC}: {field}: is a relation; the packages of this source carry none (the older names are pruned from the channel)")
     if not re.search(rf"^Name: *{re.escape(PACKAGE)}$", spec, re.M):
         out.append(f"{SPEC}: Name is not {PACKAGE}")
     declared = re.findall(r"^%package +(.*?) *$", spec, re.M)

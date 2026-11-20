@@ -44,37 +44,9 @@ BuildRequires: omx-clap-core-contract >= 0.33.1
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
 Requires: plugin-qualify >= 0.20.1
-Provides: omx-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: omx-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-64 < %{version}-%{release}
 %endif
 %ifarch aarch64
 Requires: plugin-qualify >= 0.20.0
-Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
 %endif
 # END per-architecture
 

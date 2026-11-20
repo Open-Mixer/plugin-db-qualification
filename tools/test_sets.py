@@ -169,8 +169,7 @@ class Check(Tree):
     def test_the_spec_block_follows_records_and_arch_classes(self):
         for s in CELLS:
             self.add_set("x86-64", s)
-        self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
-        self.respec()
+        # the block holds the floors only: a set added to records/ moves nothing in it
         self.assertEqual(sets.problems(self.root), [])
         self.edit("packaging/arch-classes", "0.20.1\n", "0.20.2\n")
         self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
@@ -184,13 +183,13 @@ class Check(Tree):
         """No package of this source Provides, Replaces, Breaks or Conflicts another: the old names are pruned from the channel."""
         for field in ("Provides", "Replaces", "Breaks", "Conflicts"):
             self.edit("debian/control", "Architecture: amd64 arm64\n", f"Architecture: amd64 arm64\n{field}: foo\n")
-            self.assertTrue(any("relation" in p and field in p for p in self.problems()), (field, self.problems()))
+            self.assertIn(f"{field} is a relation", self.problems())
             self.edit("debian/control", f"{field}: foo\n", "")
 
     def test_a_relation_in_the_spec_is_refused(self):
         for field in ("Provides", "Obsoletes", "Conflicts"):
             self.edit(SPEC, "\n%description\n", f"\n{field}: foo = 1\n\n%description\n")
-            self.assertTrue(any("relation" in p and field in p for p in self.problems()), (field, self.problems()))
+            self.assertIn(f"{field}: is a relation", self.problems())
             self.edit(SPEC, f"\n{field}: foo = 1\n", "")
 
     def layout(self, deb=None, rpm=None):
@@ -389,7 +388,7 @@ class Rules(Tree):
             with open(saw) as f:
                 text = f.read()
             self.assertIn(f"qualify:Depends=plugin-qualify (>= {low}~)\n", text)
-            self.assertEqual("fedora44-48000-512" in text, arch == "amd64")
+            self.assertNotIn("fedora44", text)
 
     def test_an_architecture_with_no_class_or_no_set_fails_the_build(self):
         r, _ = self.make("override_dh_install", "i386")

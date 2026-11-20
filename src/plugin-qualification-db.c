@@ -25,7 +25,7 @@ static void usage(void)
         "common options: --base PATH --user PATH --contract-dir DIR | --scope user|system\n"
         "  (absent: PLUGIN_QUALIFICATION_DB_BASE, PLUGIN_QUALIFICATION_DB_USER, OMX_CONTRACT_PATH, then the installed\n"
         "  places; --user '' reads no user layer; --scope opens the production places of that scope and takes neither\n"
-        "  --base, --user nor --contract-dir; --records takes neither --rate nor --quantum)\n");
+        "  --base, --user nor --contract-dir; --records takes --rate and --quantum together or neither)\n");
 }
 
 static void json_string(const char *s)
@@ -104,7 +104,7 @@ static int print_result(const pqdb_result *r, void *ctx)
     return 0;
 }
 
-/* one line a record: the results of one record are cells of one shadow key, in a row */
+/* one line a record: the results of one record are cells of one shadow key, in a row; at a cell, the record that claims it */
 static int print_record(const pqdb_result *r, void *ctx)
 {
     printer *p = ctx;
@@ -125,6 +125,7 @@ static int print_record(const pqdb_result *r, void *ctx)
     printf(",\"uri\":"); json_string(r->uri);
     printf(",\"offer\":"); json_string(r->offer);
     printf(",\"host_class\":"); json_string(r->host_class);
+    printf(",\"set\":"); json_string(r->set);
     printf(",\"record\":%s}\n", json);
     free(json);
     return 0;
@@ -228,7 +229,8 @@ int main(int argc, char **argv)
     }
     if (!is_check && !json) { usage(); return 2; }
     if (layer && strcmp(layer, "user") != 0 && strcmp(layer, "base") != 0) { fprintf(stderr, "--layer is user or base\n"); return 2; }
-    if (records && (rate >= 0 || quantum >= 0)) { fprintf(stderr, "--records is a record, not a cell: it takes neither --rate nor --quantum\n"); return 2; }
+    /* at a cell the results are the claimants' (pqdb_each follows the claim: section 4), so a record is the one that claims it */
+    if (records && (rate >= 0) != (quantum >= 0)) { fprintf(stderr, "--records at a cell takes --rate and --quantum together\n"); return 2; }
     if (scope) {
         if (strcmp(scope, "user") != 0 && strcmp(scope, "system") != 0) { fprintf(stderr, "--scope is user or system\n"); return 2; }
         if (base || have_user || cdir) { fprintf(stderr, "--scope opens the production places: it takes neither --base, --user nor --contract-dir\n"); return 2; }

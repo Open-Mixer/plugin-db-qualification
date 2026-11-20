@@ -1179,9 +1179,16 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     (`deciding` a string or `null`). `files` is the record's list in its order: an
     array of `{"path": "...", "sha256": "..."}`, never empty. No other key; an absent figure is `null`, as today;
   - `query ... --json --records`: one JSON object per line per RECORD (the results of one record are one line):
-    `{"layer": ..., "sha256": ..., "format": ..., "uri": ..., "offer": ..., "host_class": ..., "record": <the record of
-    pqdb_record_json>}`. The same filters apply; `--rate` and `--quantum` are refused with `--records` (a usage error,
-    exit 2), because a record is not a cell;
+    `{"layer": ..., "sha256": ..., "format": ..., "uri": ..., "offer": ..., "host_class": ..., "set": ..., "record": <the
+    record of pqdb_record_json>}`. `set` is the record's set (`record_set.name`; `null` for a user-layer record, which
+    has none): every line carries it, with a cell or without, so one line shape serves both and a caller never has to
+    ask a second time which set a record came from. The same filters apply.
+    With `--rate R --quantum Q` (given together; one alone is a usage error, exit 2) the lines are the records that
+    CLAIM that cell (section 4), one a key: a consumer that asks for the record of its machine's cell takes the
+    claimant whole. The command reads the claim through `pqdb_each`, whose results at a cell are the claimants'; the
+    rule (the reference tier first, then the set measured later within a tier) is held once, in the `claim` table the
+    base build writes, and is not copied here. A key nobody holds at that cell prints no line. Without them the
+    command prints the records of the filters as before, now with `set`;
   - `counts [--layer user|base] --json`: one JSON object per line per format, in format order:
     `{"format": "clap", "plugins": 248, "offered": 224, "not_offered": 24}`;
   - an absent base is told, never silent, and stdout stays records only (a reader parses each line as a record, and a
@@ -1466,7 +1473,8 @@ makes it fail.
     `pqdb_error`. Fails when a column is missing or a number changes type (sabotage: a fraction read as an integer).
 22. **The command's widened shape.** `query --json` prints exactly the keys of section 6 in that order (a test checks
     the key list), `files` a non-empty array of `path` and `sha256`, `unpinnable` 0 or 1, absent figures `null`.
-    `query --json --records` prints one line per record, with the record document; with `--rate` it exits 2.
+    `query --json --records` prints one line per record, with its `set` and the record document; with `--rate` and
+    `--quantum` it prints the record that claims that cell, and either alone exits 2.
     `counts --json` prints one line per format. `--scope` with `--base` or `--user` exits 2; `--scope system` reads the
     system place and never the home's (the test's `open` trace, as 15). Fails when a key is added, dropped or
     reordered, or `--records` prints one line per cell.

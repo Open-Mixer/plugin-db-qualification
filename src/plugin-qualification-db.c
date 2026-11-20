@@ -260,6 +260,9 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+    /* no silent hole: an absent base is an empty base layer, and the answer says so (a line a consumer reads first) */
+    if (pqdb_base_absent(db) && !is_check)
+        puts("{\"base\":\"absent\"}");
     if (is_check) {
         checker c;
         const char *layers[2] = { "user", "base" };
@@ -282,7 +285,7 @@ int main(int argc, char **argv)
             pqdb_close(db);
             return 1;
         }
-        puts("ok");
+        puts(pqdb_base_absent(db) ? "ok base-absent" : "ok");
         pqdb_close(db);
         return 0;
     }

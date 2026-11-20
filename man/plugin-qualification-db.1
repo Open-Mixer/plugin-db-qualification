@@ -173,6 +173,20 @@ as stored: relative to the install root, case-sensitive, no suffix match.
 .BI \-\-layer " user|base"
 (query, counts) Only that layer's records: the user layer's every record of the filters, none shadowed, or the base's,
 including a record the user layer shadows. Without it, the merged answer.
+.SH ABSENT BASE
+A base file that does not exist is an empty base layer, not a refusal: the answer is the user layer's alone and the exit
+status 0. The command says so: the first line of
+.B query \-\-json
+and
+.B counts \-\-json
+is
+.BR {"base":"absent"} ,
+and
+.B check
+prints
+.BR "ok base-absent" .
+Only a missing file is absent; a base that exists and cannot be used (a directory, no read permission, not a SQLite
+database, another schema version) is refused by name.
 .SH ENVIRONMENT
 .BR PLUGIN_QUALIFICATION_DB_BASE ,
 .BR PLUGIN_QUALIFICATION_DB_USER
@@ -181,8 +195,7 @@ and
 are read by this command only, and a flag beats its variable. The library reads no environment variable.
 .SH EXIT STATUS
 0 on success; 1 when the store is refused (the code is
-.B qualification-db.absent ,
-.BR qualification-db.unreadable ,
+.B qualification-db.unreadable ,
 .BR qualification-db.not-a-store ,
 .BR qualification-db.schema-mismatch ,
 .BR qualification-db.schema-other ,

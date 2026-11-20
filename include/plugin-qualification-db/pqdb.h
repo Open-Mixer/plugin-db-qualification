@@ -7,7 +7,7 @@
  * figures when the plugin is added, outside its audio thread, and copies them. A handle is used by one thread at a
  * time; a program with several threads opens one handle each.
  *
- * Errors are strings by name: a refusal gives `pqdb_error.code` (`qualification-db.absent`, ... or a code of the
+ * Errors are strings by name: a refusal gives `pqdb_error.code` (`qualification-db.unreadable`, ... or a code of the
  * contract loader, passed through) and a message naming the file. A status is 0 or non-zero; `pqdb_code(status)`
  * gives the name of a refusal of this library.
  */
@@ -32,8 +32,11 @@ typedef struct { const char *code; char message[256]; } pqdb_error;  /* names th
 int  pqdb_open(pqdb_scope scope, pqdb **out, pqdb_error *err);
 /* TEST AND COMMAND ONLY: the base, the user layer (NULL: none) and the contract directory, given (NULL: the installed one). */
 int  pqdb_open_at(const char *base, const char *user, const char *contract_dir, pqdb **out, pqdb_error *err);
+/* 1 when the open found no base file: the base layer is empty (the store has no base records until the records migration
+   ships), and every answer is the user layer's alone. Only ENOENT is absent: a base that exists and cannot be used is a refusal. */
+int  pqdb_base_absent(const pqdb *db);
 void pqdb_close(pqdb *db);
-const char *pqdb_code(int status);                 /* the name of a refusal: "qualification-db.absent" ...; NULL for 0 and for a
+const char *pqdb_code(int status);                 /* the name of a refusal: "qualification-db.unreadable" ...; NULL for 0 and for a
                                                       status that carries the loader's own code (err->code) */
 
 /* A query with every field optional: a string of NULL, and a rate or quantum of -1, is "any". 0 is not "any": a zeroed

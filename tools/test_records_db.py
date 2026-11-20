@@ -209,6 +209,21 @@ def find_any(predicate):
     raise AssertionError("no record satisfies the predicate")
 
 
+CONSOLE = "openmixer-console"
+
+
+def held_back(rec):
+    """The record as the base holds it: issue #5's ruling holds back the console key, so every judgment of the
+    openmixer-console profile (its verdict, its cost entries, a tier it hosts) is left out; the rest is the file's."""
+    rec = copy.deepcopy(rec)
+    rec["verdicts"] = [v for v in rec["verdicts"] if v.get("host") != CONSOLE]
+    rec["cost"] = [c for c in rec["cost"] if c.get("host") != CONSOLE]
+    for t in ("inProcess", "isolated"):
+        if rec["tiers"].get(t, {}).get("host") == CONSOLE:
+            del rec["tiers"][t]
+    return rec
+
+
 def edit(setdir, fname, fn):
     p = os.path.join(setdir, fname)
     rec = load(p)
@@ -536,6 +551,39 @@ class ProvenanceCell(Base):
     def test_a_cell_that_is_not_two_integers_is_refused(self):
         self.with_cell({"rate": "48000", "quantum": 512})
         self.refused("field-type", "provenance.json", "cell")
+
+
+class ConsoleKey(Base):
+    """Issue #5's ruling: the console key waits for its desk run. A record judged under omx-clap-host that also carries
+    an openmixer-console verdict is kept and ships without it; a set of the openmixer-console profile is refused. The
+    record files stay as they are."""
+
+    def test_a_clap_host_record_ships_without_its_console_verdict(self):
+        f = find(lambda r, n: {"omx-clap-host", CONSOLE} <= {v["host"] for v in r["verdicts"]})
+        d = make_set(self.tmp, files=[f])
+        with open(os.path.join(d, f), "rb") as fh:
+            before = fh.read()
+        build_ok(self, os.path.join(self.tmp, "records"), self.db)
+        with open(os.path.join(d, f), "rb") as fh:
+            self.assertEqual(fh.read(), before, "the record file changed")
+        self.assertEqual(self.rows("SELECT count(*) FROM record"), [(1,)], "the record was dropped")
+        self.assertEqual(self.rows("SELECT host FROM verdict ORDER BY ord"), [("omx-clap-host",)])
+        for table in ("verdict", "cost_entry", "tier"):
+            self.assertEqual(self.rows(f"SELECT count(*) FROM {table} WHERE host = ?", CONSOLE), [(0,)], table)
+        sys.path.insert(0, HERE)
+        import qualification_db
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            got = qualification_db.Exporter(db).export_record(1)
+        self.assertNotIn(CONSOLE, json.dumps({k: got[k] for k in ("verdicts", "cost", "tiers")}))
+        want = held_back(load(os.path.join(d, f)))
+        self.assertEqual([v["host"] for v in got["verdicts"]], [v["host"] for v in want["verdicts"]])
+
+    def test_a_console_profile_set_is_refused(self):
+        d = make_set(self.tmp, n=2)
+        prov = load(os.path.join(d, "provenance.json"))
+        prov["hostProfile"] = CONSOLE
+        dump(os.path.join(d, "provenance.json"), prov)
+        self.refused("console-profile", "provenance.json", CONSOLE)
 
 
 class Identity(Base):
@@ -889,7 +937,7 @@ class RoundTrip(unittest.TestCase):
         ids = self.record_ids()
         self.assertEqual(len(ids), len(self.files))
         for c, s, f in self.files:
-            want = self.strip(load(os.path.join(RECORDS, c, s, f)))
+            want = self.strip(held_back(load(os.path.join(RECORDS, c, s, f))))
             got = ex.export_record(ids[(c, s, f)])
             d = self.first_difference(want, got)
             self.assertIsNone(d, f"{c}/{s}/{f}: {d}")
@@ -912,11 +960,17 @@ class RoundTrip(unittest.TestCase):
         sets = [(r["host_class"], r["name"]) for r in self.db.execute("SELECT host_class, name FROM record_set ORDER BY set_id")]
         self.assertEqual(sets, sorted(sets, key=lambda k: os.fsencode("/".join(k))))
 
+    def test_console_judgments_are_held_back(self):
+        """No row of the openmixer-console profile anywhere in the base, and every record is in (issue #5)."""
+        for table in ("verdict", "cost_entry", "tier"):
+            self.assertEqual(self.db.execute(f"SELECT count(*) FROM {table} WHERE host = ?", (CONSOLE,)).fetchone()[0], 0, table)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM record").fetchone()[0], len(self.files))
+
     def test_02_counts_are_equal(self):
         per_set = {}
         arrays, tier_objects, plugins, names = {}, {"inProcess": 0, "isolated": 0}, set(), {}
         for c, s, f in self.files:
-            rec = load(os.path.join(RECORDS, c, s, f))
+            rec = held_back(load(os.path.join(RECORDS, c, s, f)))
             per_set[(c, s)] = per_set.get((c, s), 0) + 1
             plugins.add((rec["plugin"]["format"], rec["binary"]["sha256"], rec["plugin"]["id"]))
             lv, el = leaves(rec)
@@ -1023,7 +1077,7 @@ class RoundTrip(unittest.TestCase):
                 sql = f"SELECT record_id, ord, {col} FROM {table}"
             queries.append((path, table, col, mode, {tuple(r[:-1]): r[-1] for r in self.db.execute(sql)}, [0]))
         for (c, s, f), rid in self.record_ids().items():
-            rec = load(os.path.join(RECORDS, c, s, f))
+            rec = held_back(load(os.path.join(RECORDS, c, s, f)))
             for path, table, col, mode, sqlvals, seen in queries:
                 for idx, value in json_values(rec, path):
                     seen[0] += 1

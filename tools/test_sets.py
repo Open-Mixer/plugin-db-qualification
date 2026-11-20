@@ -169,8 +169,7 @@ class Check(Tree):
     def test_the_spec_block_follows_records_and_arch_classes(self):
         for s in CELLS:
             self.add_set("x86-64", s)
-        self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
-        self.respec()
+        # the block holds the floors only: a set added to records/ moves nothing in it
         self.assertEqual(sets.problems(self.root), [])
         self.edit("packaging/arch-classes", "0.20.1\n", "0.20.2\n")
         self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
@@ -179,8 +178,19 @@ class Check(Tree):
         self.edit("debian/control", "Architecture: amd64 arm64", "Architecture: all")
         self.assertIn("Architecture is 'all', not the Debian architectures of packaging/arch-classes: amd64 arm64", self.problems())
         self.edit("debian/control", "Architecture: all", "Architecture: amd64 arm64")
-        self.edit("debian/control", "Breaks: ${records:Breaks}", "Breaks: foo")
-        self.assertIn("Breaks does not carry ${records:Breaks}", self.problems())
+
+    def test_a_relation_in_debian_control_is_refused(self):
+        """No package of this source Provides, Replaces, Breaks or Conflicts another: the old names are pruned from the channel."""
+        for field in ("Provides", "Replaces", "Breaks", "Conflicts"):
+            self.edit("debian/control", "Architecture: amd64 arm64\n", f"Architecture: amd64 arm64\n{field}: foo\n")
+            self.assertIn(f"{field} is a relation", self.problems())
+            self.edit("debian/control", f"{field}: foo\n", "")
+
+    def test_a_relation_in_the_spec_is_refused(self):
+        for field in ("Provides", "Obsoletes", "Conflicts"):
+            self.edit(SPEC, "\n%description\n", f"\n{field}: foo = 1\n\n%description\n")
+            self.assertIn(f"{field}: is a relation", self.problems())
+            self.edit(SPEC, f"\n{field}: foo = 1\n", "")
 
     def layout(self, deb=None, rpm=None):
         """The tree's debian/control and spec with the records package and the reader's three, or the given names."""
@@ -269,6 +279,134 @@ class Check(Tree):
             del os.environ["GITHUB_OUTPUT"]
 
 
+class Import(Tree):
+    """`tools/sets.py import <class> <set> <out-dir> [--provenance <file>]`: a plugin-qualify --out directory into
+    records/<class>/<set>/, by name, refusing what is not a record or has no pair."""
+    SRC = os.path.join(ROOT, "records", "x86-64", "fedora44-48000-512")
+
+    def setUp(self):
+        super().setUp()
+        shutil.copy2(os.path.join(HERE, "check-records.py"), self.path("tools", "check-records.py"))
+        self.out = os.path.join(self.tmp.name, "out")
+        os.makedirs(self.out)
+        names = sorted(f for f in os.listdir(self.SRC) if f.endswith(".qualification.json"))[:2]
+        for n in names:
+            shutil.copy2(os.path.join(self.SRC, n), self.out)
+            with open(os.path.join(self.SRC, n)) as f:
+                shutil.copy2(os.path.join(self.SRC, json.load(f)["probe"]["file"]), self.out)
+        self.prov = os.path.join(self.tmp.name, "provenance.json")
+        self.write_prov("fedora45-48000-512")
+
+    def write_prov(self, set_, **over):
+        prov = {"schema": "plugin-qualify.distributed-provenance/1", "set": set_, "hostClass": "x86-64",
+                "package": {"name": f"plugin-db-qualification-x86-64-{set_}"}, "hostProfile": "omx-clap-host", "grid": "48000/512"}
+        prov.update(over)
+        with open(self.prov, "w") as f:
+            json.dump(prov, f)
+
+    def snapshot(self):
+        return sorted((os.path.relpath(d, self.root), f) for d, _, fs in os.walk(self.root) for f in fs)
+
+    def imp(self, cls="x86-64", set_="fedora45-48000-512", out=None, prov=True):
+        argv = ["import", cls, set_, out or self.out] + (["--provenance", self.prov] if prov else [])
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf), contextlib.redirect_stdout(io.StringIO()):
+            rc = sets.main(argv, root=self.root)
+        return rc, buf.getvalue()
+
+    def refused(self, name, **kw):
+        before = self.snapshot()
+        rc, err = self.imp(**kw)
+        self.assertEqual(rc, 1, err)
+        self.assertIn(f"import: {name}:", err)
+        self.assertEqual(self.snapshot(), before, "a refusal changed the tree")
+        return err
+
+    def test_the_records_and_probes_are_copied_and_the_check_passes(self):
+        before = self.snapshot()
+        rc, err = self.imp()
+        self.assertEqual(rc, 0, err)
+        dest = self.path("records", "x86-64", "fedora45-48000-512")
+        self.assertEqual(sorted(os.listdir(dest)), sorted(os.listdir(self.out) + ["provenance.json"]))
+        for f in os.listdir(self.out):
+            self.assertTrue(filecmp.cmp(os.path.join(self.out, f), os.path.join(dest, f), shallow=False), f)
+        added = [x for x in self.snapshot() if x not in before]
+        self.assertTrue(all(d == os.path.join("records", "x86-64", "fedora45-48000-512") for d, _ in added), added)
+        self.assertEqual([x for x in before if x not in self.snapshot()], [])
+
+    def test_any_other_file_is_refused(self):
+        with open(os.path.join(self.out, "notes.txt"), "w") as f:
+            f.write("x")
+        self.assertIn("notes.txt", self.refused("file-other"))
+
+    def test_a_directory_in_the_out_dir_is_refused(self):
+        os.makedirs(os.path.join(self.out, "sub"))
+        self.refused("file-other")
+
+    def test_an_unknown_class_is_refused(self):
+        self.assertIn("pi4", self.refused("class-unknown", cls="pi4"))
+
+    def test_a_set_that_exists_is_refused(self):
+        self.imp()
+        self.refused("set-exists")
+
+    def test_an_empty_directory_is_refused(self):
+        empty = os.path.join(self.tmp.name, "empty")
+        os.makedirs(empty)
+        self.refused("dir-empty", out=empty)
+
+    def test_a_missing_directory_is_refused(self):
+        self.refused("dir-absent", out=os.path.join(self.tmp.name, "nope"))
+
+    def test_a_record_without_its_probe_is_refused(self):
+        probe = next(f for f in os.listdir(self.out) if f.endswith(".probe.json"))
+        os.remove(os.path.join(self.out, probe))
+        self.assertIn(probe, self.refused("probe-missing"))
+
+    def test_a_probe_without_its_record_is_refused(self):
+        rec = next(f for f in os.listdir(self.out) if f.endswith(".qualification.json"))
+        os.remove(os.path.join(self.out, rec))
+        self.assertIn(rec.replace(".qualification.json", ".probe.json"), self.refused("qualification-missing"))
+
+    def test_a_set_that_fails_the_records_check_is_refused_and_leaves_nothing(self):
+        self.write_prov("another-set")
+        err = self.refused("set-check-failed")
+        self.assertIn("provenance.json", err)
+        self.assertFalse(os.path.exists(self.path("records", "x86-64", "fedora45-48000-512")))
+
+    def test_without_a_provenance_the_check_refuses(self):
+        self.refused("set-check-failed", prov=False)
+
+    def test_the_usage_names_it(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            sets.main([], root=self.root)
+        self.assertIn("tools/sets.py import", buf.getvalue())
+
+
+class ReleaseArches(unittest.TestCase):
+    """What this repository's own packaging/release-arches offers: no amd64 deb."""
+
+    def test_the_deb_is_arm64_alone_and_the_rpm_is_x86_64_and_aarch64(self):
+        self.assertEqual(sets.release_arches(ROOT), {"deb": ["arm64"], "rpm": ["x86_64", "aarch64"]})
+
+    def test_every_consumer_still_passes(self):
+        self.assertEqual(sets.problems(ROOT), [])
+        out = os.path.join(tempfile.mkdtemp(prefix="pdq-gho-"), "out")
+        os.environ["GITHUB_OUTPUT"] = out
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sets.main(["github-output"], root=ROOT), 0)
+        finally:
+            del os.environ["GITHUB_OUTPUT"]
+        with open(out) as f:
+            written = f.read().splitlines()
+        self.assertIn('deb-arches=["arm64"]', written)
+        self.assertIn('rpm-arches=["x86_64", "aarch64"]', written)
+        self.assertIn("deb-prove=true", written)
+        self.assertIn("rpm-prove=true", written)
+
+
 class Substvars(Tree):
     def vars(self, arch):
         rc, out = self.run_main("substvars", arch)
@@ -281,31 +419,18 @@ class Substvars(Tree):
     def test_arm64_takes_plugin_qualify_0_20_0_and_folds_the_rpi5_names(self):
         self.with_two_cells()
         v = self.vars("arm64")
-        self.assertEqual(v["qualify:Depends"], "plugin-qualify (>= 0.20.0~)")
-        self.assertEqual(v["records:Provides"],
-                         f"omx-qualification-rpi5-zynthian-vangelis (= {VERSION}), plugin-db-qualification-rpi5-zynthian-vangelis (= {VERSION})")
-        for field in ("records:Replaces", "records:Breaks"):
-            self.assertEqual(v[field], f"omx-qualification-rpi5-zynthian-vangelis (<< {VERSION}), "
-                                       f"plugin-db-qualification-rpi5-zynthian-vangelis (<< {VERSION})")
+        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.0~)"})
 
     def test_amd64_takes_plugin_qualify_0_20_1_and_folds_every_cell(self):
         self.with_two_cells()
         v = self.vars("amd64")
-        self.assertEqual(v["qualify:Depends"], "plugin-qualify (>= 0.20.1~)")
-        want = ["omx-qualification-rpi5-zynthian-vangelis", "omx-qualification-x86-64-fedora44",
-                "plugin-db-qualification-rpi5-zynthian-vangelis", "plugin-db-qualification-x86-64-fedora44",
-                "plugin-db-qualification-x86-64-fedora44-48000-512", "plugin-db-qualification-x86-64-fedora44-96000-256"]
-        for field, op in (("records:Provides", "="), ("records:Replaces", "<<"), ("records:Breaks", "<<")):
-            self.assertEqual(self.names(v[field]), want)
-            self.assertTrue(all(n.endswith(f"({op} {VERSION})") for n in v[field].split(", ")), v[field])
+        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.1~)"})
 
     def test_the_rpm_folds_its_classes_names(self):
         self.with_two_cells()
         block = sets.spec_block(self.root)
         self.assertIn("%ifarch x86_64\nRequires: plugin-qualify >= 0.20.1\n", block)
-        for n in ("plugin-db-qualification-x86-64-fedora44", "omx-qualification-x86-64-fedora44",
-                  "plugin-db-qualification-x86-64-fedora44-48000-512", "plugin-db-qualification-x86-64-fedora44-96000-256"):
-            self.assertIn(f"Provides: {n} = %{{version}}-%{{release}}\nObsoletes: {n} < %{{version}}-%{{release}}\n", block)
+        self.assertNotRegex(block, r"(?m)^(Provides|Obsoletes|Conflicts):")
         # each architecture's block names its own classes only
         self.assertNotIn("rpi5", block.split("%endif")[0])
         self.assertIn("%ifarch aarch64\nRequires: plugin-qualify >= 0.20.0\n", block)
@@ -315,7 +440,7 @@ class Substvars(Tree):
                 return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
                                       capture_output=True, text=True, check=True).stdout
             self.assertIn("plugin-qualify >= 0.20.1", q("--requires"))
-            self.assertIn("plugin-db-qualification-x86-64-fedora44-48000-512 <", q("--obsoletes"))
+            self.assertEqual(q("--obsoletes").split(), [])
             self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
     def test_an_architecture_with_no_class_or_no_set_is_refused(self):
@@ -338,11 +463,22 @@ class Rules(Tree):
         with open(os.path.join(bin_, "dh_install"), "w") as f:
             f.write("#!/bin/sh\n")
         os.chmod(os.path.join(bin_, "dh_install"), 0o755)
+        # the base database's builder and the contract directory's path: this test is about what the rules pass them
+        with open(os.path.join(bin_, "pkg-config"), "w") as f:
+            f.write("#!/bin/sh\necho /contract/dir\n")
+        os.chmod(os.path.join(bin_, "pkg-config"), 0o755)
+        with open(self.path("tools", "records-db.py"), "w") as f:
+            f.write("import sys\nopen('records-db.args', 'w').write(' '.join(sys.argv[1:]))\n"
+                    "open(sys.argv[sys.argv.index('--out') + 1], 'w').write('database')\n")
         saw = os.path.join(self.tmp.name, "substvars")
         env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"], GENCONTROL_SAW=saw)
         r = subprocess.run(["make", "-f", "debian/rules", target, f"DEB_HOST_ARCH={arch}"], cwd=self.root,
                            capture_output=True, text=True, env=env)
         return r, saw
+
+    def read_args(self):
+        with open(self.path("records-db.args")) as f:
+            return f.read().split()
 
     def installed(self):
         base = self.path("debian", PKG, "usr", "share", "omx", "qualification")
@@ -352,7 +488,11 @@ class Rules(Tree):
         self.with_two_cells()
         r, _ = self.make("override_dh_install", "arm64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.installed(), ["rpi5/zynthian-vangelis/a.qualification.json", "rpi5/zynthian-vangelis/provenance.json"])
+        self.assertEqual(self.installed(), ["qualification.sqlite", "rpi5/zynthian-vangelis/a.qualification.json",
+                                            "rpi5/zynthian-vangelis/provenance.json"])
+        self.assertEqual(self.read_args(), ["--records", "records", "--class", "rpi5", "--contract-dir", "/contract/dir",
+                                            "--built-from-file", "BUILT_FROM", "--out",
+                                            f"debian/{PKG}/usr/share/omx/qualification/qualification.sqlite"])
         base = self.path("debian", PKG, "usr", "share", "omx", "qualification")
         self.assertTrue(filecmp.cmp(os.path.join(base, "rpi5", "zynthian-vangelis", "provenance.json"),
                                     self.path("records", "rpi5", "zynthian-vangelis", "provenance.json"), shallow=False))
@@ -361,7 +501,10 @@ class Rules(Tree):
         self.with_two_cells()
         r, _ = self.make("override_dh_install", "amd64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.installed(), [f"x86-64/{s}/{f}" for s in CELLS for f in ("a.qualification.json", "provenance.json")])
+        self.assertEqual(self.installed(), ["qualification.sqlite"] + [f"x86-64/{s}/{f}" for s in CELLS
+                                                                       for f in ("a.qualification.json", "provenance.json")])
+        self.assertIn("--class x86-64 ", " ".join(self.read_args()) + " ")
+        self.assertNotIn("rpi5", self.read_args())
 
     def test_gencontrol_gets_the_architectures_substvars(self):
         self.with_two_cells()
@@ -373,7 +516,7 @@ class Rules(Tree):
             with open(saw) as f:
                 text = f.read()
             self.assertIn(f"qualify:Depends=plugin-qualify (>= {low}~)\n", text)
-            self.assertEqual("fedora44-48000-512" in text, arch == "amd64")
+            self.assertNotIn("fedora44", text)
 
     def test_an_architecture_with_no_class_or_no_set_fails_the_build(self):
         r, _ = self.make("override_dh_install", "i386")
@@ -470,18 +613,34 @@ class Prove(Tree):
         self.assertNotIn("plugin-qualify-sync", log)
         self.assertIn(f"apt-get remove -y {PKG}", log)
 
-    def test_a_set_measured_on_another_host_class_is_named_and_not_proven(self):
+    def with_an_rpi5_set(self):
+        """x86_64's package carrying a set of the rpi5 class too (the proof names it, it does not prove it)."""
+        real = sets.carried
+        self.addCleanup(setattr, sets, "carried", real)
+        sets.carried = lambda root, kind, arch: real(root, kind, arch) + [("rpi5", "zynthian-vangelis")]
+
+    def test_a_fedora44_set_is_proven_on_a_fedora45_image(self):
+        # qualification results are stable: x86-64 is a host class, not an operating system
         self.with_two_cells()
-        self.add_set("x86-64", "fedora45-48000-64")
-        self.respec()
-        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), STUB_HOST="fedora45")
+        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
         self.assertEqual(rc, 0, out + log)
-        for s in CELLS:
-            self.assertIn(f"::notice::x86-64/{s}: measured on fedora44, not proven in fedora45", out)
-        self.assertIn("2 sets measured on another host class, not proven in fedora45", out)
-        self.assertIn("1 of 3 sets proven, 2 not proven (measured on another host class)", out)
-        self.assertEqual(log.count("plugin-qualify-sync --system"), 1)
+        self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
+        self.assertEqual(log.count("plugin-qualify-sync --system"), 2)
+        self.assertNotIn("::notice::", out)
         self.assertNotIn("::warning::", out)
+
+    def test_a_set_of_another_host_class_is_named_and_not_proven_whatever_the_os(self):
+        self.with_two_cells()
+        self.with_an_rpi5_set()
+        for image in (("fedora", "44"), ("fedora", "45")):
+            shutil.rmtree(os.path.join(self.tmp.name, "root"), ignore_errors=True)
+            rc, out, log = self.prove("rpm", "x86_64", image=image)
+            self.assertEqual(rc, 0, out + log)
+            self.assertIn("::notice::rpi5/zynthian-vangelis: a set of the rpi5 class, not proven on an x86-64 machine", out)
+            self.assertIn("1 sets of another host class, not proven on an x86-64 machine", out)
+            self.assertIn("2 of 3 sets proven, 1 not proven (measured on another host class)", out)
+            self.assertEqual(log.count("plugin-qualify-sync --system"), 2)
+            self.assertNotIn("::warning::", out)
 
     def test_a_set_measured_on_this_host_class_is_proven(self):
         self.with_two_cells()
@@ -490,21 +649,15 @@ class Prove(Tree):
         self.assertIn("2 of 2 sets proven, 0 not proven (measured on another host class)", out)
         self.assertNotIn("::notice::", out)
 
-    def test_a_matching_set_that_fails_still_fails(self):
+    def test_no_set_of_this_host_class_warns_and_does_not_fail(self):
         self.with_two_cells()
-        self.add_set("x86-64", "fedora45-48000-64")
-        self.respec()
-        rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"), BAD_GRID="48000/64", STUB_HOST="fedora45")
-        self.assertEqual(rc, 1, out)
-        self.assertIn("0 of 3 sets proven, 2 not proven (measured on another host class); failed: fedora45-48000-64", out)
-
-    def test_no_matching_set_warns_and_does_not_fail(self):
-        self.with_two_cells()
+        real = sets.carried
+        self.addCleanup(setattr, sets, "carried", real)
+        sets.carried = lambda root, kind, arch: [("rpi5", "zynthian-vangelis")]
         rc, out, log = self.prove("rpm", "x86_64", image=("fedora", "45"))
         self.assertEqual(rc, 0, out + log)
-        self.assertIn("::warning::proved 0 of 2 sets: none was measured on fedora45", out)
-        self.assertIn("0 of 2 sets proven, 2 not proven (measured on another host class)", out)
-        self.assertNotIn("0 of 0", out)
+        self.assertIn("::warning::proved 0 of 1 sets: none is a set of the x86-64 class", out)
+        self.assertIn("0 of 1 sets proven, 1 not proven (measured on another host class)", out)
         self.assertNotIn("plugin-qualify-sync", log)
 
     def test_a_set_without_a_host_class_in_its_name_is_always_proven(self):
@@ -524,16 +677,6 @@ class Prove(Tree):
         self.assertEqual(rc, 1, out)
         self.assertIn("::error::", out)
         self.assertIn("carries no set", out)
-
-    def test_an_image_whose_host_class_cannot_be_read_fails_the_proof(self):
-        self.with_two_cells()
-        for text in (None, "", 'NAME="Test"\nID=fedora\n', 'NAME="Test"\nVERSION_ID="45"\n'):
-            shutil.rmtree(os.path.join(self.tmp.name, "root"), ignore_errors=True)
-            rc, out, log = self.prove("rpm", "x86_64", image="none", os_release=text)
-            self.assertEqual(rc, 1, (text, out))
-            self.assertIn("::error::", out)
-            self.assertIn("host class of this image cannot be read", out)
-            self.assertNotIn("plugin-qualify-sync", log)
 
     def test_no_set_is_not_a_proof(self):
         os.environ["PROVE_ARCH"] = "x86_64"

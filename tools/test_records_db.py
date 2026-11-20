@@ -471,6 +471,43 @@ class Refusals(Base):
         self.refused("claim-duplicate", "copy-of-" + f)
 
 
+class TwoTiers(Base):
+    """Ruling 2026-11-20 (the store spec, section 4): a set of the reference tier and a set of another tier may hold one
+    key at one cell; the reference tier's record claims it, whichever set comes first, and the other record stays whole.
+    Two sets of one tier at one cell are refused."""
+
+    def two(self, other_name, other_tier):
+        make_set(self.tmp, n=2)  # fedora44-48000-512, tier provisional
+        d = make_set(self.tmp, n=2, name=other_name)
+        prov = load(os.path.join(d, "provenance.json"))
+        prov["tier"] = other_tier
+        dump(os.path.join(d, "provenance.json"), prov)
+
+    def claimed_by(self):
+        return self.rows("SELECT s.name, s.tier, count(*) FROM claim cl JOIN record r USING (record_id) "
+                         "JOIN record_set s USING (set_id) GROUP BY s.name, s.tier ORDER BY s.name")
+
+    def assert_reference_claims(self, ref):
+        build_ok(self, os.path.join(self.tmp, "records"), self.db)
+        self.assertEqual(self.rows("SELECT count(*) FROM record"), [(4,)], "a record was dropped")
+        ref_cells = self.rows("SELECT count(*) FROM cell JOIN record USING (record_id) JOIN record_set s USING (set_id) "
+                              "WHERE s.name = ?", ref)[0][0]
+        self.assertGreater(ref_cells, 0)
+        self.assertEqual(self.claimed_by(), [(ref, "reference", ref_cells)])
+
+    def test_9_the_reference_tier_claims_a_cell_both_hold_when_it_comes_last(self):
+        self.two("fedora44-rt-48000-512", "reference")
+        self.assert_reference_claims("fedora44-rt-48000-512")
+
+    def test_9_the_reference_tier_claims_a_cell_both_hold_when_it_comes_first(self):
+        self.two("fedora44-0rt-48000-512", "reference")
+        self.assert_reference_claims("fedora44-0rt-48000-512")
+
+    def test_9_two_sets_of_one_tier_at_one_cell_are_refused(self):
+        self.two("fedora44-rt-48000-512", "provisional")
+        self.refused("claim-duplicate", "fedora44-rt-48000-512", "fedora44-48000-512")
+
+
 class Identity(Base):
     def test_04_two_builds_are_row_identical_and_byte_identical(self):
         for s in ("fedora44-48000-512", "fedora44-96000-64"):
@@ -874,7 +911,17 @@ class RoundTrip(unittest.TestCase):
         self.assertEqual(count("adapter_cell_param"), arrays["adapter.cells[].params.*"])
         self.assertEqual(count("record_version"), arrays["adapter.versions.*"] + arrays["rejudged.figures.adapter.versions.*"])
         self.assertEqual(count("tier"), sum(tier_objects.values()))
-        self.assertEqual(count("claim"), arrays["measurements.grid[]"])
+        # one claim per key, offer, class and cell: where a reference-tier set and another set both hold one, the
+        # reference record claims it (section 4)
+        held = self.db.execute("SELECT count(*) FROM (SELECT DISTINCT r.plugin_id, r.offer, r.host_class, c.rate, c.quantum "
+                               "FROM cell c JOIN record r USING (record_id))").fetchone()[0]
+        self.assertEqual(count("claim"), held)
+        self.assertEqual(self.db.execute(
+            "SELECT count(*) FROM claim cl JOIN record r USING (record_id) JOIN record_set s USING (set_id) "
+            "WHERE s.tier <> 'reference' AND EXISTS (SELECT 1 FROM cell c2 JOIN record r2 ON r2.record_id = c2.record_id "
+            "JOIN record_set s2 ON s2.set_id = r2.set_id WHERE s2.tier = 'reference' AND r2.plugin_id = cl.plugin_id "
+            "AND r2.offer = cl.offer AND r2.host_class = cl.host_class AND c2.rate = cl.rate AND c2.quantum = cl.quantum)").fetchone()[0],
+            0, "a cell a reference record holds is claimed by another tier")
 
     def test_03_the_package_fields_and_the_absent_fields_read_back_null(self):
         cols = ("pkg_format", "pkg_name", "pkg_version", "pkg_release", "pkg_distro", "pkg_arch")

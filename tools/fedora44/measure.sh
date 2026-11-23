@@ -117,6 +117,13 @@ measure_base() {
   rate=${cell%/*}; per=${cell#*/}; n=b$rate-$per; dir=$cache/$n; mkdir -p $dir
   if [ -e $dir/stamp-$stage ]; then echo "stage $stage at $cell: stamped done, skipped"; return 0; fi
   mkdir -p /etc/omx
+  # the directories scanned are plugin-hostd's settings (plugin-hostd --search-path -c <file>), named by hostd_conf;
+  # plugin-qualify-sync refuses lv2_path, clap_path and clap_extra in its own file. Fedora's CLAP plugins are in lib64.
+  if [ -n "${DRY:-}" ]; then
+    printf 'lv2_path /work/dry/lv2\nclap_path /work/dry/clap\n' > $dir/plugin-hostd.conf
+  else
+    printf 'clap_path /usr/lib64/clap:/usr/lib/clap\n' > $dir/plugin-hostd.conf
+  fi
   cat > /etc/omx/qualify.conf <<C
 host_class $HOST_CLASS
 hostd_port 0
@@ -126,8 +133,9 @@ pin_file $dir/qualified.pins
 qualification_dir $dir/qualification
 descriptor_dir $dir/descriptors
 state_file $dir/qualify-sync.json
-$( if [ -n "${DRY:-}" ]; then echo "lv2_path /work/dry/lv2"; echo "clap_path /work/dry/clap"; else echo "clap_extra /usr/lib64/clap"; fi )
+hostd_conf $dir/plugin-hostd.conf
 C
+  plugin-hostd --search-path -c $dir/plugin-hostd.conf
   # the JACK server a device runs: the admission under omx-clap-host adds each LV2 plugin as a client of the default
   # server. Private to this pod, dummy driver, the cell the grid measures; started again whenever it ends, since an
   # admission without a server answers ERR_JACK_CLIENT_CREATION for a plugin that never ran

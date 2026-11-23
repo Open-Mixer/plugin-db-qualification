@@ -8,7 +8,8 @@ and 8, change 2). The round trip runs over every record of records/; the refusal
 
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones:
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
-(plugin-qualify, plugin-hostd, plugin-db, omx-clap); each domain is read from `contract.d/<domain>/` at
+(plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap: the domain qualification is plugin-hostd's since V5, the domain probe
+plugin-hostd-protocol's since V8; plugin-qualify holds neither); each domain is read from `contract.d/<domain>/` at
 PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap at the same ref, laid out as its
 `make install-contract` lays them (<contractdir>/3/omx-clap/ and its MANIFEST.json), the hosting exception of the spec. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
 """
@@ -33,7 +34,7 @@ SCHEMA = os.path.join(REPO, "schema", "qualification.sql")
 TSV = os.path.join(HERE, "testdata", "field-columns.tsv")
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 SRC_SET = ("x86-64", "fedora44-48000-512")
-DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
+DOMAIN_REPO = {"qualification": "plugin-hostd", "machine": "plugin-hostd", "probe": "plugin-hostd-protocol",
                "plugin-db": "plugin-db"}
 
 SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
@@ -73,7 +74,7 @@ def contract_dir():
         return _contract["dir"]
     if not SIBLINGS:
         raise unittest.SkipTest("PDQ_SIBLINGS is not set: no sibling clones to read the owners' words from "
-                                "(plugin-qualify, plugin-hostd, plugin-db, omx-clap)")
+                                "(plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap)")
     root = tempfile.mkdtemp(prefix="pdq-contract-")
     for dom, repo in DOMAIN_REPO.items():
         clone = os.path.join(SIBLINGS, repo)

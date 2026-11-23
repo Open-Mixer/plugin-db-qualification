@@ -142,7 +142,8 @@ The records change only when new measurements are added, never per release. A ne
 tools/sets.py import <class> <set> <out-dir> --provenance <file>
 ```
 
-The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. It refuses a set that already exists
+The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. An `*.unmeasured.json` beside the
+records is left out and named: an unmeasured record never applies. It refuses a set that already exists
 (`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then run
 `tools/sets.py spec`, and release the records package under a new date version.
 

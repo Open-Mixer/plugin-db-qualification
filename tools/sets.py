@@ -17,8 +17,9 @@ debian/rules and the spec read all of it from here.
     tools/sets.py import <class> <set> <out-dir> [--provenance <file>]
                                                 copies the *.qualification.json and *.probe.json files of a
                                                 `plugin-qualify --out` directory (and the provenance) into
-                                                records/<class>/<set>/, then runs tools/check-records.py on it; a
-                                                refusal is named and leaves the tree as it was
+                                                records/<class>/<set>/, then runs tools/check-records.py on it; an
+                                                *.unmeasured.json is left out and named; a refusal is named and
+                                                leaves the tree as it was
     tools/sets.py prove deb|rpm <pkg dir>       installs the package of this machine's architecture from <pkg dir> and
                                                 proves every set it carries of this machine's host class
                                                 (tools/prove-set.sh), one after the other; the others are named, not proven
@@ -58,6 +59,7 @@ QUALIFICATION = os.path.join("usr", "share", "omx", "qualification")
 BASE_DB = "qualification.sqlite"
 RECORD = ".qualification.json"
 PROBE = ".probe.json"
+UNMEASURED = ".unmeasured.json"
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
 BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
 BLOCK_END = "# END per-architecture"
@@ -224,9 +226,10 @@ class ImportRefused(Refused):
 
 def import_set(root, cls, set_, out, provenance=None):
     """A `plugin-qualify --out` directory into records/<cls>/<set_>/: its *.qualification.json and *.probe.json files, byte
-    for byte, and the provenance given. Refused by name, and then nothing is written (a set that fails the records check is
-    removed again): file-other, class-unknown, set-exists, dir-absent, dir-empty, probe-missing, qualification-missing,
-    set-check-failed."""
+    for byte, and the provenance given. An *.unmeasured.json is left out and named in `left` (an unmeasured record never
+    applies; owner ruling on plugin-qualify#141, 2026-11-23). Refused by name, and then nothing is written (a set that
+    fails the records check is removed again): file-other, class-unknown, set-exists, dir-absent, dir-empty, probe-missing,
+    qualification-missing, set-check-failed. Returns the number of records and the names left out."""
     if cls not in {line["class"] for line in arch_classes(root)}:
         raise ImportRefused("class-unknown", f"{cls!r} is not a class of {ARCH_CLASSES}")
     dest = os.path.join(root, "records", cls, set_)
@@ -235,6 +238,8 @@ def import_set(root, cls, set_, out, provenance=None):
     if not os.path.isdir(out):
         raise ImportRefused("dir-absent", f"{out}: no such directory")
     names = sorted(os.listdir(out), key=os.fsencode)
+    left = [n for n in names if n.endswith(UNMEASURED) and os.path.isfile(os.path.join(out, n)) and not os.path.islink(os.path.join(out, n))]
+    names = [n for n in names if n not in left]
     if not names:
         raise ImportRefused("dir-empty", f"{out} holds no file")
     for n in names:
@@ -264,7 +269,7 @@ def import_set(root, cls, set_, out, provenance=None):
         if not os.listdir(parent):
             os.rmdir(parent)
         raise ImportRefused("set-check-failed", f"records/{cls}/{set_}/ fails tools/check-records.py:\n{(r.stdout + r.stderr).strip()}")
-    return len(records)
+    return len(records), left
 
 
 def install(root, kind, arch, dest):
@@ -569,7 +574,9 @@ def main(argv, root=os.path.dirname(HERE)):
                 print(f"records/{c}/ -> {os.path.join(argv[3], c)}/")
             return 0
         if cmd == "import" and len(argv) in (4, 6) and (len(argv) == 4 or argv[4] == "--provenance"):
-            n = import_set(root, argv[1], argv[2], argv[3], argv[5] if len(argv) == 6 else None)
+            n, left = import_set(root, argv[1], argv[2], argv[3], argv[5] if len(argv) == 6 else None)
+            for name in left:
+                print(f"{name}: left out, an unmeasured record never applies")
             print(f"records/{argv[1]}/{argv[2]}/: {n} record{'' if n == 1 else 's'} imported and checked")
             return 0
         if cmd == "spec" and len(argv) == 1:

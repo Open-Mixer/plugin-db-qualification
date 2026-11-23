@@ -378,6 +378,20 @@ class Import(Tree):
             f.write("x")
         self.assertIn("notes.txt", self.refused("file-other"))
 
+    def test_an_unmeasured_record_is_left_out_by_name(self):
+        # plugin-qualify#141, ruled 2026-11-23: an unmeasured record never applies; the import leaves it out and says so,
+        # as plugin-qualify-records-package does (records.left.unmeasured), and the set is imported without it
+        with open(os.path.join(self.out, "x.unmeasured.json"), "w") as f:
+            f.write("{}")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(io.StringIO()) as err, contextlib.redirect_stdout(buf):
+            rc = sets.main(["import", "x86-64", "fedora45-48000-512", self.out, "--provenance", self.prov], root=self.root)
+        self.assertEqual(rc, 0, err.getvalue())
+        dest = self.path("records", "x86-64", "fedora45-48000-512")
+        self.assertNotIn("x.unmeasured.json", os.listdir(dest))
+        self.assertEqual(sorted(os.listdir(dest)), sorted([f for f in os.listdir(self.out) if f != "x.unmeasured.json"] + ["provenance.json"]))
+        self.assertIn("x.unmeasured.json: left out, an unmeasured record never applies", buf.getvalue())
+
     def test_a_directory_in_the_out_dir_is_refused(self):
         os.makedirs(os.path.join(self.out, "sub"))
         self.refused("file-other")

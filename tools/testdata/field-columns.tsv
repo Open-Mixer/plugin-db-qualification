@@ -1,0 +1,192 @@
+# The old field of a record (or, with the P: prefix, of a provenance) and the column that holds it: written by hand from
+# the table of this repository's qualification store spec, section 3.5, one line per leaf. tools/test_records_db.py reads
+# each path's value from the JSON and the column's value with its own SQL, and compares them. It does not use the
+# writer's mapping, so a mapping wrong in the writer and the exporter alike (two columns swapped in both) fails here.
+#
+# <JSON path>	<table>.<column>	[presence | presence:<object>]
+# `[]` is an array element. `present`: the column is 1 when the field is present, NULL when absent (the text itself is a
+# sentence and is not stored). `presence`: 1 when the JSON object is present, 0 when absent; `presence:<object>`: the
+# same, and NULL when <object> is absent.
+# Not here: the named values of a map (params, versions, packages, passes, settings), which the tests read by name, and
+# the sentences (section 3.5), which no column holds.
+schema	record.schema
+plugin.format	plugin.format
+plugin.id	plugin.uri
+binary.sha256	plugin.sha256
+binary.path	record.binary_path
+binary.files[].path	record_file.path
+binary.files[].sha256	record_file.sha256
+binary.layout.scheme	record.layout_scheme
+binary.layout.sha256	record.layout_sha256
+rules	record.rules
+latencyLineMs	record.latency_line_ms
+binary.unpinnable	record.unpinnable	present
+testedVersion	record.tested_version
+measuredAt	record.measured_at
+run.id	record.run_id
+run.steps[].step	run_step.step
+run.steps[].result	run_step.result
+run.steps[].code	run_step.code
+run.steps[].figures.cpuPercent	run_step.cpu_percent
+run.steps[].figures.latencyFrames	run_step.latency_frames
+run.steps[].figures.midiInputsLinked	run_step.midi_inputs_linked
+run.steps[].figures.xruns	run_step.xruns
+run.steps[].pool.allocationsOn	run_step.pool_allocations_on
+run.steps[].pool.locksOn	run_step.pool_locks_on
+run.steps[].pool.syscallsOn	run_step.pool_syscalls_on
+run.steps[].pool.tasksOnHelpers	run_step.pool_tasks_on_helpers
+tool.runner	record.tool_runner
+tool.child	record.tool_child
+tool.interposer	record.tool_interposer
+probe.file	record.probe_file
+probe.sha256	record.probe_sha256
+probe.bytes	record.probe_bytes
+probe.protocol.name	record.probe_protocol
+probe.protocol.version	record.probe_protocol_version
+probe.reason	record.probe_reason
+probe.outcome	record.probe_outcome
+probe.complete	record.probe_complete
+probe.meetsProtocol	record.probe_meets_protocol
+probe.load.loadavg1	record.probe_loadavg1
+probe.load.cores	record.probe_cores
+probe.machineClass.arch	record.mc_arch
+probe.machineClass.family	record.mc_family
+probe.machineClass.coreBand	record.mc_core_band
+probe.machineClass.clockBand	record.mc_clock_band
+probe.machineClass.preemptRt	record.mc_preempt_rt
+probe.machineClass.cstatesLimited	record.mc_cstates_limited
+probe.ends[].step	probe_end.step
+probe.ends[].outcome	probe_end.outcome
+probe.ends[].exitStatus	probe_end.exit_status
+probe.ends[].signal	probe_end.signal
+verdicts[].host	verdict.host
+verdicts[].measured	verdict.measured
+verdicts[].rating	verdict.rating
+verdicts[].qualified	verdict.qualified
+verdicts[].hosting	verdict.hosting
+verdicts[].arm	verdict.arm
+verdicts[].deciding	verdict.deciding
+verdicts[].reasons[].dimension	reason.dimension
+verdicts[].reasons[].rating	reason.rating
+verdicts[].reasons[].code	reason.code
+cost[].host	cost_entry.host
+cost[].rate	cost_entry.rate
+cost[].quantum	cost_entry.quantum
+cost[].reasons[].dimension	reason.dimension
+cost[].reasons[].rating	reason.rating
+cost[].reasons[].code	reason.code
+tiers.inProcess.host	tier.host
+tiers.inProcess.measured	tier.measured
+tiers.inProcess.qualified	tier.qualified
+tiers.inProcess.rating	tier.rating
+tiers.inProcess.deciding	tier.deciding
+tiers.inProcess.runsAlone	tier.runs_alone
+tiers.isolated.host	tier.host
+tiers.isolated.measured	tier.measured
+tiers.isolated.qualified	tier.qualified
+tiers.isolated.rating	tier.rating
+tiers.isolated.deciding	tier.deciding
+tiers.isolated.runsAlone	tier.runs_alone
+tiers.offeredOn[]	tier_offered.tier
+measurements.grid[].rate	cell.rate
+measurements.grid[].quantum	cell.quantum
+measurements.grid[].outcome	cell.outcome
+measurements.grid[].latency.declaredFrames	cell.latency_declared_frames
+measurements.grid[].latency.measuredFrames	cell.latency_measured_frames
+measurements.grid[].latency.code	cell.latency_code
+measurements.grid[].latency.unmeasuredReason	cell.latency_unmeasured_reason
+measurements.grid[].latencyMs	cell.latency_ms
+measurements.grid[].cost.median	cell.cost_median
+measurements.grid[].cost.percentile.p	cell.cost_percentile_p
+measurements.grid[].cost.percentile.value	cell.cost_percentile_value
+measurements.grid[].cost.blocks	cell.cost_blocks
+measurements.grid[].cost.warmupBlocks	cell.cost_warmup_blocks
+measurements.grid[].cost.voices.basis	cell.voices_basis
+measurements.grid[].cost.voices.capacity	cell.voices_capacity
+measurements.grid[].cost.voices.held	cell.voices_held
+measurements.grid[].memory.afterInstantiateKb	cell.mem_after_instantiate_kb
+measurements.grid[].memory.afterActivateKb	cell.mem_after_activate_kb
+measurements.grid[].memory.atRestKb	cell.mem_at_rest_kb
+measurements.grid[].memory.secondInstanceKb	cell.mem_second_instance_kb
+measurements.grid[].memory.firstInstanceKb	cell.mem_first_instance_kb
+measurements.grid[].memory.perInstanceKb	cell.mem_per_instance_kb
+measurements.grid[].memory.notesHeldKb	cell.mem_notes_held_kb
+measurements.grid[].memory.basis	cell.mem_basis
+measurements.grid[].memory.unmeasuredReason	cell.mem_unmeasured_reason
+measurements.grid[].memoryLimit.bytes	cell.mem_limit_bytes
+measurements.grid[].memoryLimit.mechanism	cell.mem_limit_mechanism
+measurements.grid[].rtSafety.interposer	cell.rt_interposer
+measurements.grid[].rtSafety.swept	cell.rt_swept
+measurements.grid[].rtSafety.sweepApplicable	cell.rt_sweep_applicable
+measurements.grid[].rtSafety.blocks	cell.rt_blocks
+measurements.grid[].rtSafety.allocations	cell.rt_allocations
+measurements.grid[].rtSafety.locks	cell.rt_locks
+measurements.grid[].rtSafety.syscalls	cell.rt_syscalls
+measurements.grid[].rtSafety.threadViolations	cell.rt_thread_violations
+measurements.grid[].rtSafety.processErrors	cell.rt_process_errors
+measurements.grid[].rtSafety.events[]	cell_event.event
+measurements.grid[].noteSweep.applicable	cell.note_sweep_applicable
+measurements.grid[].noteSweep.dialect	cell.note_sweep_dialect
+measurements.grid[].noteSweep.allocations	cell.note_sweep_allocations
+measurements.grid[].noteSweep.locks	cell.note_sweep_locks
+measurements.grid[].noteSweep.syscalls	cell.note_sweep_syscalls
+measurements.unmeasured[].dimension	unmeasured.dimension
+measurements.unmeasured[].code	unmeasured.code
+measurements.unmeasured[].rate	unmeasured.rate
+measurements.unmeasured[].quantum	unmeasured.quantum
+measurements.behaviour.lifecycle.cycles	record.lifecycle_cycles
+measurements.behaviour.lifecycle.failed	record.lifecycle_failed
+measurements.behaviour.lifecycle.instantiated	record.lifecycle_instantiated
+measurements.behaviour.threads.before	record.threads_before
+measurements.behaviour.threads.afterFirstInstantiate	record.threads_after_first_instantiate
+measurements.behaviour.threads.afterAllFreed	record.threads_after_all_freed
+measurements.behaviour.features.required[]	feature_required.feature
+notMeasured[].dimension	not_measured.dimension
+notMeasured[].code	not_measured.code
+adapter.admitted	record.adapter_admitted
+adapter.host	record.adapter_host
+adapter.measured	record.adapter_measured
+adapter.code	record.adapter_code
+adapter.measuredAt	record.adapter_measured_at
+adapter.params	record.adapter_params	presence:adapter
+adapter.cells[].rate	adapter_cell.rate
+adapter.cells[].quantum	adapter_cell.quantum
+adapter.cells[].admitted	adapter_cell.admitted
+adapter.cells[].measured	adapter_cell.measured
+adapter.cells[].code	adapter_cell.code
+adapter.cells[].params	adapter_cell.params	presence
+memoryRun.measuredAt	record.memory_run_measured_at
+memoryRun.runId	record.memory_run_id
+memoryRun.tool.runner	record.memory_run_runner
+memoryRun.tool.child	record.memory_run_child
+memoryRun.cells[].rate	memory_run_cell.rate
+memoryRun.cells[].quantum	memory_run_cell.quantum
+memoryRun.cells[].outcome	memory_run_cell.outcome
+rejudged.at	record.rejudged_at
+rejudged.by	record.rejudged_by
+rejudged.figures.measuredAt	record.rejudged_measured_at
+rejudged.figures.runId	record.rejudged_run_id
+rejudged.figures.tool.runner	record.rejudged_runner
+rejudged.figures.tool.child	record.rejudged_child
+rejudged.figures.tool.interposer	record.rejudged_interposer
+rejudged.figures.adapter.measuredAt	record.rejudged_adapter_measured_at
+rejudged.figures.memory.measuredAt	record.rejudged_memory_measured_at
+rejudged.figures.memory.tool.runner	record.rejudged_memory_runner
+rejudged.figures.memory.tool.child	record.rejudged_memory_child
+rejudged.owes[].code	rejudged_owe.code
+rejudged.owes[].measurement	rejudged_owe.measurement
+P:schema	record_set.schema
+P:set	record_set.name
+P:hostClass	record_set.host_class
+P:hostProfile	record_set.host_profile
+P:tier	record_set.tier
+P:measured	record_set.measured
+P:date	record_set.date
+P:package.name	record_set.package_name
+P:package.version	record_set.package_version
+hostExtensions	record.host_extensions	present
+hostExtensions[]	record_extension.extension
+measurements.grid[].rtSafety.ownThreads	cell.rt_own_threads	fixture
+measurements.grid[].rtSafety.otherThreads.allocations	cell.rt_other_allocations	fixture
+measurements.grid[].rtSafety.otherThreads.locks	cell.rt_other_locks	fixture
+measurements.grid[].rtSafety.otherThreads.syscalls	cell.rt_other_syscalls	fixture

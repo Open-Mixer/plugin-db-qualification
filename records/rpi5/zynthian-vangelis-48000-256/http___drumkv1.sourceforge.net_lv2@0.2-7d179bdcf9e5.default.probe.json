@@ -1,0 +1,58 @@
+{
+  "format": "plugin-hostd.probe-output",
+  "formatVersion": "1.4",
+  "run": {
+    "id": "20261108T232650Z-1a1a6-f541efcb",
+    "startedAt": "2026-11-08T23:26:50+00:00",
+    "elapsedMs": 1130,
+    "complete": true,
+    "outcome": "probe.ok",
+    "reason": "on-request",
+    "protocol": {"name": "plugin-hostd.probe-protocol", "version": 1},
+    "tools": {"runner": "plugin-hostd-probe 0.19.1", "child": "lv2_measure", "interposer": "rt_interpose.so"},
+    "via": "runner",
+    "realtime": {"class": "fifo", "priority": 99, "requested": 99, "grantedBy": "cap", "capabilityBound": true, "observed": {"policy": "fifo", "priority": 99}},
+    "memoryLock": {"locked": false, "limitBytes": 8388608, "reason": "RLIMIT_MEMLOCK is 8388608 bytes, below the memory limit of 2122874880: a lock would fail the plugin's own allocations first"}
+  },
+  "plugin": {"format": "lv2", "id": "http://drumkv1.sourceforge.net/lv2", "version": "0.2"},
+  "binary": {"path": "drumkv1.so", "sha256": "7d179bdcf9e5b755855794eed0a764c3f53abb70c529ea97077d534fa39ae442", "files": [{"path": "drumkv1.so", "sha256": "7d179bdcf9e5b755855794eed0a764c3f53abb70c529ea97077d534fa39ae442"}, {"path": "drumkv1.ttl", "sha256": "ef66e4a1fff9e9c53206dc6c679620f9b552aade7f7ef2026854be19ceacf831"}, {"path": "drumkv1_ui.ttl", "sha256": "6f0e871e0f10a5f98a78d47721886c17d693356cf22bc2c9780f4d3fd2c8da24"}, {"path": "manifest.ttl", "sha256": "b66fed04b78253873ae51e1b31eeddc95cf76e1aa99d8dbb30983ad41f04cade"}], "layout": {"scheme": "omx-layout/1", "sha256": "ae0fca82111ac3f7310ace9fcc27e7f0345e1937d47f5e7532115b0b536d07ce"}},
+  "machine": {
+    "class": {"arch": "aarch64", "family": "arm", "coreBand": "3-4", "clockBand": "1.5-2.5GHz", "preemptRt": false, "cstatesLimited": false},
+    "profile": {"governor": "performance", "turbo": false, "smt": false, "preempt": "PREEMPT",
+      "cpuidle": [],
+      "meetsProtocol": false, "unmet": ["probe.profile.not-pinned"]},
+    "pinnedCpus": "0-3"
+  },
+  "offer": {"id": "default", "realtime": "fifo"},
+  "limits": {"set": "default",
+    "applied": [
+      {"limit": "wall-clock", "value": 120, "unit": "s", "by": "supervisor"},
+      {"limit": "cpu-time", "value": 540, "unit": "s", "by": "rlimit"},
+      {"limit": "memory", "value": 2122874880, "unit": "bytes", "by": "rlimit"},
+      {"limit": "files", "value": 256, "unit": "count", "by": "rlimit"},
+      {"limit": "file-size", "value": 67108864, "unit": "bytes", "by": "rlimit"},
+      {"limit": "core-dump", "value": 0, "unit": "bytes", "by": "rlimit"},
+      {"limit": "rt-priority", "value": 0, "by": "rlimit"},
+      {"limit": "rt-time", "value": 120000000, "unit": "us", "by": "rlimit"},
+      {"limit": "memory-lock", "value": 8388608, "unit": "bytes", "by": "rlimit"},
+      {"limit": "no-new-privs", "by": "prctl"}
+    ],
+    "unavailable": [
+      {"limit": "memory", "code": "probe.limit.controller-not-delegated"},
+      {"limit": "tasks", "code": "probe.limit.not-implemented"}
+    ]
+  },
+  "steps": [
+    {"step": "hash", "outcome": "probe.ok", "elapsedMs": 27, "exitStatus": 0},
+    {"step": "instantiate", "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "rt-safety", "rate": 48000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0, "detail": "read from the child's line"},
+    {"step": "latency", "rate": 48000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0},
+    {"step": "cost", "rate": 48000, "quantum": 256, "outcome": "probe.ok", "elapsedMs": 0},
+    {"step": "lifecycle", "outcome": "probe.ok", "elapsedMs": 1103, "exitStatus": 0}
+  ],
+  "grid": [
+    {"rate": 48000, "quantum": 256, "outcome": "probe.ok", "latency": {"declaredFrames": 0, "measuredFrames": 0, "method": "impulse-onset"}, "cost": {"unit": "ns-per-sample", "median": 172.129, "percentile": {"p": 95, "value": 173.537}, "min": 2.45703, "max": 207.609, "blocks": 512, "warmupBlocks": 64}, "memory": {"afterInstantiateKb": 21792, "afterActivateKb": 22512, "atRestKb": 22528, "secondInstanceKb": 976}, "rtSafety": {"interposer": true, "swept": true, "sweepApplicable": true, "blocks": 512, "allocations": 0, "locks": 0, "syscalls": 0, "events": []}, "noteSweep": {"applicable": true, "dialect": "midi", "allocations": 0, "locks": 0, "syscalls": 0}}
+  ],
+  "behaviour": {"lifecycle": {"cycles": 30, "instantiated": 30, "failed": 0}, "threads": {"before": 1, "afterFirstInstantiate": 2, "afterAllFreed": 1}, "features": {"required": ["http://lv2plug.in/ns/ext/worker#schedule", "http://lv2plug.in/ns/ext/urid#map"]}},
+  "logs": [{"name": "stderr", "path": "/tmp/plugin-qualify-probe-BM3uwD/child.stderr.log", "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "bytes": 0}]
+}

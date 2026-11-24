@@ -12,7 +12,7 @@
 # installed plugin's bytes are the measured ones.
 #
 # The block between BEGIN and END per-architecture is written by tools/sets.py spec: each architecture's
-# plugin-qualify range (packaging/arch-classes) and the older package names it takes over (one package per set, the
+# plugin-qualify floor (packaging/arch-classes) and the older package names it takes over (one package per set, the
 # names derived from records/), and tools/sets.py check holds it to them. The spec is read before %%prep unpacks the
 # tree, so that part is written here; %%install and %%files read the tree.
 
@@ -20,7 +20,7 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026111001
+Version: 2026112001
 Release: 1%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
@@ -30,41 +30,23 @@ ExclusiveArch: x86_64 aarch64
 
 # tools/sets.py in %%install and the record check in %%check
 BuildRequires: python3
+# the reader (the Makefile): sqlite 3.37.0 is the first with STRICT tables; libomx-domain is the contract loader
+BuildRequires: gcc make pkgconfig binutils
+BuildRequires: sqlite-devel >= 3.37.0
+BuildRequires: libomx-domain-devel >= 3.20.0
+# tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
+BuildRequires: python3-jsonschema
+BuildRequires: plugin-qualify-contract >= 0.20.7
+BuildRequires: plugin-hostd-contract >= 0.20.8
+BuildRequires: plugin-db-contract >= 0.4.7
+BuildRequires: omx-clap-core-contract >= 0.33.1
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64
-Requires: (plugin-qualify >= 0.20.1 with plugin-qualify < 0.21)
-Provides: omx-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: omx-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-192000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-192000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-48000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-48000-64 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-128 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-128 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-256 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-256 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-512 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-512 < %{version}-%{release}
-Provides: plugin-db-qualification-x86-64-fedora44-96000-64 = %{version}-%{release}
-Obsoletes: plugin-db-qualification-x86-64-fedora44-96000-64 < %{version}-%{release}
+Requires: plugin-qualify >= 0.20.7
 %endif
 %ifarch aarch64
-Requires: (plugin-qualify >= 0.20.0 with plugin-qualify < 0.21)
-Provides: omx-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: omx-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
-Provides: plugin-db-qualification-rpi5-zynthian-vangelis = %{version}-%{release}
-Obsoletes: plugin-db-qualification-rpi5-zynthian-vangelis < %{version}-%{release}
+Requires: plugin-qualify >= 0.20.7
 %endif
 # END per-architecture
 
@@ -85,11 +67,67 @@ sync reads these records once /etc/omx/qualify.conf says "host_class x86-64",
 and finds the CLAP plugins of /usr/lib64/clap once it says
 "clap_extra /usr/lib64/clap".
 
+%package -n libplugin-qualification-db
+Summary: Reader of the OpenMixer qualification store
+Requires: sqlite-libs >= 3.37.0
+Requires: libomx-domain >= 3.20.0
+
+%description -n libplugin-qualification-db
+The C library that reads the qualification store: the base database of
+plugin-qualification-records and a user layer, merged by whole record, with
+every word column checked against the contract domains that own its words.
+It reads figures at start-up, never in a real-time path.
+
+%package -n libplugin-qualification-db-devel
+Summary: Reader of the OpenMixer qualification store, development files
+Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
+Requires: plugin-qualification-db-schema = %{version}-%{release}
+Requires: sqlite-devel >= 3.37.0
+Requires: libomx-domain-devel >= 3.20.0
+
+%description -n libplugin-qualification-db-devel
+The header, the shared library link and plugin-qualification-db.pc, whose
+variable schema names the DDL of plugin-qualification-db-schema.
+
+%package -n plugin-qualification-db
+Summary: Command to query the OpenMixer qualification store
+Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
+
+%description -n plugin-qualification-db
+plugin-qualification-db query --json prints the results of the base database
+and the user layer, one JSON object per line; check opens both layers and the
+words they hold.
+
+%package -n plugin-qualification-db-schema
+Summary: DDL of the OpenMixer qualification store
+BuildArch: noarch
+
+%description -n plugin-qualification-db-schema
+The SQL that creates the qualification store, one copy, at
+/usr/share/plugin-qualification-db/qualification.sql. The writer creates a user
+layer from it, and test fixtures read it with no checkout.
+
+%package -n plugin-qualification-db-write
+Summary: Writer of the OpenMixer qualification store's user and system layers
+BuildArch: noarch
+Requires: python3
+Requires: python3-jsonschema
+Requires: sqlite-libs >= 3.37.0
+Requires: plugin-qualification-db-schema = %{version}-%{release}
+
+%description -n plugin-qualification-db-write
+plugin-qualification-db-write put reads one qualification record on standard
+input and replaces the record of its key in the layer of the scope; delete
+removes one. Every word is checked against the installed contract domains and
+the binary's path, file list and key against the rules of the store; a refusal
+is named on standard error and writes nothing.
+
 %prep
 %autosetup
 
 %build
-# the records are data: nothing to build
+# the records are data; the reader is built with its Makefile
+%make_build PREFIX=%{_prefix} LIBDIR=%{_libdir} all
 
 %install
 # the sets of this architecture's classes, byte for byte, and a %%files line per class
@@ -97,8 +135,17 @@ python3 tools/sets.py install rpm %{_target_cpu} %{buildroot}%{qual_dir}
 for class in $(ls %{buildroot}%{qual_dir}); do
     echo "%{qual_dir}/$class/"
 done > records.files
+# the base database of the same sets, beside them: its words are checked against the contract directory's domains
+# (the contract packages of BuildRequires) and its commit is BUILT_FROM's (git archive substituted it)
+classes=$(python3 tools/sets.py list rpm %{_target_cpu} | cut -d' ' -f1 | sort -u | sed 's/^/--class /')
+python3 tools/records-db.py --records records $classes --contract-dir "$(pkg-config --variable=contractdir libomx-domain)" \
+    --built-from-file BUILT_FROM --out %{buildroot}%{qual_dir}/qualification.sqlite
+echo "%{qual_dir}/qualification.sqlite" >> records.files
+%make_install PREFIX=%{_prefix} LIBDIR=%{_libdir}
 
 %check
+test -s %{buildroot}%{qual_dir}/qualification.sqlite
+make PREFIX=%{_prefix} LIBDIR=%{_libdir} check
 for dir in %{buildroot}%{qual_dir}/*/*/; do
     set=$(basename "$dir")
     class=$(basename "$(dirname "$dir")")
@@ -113,5 +160,31 @@ done
 %license LICENSE
 %dir %{_datadir}/omx
 %dir %{qual_dir}
+
+%files -n libplugin-qualification-db
+%license LICENSE
+%{_libdir}/libplugin-qualification-db.so.0
+
+%files -n libplugin-qualification-db-devel
+%{_includedir}/plugin-qualification-db/
+%{_libdir}/libplugin-qualification-db.so
+%{_libdir}/pkgconfig/plugin-qualification-db.pc
+
+%files -n plugin-qualification-db
+%license LICENSE
+%{_bindir}/plugin-qualification-db
+%{_mandir}/man1/plugin-qualification-db.1*
+
+%files -n plugin-qualification-db-schema
+%license LICENSE
+%dir %{_datadir}/plugin-qualification-db
+%{_datadir}/plugin-qualification-db/qualification.sql
+
+%files -n plugin-qualification-db-write
+%license LICENSE
+%{_bindir}/plugin-qualification-db-write
+%dir %{_datadir}/plugin-qualification-db
+%{_datadir}/plugin-qualification-db/qualification_db.py
+%{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog

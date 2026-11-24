@@ -7,7 +7,7 @@ name: release
 # attached to the GitHub release; the arm64 one is then installed in Debian trixie on arm64 beside plugin-qualify
 # from the channel, and plugin-qualify-sync --system takes plugins from every set it carries. The RPMs are built from
 # packaging/plugin-qualification-records.spec (whose Version is the tag's too), published into the rpm/ tree and
-# proven the same way in each Fedora cell on x86_64, fc44 and fc45 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
+# proven the same way in each Fedora cell check-matrix names on x86_64 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
 # the same and publishes nothing unless `publish` is set, and even then only on a tag. The build and the publish are
 # in Open-Mixer/.github; the secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
@@ -80,10 +80,11 @@ jobs:
       binary-names: ${{ needs.plan.outputs.deb-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
       # the arm64 records are for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
-      # bookworm images before it); no build dependency beyond debhelper and python3 (tools/sets.py)
+      # bookworm images before it); the reader builds with sqlite, pkgconf and the channel's libomx-domain-dev, the records with python3 (tools/sets.py)
       dependencies: ''
       requires: ''
-      channel-deps: false
+      # the reader's Build-Depends libomx-domain-dev comes from the channel; sqlite and pkgconf are Debian's
+      channel-deps: true
       build-packages: python3
       # trixie only: the channel has no bookworm suite to install plugin-qualify from, so a bookworm package could not
       # pass its install check; ZynthianOS Vangelis is trixie
@@ -132,6 +133,21 @@ jobs:
           set -euo pipefail
           apt-get install -y --no-install-recommends python3
           python3 tools/sets.py prove deb pkgs
+        env:
+          PROVE_NOTES: ${{ github.workspace }}/proof-notes-deb.md
+
+      - name: What the proof found, for the release notes
+        if: ${{ !cancelled() }}
+        run: |
+          [ -s proof-notes-deb.md ] || exit 0
+          { echo '## Install and sync proof (deb)'; echo; cat proof-notes-deb.md; } | tee proof-notes-deb-section.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: proof-notes-deb
+          path: proof-notes-deb-section.md
+          if-no-files-found: ignore
 
   # The RPM: plugin-qualification-records for each architecture packaging/release-arches names, built from
   # packaging/ by the organisation's RPM path (its %check runs tools/check-records.py over each installed set),
@@ -144,17 +160,18 @@ jobs:
       package-name: plugin-qualification-records
       binary-names: ${{ needs.plan.outputs.rpm-names }}
       publish: ${{ github.event_name == 'push' || inputs.publish == true }}
-      # data, built per architecture; no mod-host, no channel BuildRequires
+      # the records are data, built per architecture; no mod-host
       arch-matrix: ${{ needs.plan.outputs.rpm-arches }}
       needs-mod-host: false
-      channel-deps: false
+      # the reader's BuildRequires libomx-domain-devel comes from the channel
+      channel-deps: true
     secrets: inherit
 
-  # The x86_64 RPM installed where it is used, each set in turn, in each Fedora cell with plugin-qualify and the
-  # channel's omx-plugins at the version the set measured (its provenance.json). A container has no device tree, and
-  # an x86_64 machine never has one, so the host class is the settings file's. The sync takes the omx plugins from the
-  # records and measures nothing. When the channel's omx-plugins of that version is rebuilt with other bytes this
-  # step fails with `binary differs`: the set is then due to be measured again.
+  # The x86_64 RPM installed where it is used, each set in turn, in each Fedora cell check-matrix names, with plugin-qualify and the
+  # channel's current omx-plugins (the channel keeps the newest only; the proof logs the version each set measured
+  # beside the one installed). A container has no device tree, and an x86_64 machine never has one, so the host class
+  # is the settings file's. A record of bytes the channel no longer serves (`binary differs`, another omx-plugins
+  # version than the measured one) is UNPROVEN: it stays as measured and the release notes name it (proof-notes).
   rpm-installed:
     name: Install and sync (${{ matrix.cell.image }}, ${{ matrix.cell.arch }})
     needs: [plan, rpm]
@@ -188,3 +205,49 @@ jobs:
           # the Fedora container has no python3; tools/sets.py and the provenance read need it
           dnf install -y --setopt=install_weak_deps=False python3
           python3 tools/sets.py prove rpm pkgs
+        env:
+          PROVE_NOTES: ${{ github.workspace }}/proof-notes-rpm.md
+
+      - name: What the proof found, for the release notes
+        if: ${{ !cancelled() }}
+        run: |
+          [ -s proof-notes-rpm.md ] || exit 0
+          { echo '## Install and sync proof (rpm)'; echo; cat proof-notes-rpm.md; } | tee proof-notes-rpm-section.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: proof-notes-rpm
+          path: proof-notes-rpm-section.md
+          if-no-files-found: ignore
+
+  # On a tag, what the proofs found (the set plugin-qualify takes at each cell against the store rule's winner, the
+  # WRONG WINNER cells, the UNPROVEN sets) joins the release notes the build created, once: an earlier section of
+  # the same name is replaced. Without a release the notes stay in the job summaries.
+  proof-notes:
+    name: The proofs' findings in the release notes
+    needs: [installed, rpm-installed]
+    if: ${{ !cancelled() && contains(fromJSON('["success","skipped"]'), needs.installed.result) && contains(fromJSON('["success","skipped"]'), needs.rpm-installed.result) && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: proof-notes-*
+          path: notes
+          merge-multiple: true
+      - name: Append them to the release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(notes/proof-notes-*-section.md)
+          [ "${#files[@]}" -gt 0 ] || { echo "the proofs found nothing to note"; exit 0; }
+          body=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body) || { echo "::notice::no release $TAG to carry the proofs' findings; they are in the job summaries"; exit 0; }
+          body=${body%%$'\n## Install and sync proof'*}
+          { printf '%s\n' "$body"; for f in "${files[@]}"; do printf '\n'; cat "$f"; done; } > notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md

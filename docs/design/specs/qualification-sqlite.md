@@ -265,6 +265,9 @@ CREATE TABLE record (
   adapter_code     TEXT CHECK (adapter_code IS NULL OR WORD(adapter_code)),
   adapter_measured_at TEXT,
   adapter_params   INTEGER CHECK (adapter_params IS NULL OR adapter_params IN (0, 1)),   -- NULL: no adapter object; 1: adapter.params present
+  adapter_content  TEXT,                   -- adapter.params.content: the content parameters an instrument declares, as written (names, space-separated)
+  adapter_loaded   TEXT,                   -- adapter.params.loaded: the ones the host took, as written
+  adapter_refused  TEXT,                   -- adapter.params.refused: the ones it did not take, each with the host's answer, as written
   -- memory pass
   memory_run_measured_at TEXT, memory_run_id TEXT, memory_run_runner TEXT, memory_run_child TEXT,
   -- rejudgement
@@ -326,6 +329,8 @@ CREATE TABLE cost_entry (                  -- cost[]
   host      TEXT NOT NULL CHECK (WORD(host)),
   rate      INTEGER NOT NULL,
   quantum   INTEGER NOT NULL,
+  voices_basis    TEXT CHECK (voices_basis IS NULL OR WORD(voices_basis)),   -- cost[].voices: the notes an instrument's entry was taken with
+  voices_capacity INTEGER, voices_held INTEGER,
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
@@ -404,6 +409,7 @@ CREATE TABLE cell (                        -- measurements.grid[]
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR WORD(note_sweep_dialect)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
   CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
+  CHECK ((rt_allocations IS NULL) = (rt_locks IS NULL) AND (rt_locks IS NULL) = (rt_syscalls IS NULL)),   -- the audio thread's counts: all three or none
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;
@@ -413,6 +419,16 @@ CREATE TABLE cell_event (                  -- measurements.grid[].rtSafety.event
   cell_ord  INTEGER NOT NULL,
   ord       INTEGER NOT NULL,
   event     TEXT NOT NULL,                 -- a symbol name as the interposer wrote it
+  PRIMARY KEY (record_id, cell_ord, ord),
+  FOREIGN KEY (record_id, cell_ord) REFERENCES cell (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE cell_voice_point (            -- measurements.grid[].cost.voiceCurve[]: an instrument's cost at each count of notes held
+  record_id INTEGER NOT NULL,
+  cell_ord  INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  held      INTEGER NOT NULL,              -- the notes held
+  median    REAL NOT NULL, percentile_p INTEGER NOT NULL, percentile_value REAL NOT NULL,
   PRIMARY KEY (record_id, cell_ord, ord),
   FOREIGN KEY (record_id, cell_ord) REFERENCES cell (record_id, ord) ON DELETE CASCADE
 ) STRICT;
@@ -670,10 +686,10 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
 | `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
 | `reason_param.name`, `adapter_param.name`, `adapter_cell_param.name` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...; the adapter params' keys `notes`, `peak`, `quantum`, `rate`, `resp`, `step` are in it too) | added |
-| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
+| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`, `remove`: `step` names the mod-host command that did not answer, `add` or `remove`) | added; `remove` added for plugin-qualify#169 (section 9, ruling 12) |
 | `tier.tier` | plugin-hostd | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
 | `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
-| `cell.voices_basis`, `cell.mem_basis` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
+| `cell.voices_basis`, `cost_entry.voices_basis`, `cell.mem_basis` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
 | `cell.mem_limit_mechanism` | plugin-hostd | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
 | `cell.note_sweep_dialect` | plugin-hostd | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
 | `run_step.step` | plugin-hostd | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
@@ -735,6 +751,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `verdicts[].reasons[].dimension`, `.rating`, `.code` | `reason.*` with `verdict_ord` = the verdict's `ord` |
 | `verdicts[].reasons[].params.<name>` | `reason_param.name`, `.number` or `.word` |
 | `cost[].host`, `.rate`, `.quantum` | `cost_entry.*` |
+| `cost[].voices.basis`, `.capacity`, `.held` | `cost_entry.voices_basis`, `.voices_capacity`, `.voices_held` (NULL when absent) |
 | `cost[].reasons[]` and their `params` | `reason`, `reason_param` with `cost_ord` = the cost entry's `ord` |
 | `tiers.inProcess.*`, `tiers.isolated.*` (`host`, `measured`, `qualified`, `rating`, `deciding`, `runsAlone`) | `tier` row with `tier` = `inProcess` or `isolated` |
 | `tiers.offeredOn[]` | `tier_offered.tier` |
@@ -743,9 +760,10 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.grid[].latencyMs` | `cell.latency_ms` (NULL when absent): stored as written, never recomputed from the frames, and read back as the shortest decimal that gives the same double (as `JSON.stringify` writes it) |
 | `measurements.grid[].cost.median`, `.percentile.p`, `.percentile.value`, `.blocks`, `.warmupBlocks` | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value`, `.cost_blocks`, `.cost_warmup_blocks` |
 | `measurements.grid[].cost.voices.basis`, `.capacity`, `.held` | `cell.voices_basis`, `.voices_capacity`, `.voices_held` |
+| `measurements.grid[].cost.voiceCurve[].held`, `.median`, `.percentile.p`, `.percentile.value` | `cell_voice_point.held`, `.median`, `.percentile_p`, `.percentile_value`, in `ord` |
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |
 | `measurements.grid[].memoryLimit.bytes`, `.mechanism` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
-| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`) |
+| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`); `allocations`, `locks` and `syscalls` all three or none: a cell whose interposer ran and whose sweep did not count carries none (the probe output's counts are optional) |
 | `measurements.grid[].rtSafety.otherThreads.allocations`, `.locks`, `.syscalls` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (the record's grid carries the probe point's names for these counts) |
 | `hostExtensions[]` (a CLAP record's; the probe output's `offer.clapExtensions`, section 6.2) | `record_extension.extension`; presence: `record.host_extensions` |
 | `measurements.grid[].rtSafety.events[]` | `cell_event.event` |
@@ -762,6 +780,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
 | `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
 | `adapter.params.<name>` | `adapter_param.name`, `.number` or `.word`; presence: `record.adapter_params` (NULL with no `adapter` object, 1 when `params` is present, 0 when absent) |
+| `adapter.params.content`, `.loaded`, `.refused` | `record.adapter_content`, `.adapter_loaded`, `.adapter_refused`: names as written, not words (an instrument's content parameters, plugin-qualify's `contentParams`); read back after the other params, in this order |
 | `adapter.cells[].rate`, `.quantum`, `.admitted`, `.measured`, `.code` | `adapter_cell.*` |
 | `adapter.cells[].params.<name>` | `adapter_cell_param.name`, `.number` or `.word`; presence: `adapter_cell.params` |
 | `memoryRun.measuredAt`, `.runId`, `.tool.runner`, `.tool.child` | `record.memory_run_measured_at`, `.memory_run_id`, `.memory_run_runner`, `.memory_run_child` |
@@ -806,6 +825,8 @@ migration writes NULL in all six for every one of the 12,953 records:
 - `measurements.grid[].memory.unmeasuredDetail` (`mem_unmeasured_reason` is stored);
 - `measurements.unmeasured[].detail` (`code` and `dimension` are stored);
 - `binary.unpinnable` (its presence is stored as `record.unpinnable` = 1);
+- `adapter.params.problem` (why the level under a held note could not be read; `record.adapter_code`,
+  `omx-clap-host.level-unmeasured`, is stored);
 - `tiers.dimmed` (a joined string `<host>: <deciding>; ...`, each part of which is in `tier` and `verdict`);
 - of each `provenance.json`: `image`, `board`, `kernel`, `realtime`, `jack`, `grid`, `tierNote`, `settings.note`,
   `sources`, `repositories`.
@@ -1281,7 +1302,7 @@ function that does; a field the table says nothing decides is carried into the j
 | `grid[].latency.declaredFrames`, `.measuredFrames` | the CLAP line's `latency`; no reason | `cell.latency_declared_frames`, `.latency_measured_frames` |
 | `grid[].cost.median`, `.percentile.p`, `.percentile.value` | `gridCostReadings`, `hostingCostReasons` (only `p` = 95 counts; the core fraction is computed from `value` and `rate`) | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value` |
 | `grid[].cost.voices.held`, `.basis`, `.capacity` | `costOf` (kept beside the cost) | `cell.voices_held`, `.voices_basis`, `.voices_capacity` |
-| `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` not stored, and not read |
+| `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` as `cell_voice_point` rows (section 9, ruling 12), read by no verdict |
 | `grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls` | `rtSafetyOfProbeOutput`, `rtSafetyReasons`, `processCalls` | `cell.rt_interposer`, `.rt_swept`, `.rt_sweep_applicable`, `.rt_blocks`, `.rt_allocations`, `.rt_locks`, `.rt_syscalls` |
 | `grid[].rtSafety.threadViolations`, `.processErrors` | `clapRtReasons` | `cell.rt_thread_violations`, `.rt_process_errors` |
 | `grid[].rtSafety.ownThreads`, `.otherThreads.allocations`, `.locks`, `.syscalls` | not read on plugin-qualify's `main`; read by the judge once plugin-qualify#119 merges (`hosting.rt-safety.own-threads` is conditional, and the other-thread counts are a figure, never the verdict) | NEW: `cell.rt_own_threads`, `.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (NULL where not taken; the three counts all or none; the record's grid carries the probe point's names for them). Records of today hold none |
@@ -1408,6 +1429,12 @@ makes it fail.
     `hostExtensions` (a probe that ended before the offer) is stored with `host_extensions` NULL, which the row judge
     reads as `[]`; C6b holds byte-equal on all 254 such records of `records/`. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
     dropped.
+26. **The instrument fields and the adapter's content (#72).** A fixture record with `cost[].voices`
+    `{"held": 16, "basis": "probe"}`, a cell whose `cost.voiceCurve` holds two points, a cell whose `rtSafety` carries no
+    counts, and `adapter.params` with `content`, `loaded`, `refused` and `problem` reads back exactly, `problem` absent
+    (a sentence); a cell with one of the three audio-thread counts only is refused by the schema, and an adapter cell's
+    `params.content` is refused as `word-unknown` (only the record's adapter pass carries content). Fails when a column
+    or the table is dropped, or when the content is written as a word.
 
 ### Change 3: the reader
 
@@ -1576,6 +1603,16 @@ Decided by the owner (2026-11-19):
     lands, so that code lands before this pass's release of this repository.
 11. **DECIDED (%7, ruling (a)): rejudge works from rows only.** Probe bytes are never kept beside the store. Any field
     the judge needs gets a column, including `ownThreads` and `otherThreads` (section 6.2).
+
+12. **DECIDED (plugin-db-qualification#72, plugin-qualify#169, 2026-11-24): every field plugin-qualify 0.20.6 writes
+    is mapped.** The three reference sets of #67 carried fields no column held, and one refused record refuses the base.
+    A measured figure is data, so it is stored, never dropped by the reader: `cost[].voices` as `cost_entry.voices_*`
+    (the cell's columns, one level up), `cost.voiceCurve[]` as `cell_voice_point` rows. A params map holds figures
+    (numbers and the domain's words); the adapter pass's `content`, `loaded` and `refused` are names (parameter URIs),
+    so they get columns of their own and no domain word, and `problem` is prose, a sentence (ruling 1). The audio
+    thread's counts are optional as the probe output has them, all three or none. `remove` beside `add` is the
+    owner's word (plugin-hostd's `qualification` domain), not a store exception. The record files are not edited: the
+    store's mapping and the domain change, so a record plugin-qualify wrote builds as it is.
 
 The records a device already holds in its `qualification_dir` are not migrated, imported or read by the switch: the
 sync measures a plugin that the base does not hold, and the old files stay on the device unread. No program converts

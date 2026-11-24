@@ -405,11 +405,11 @@ CREATE TABLE cell (                        -- measurements.grid[]
   rt_thread_violations INTEGER, rt_process_errors INTEGER,
   rt_own_threads INTEGER,                  -- threads the plugin started itself (judged under hosting.rt-safety.own-threads); NULL: not taken
   rt_other_allocations INTEGER, rt_other_locks INTEGER, rt_other_syscalls INTEGER,   -- what threads other than the audio thread did; all three or none
+  rt_events INTEGER CHECK (rt_events IS NULL OR rt_events = 1),   -- 1: rtSafety.events is present (cell_event, possibly empty); NULL: absent
   note_sweep_applicable INTEGER CHECK (note_sweep_applicable IN (0, 1)),
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR WORD(note_sweep_dialect)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
   CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
-  rt_events INTEGER CHECK (rt_events IS NULL OR rt_events = 1),   -- 1: rtSafety.events is present (cell_event, possibly empty); NULL: absent
   CHECK ((rt_allocations IS NULL) = (rt_locks IS NULL) AND (rt_locks IS NULL) = (rt_syscalls IS NULL)),   -- the audio thread's counts: all three or none
   CHECK ((rt_events IS NULL) = (rt_allocations IS NULL)),   -- the interposer's tally: its events and its counts together, or neither
   PRIMARY KEY (record_id, ord),

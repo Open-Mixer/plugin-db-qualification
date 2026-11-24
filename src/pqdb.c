@@ -178,7 +178,7 @@ static int check_store(sqlite3 *db, const char *path, int want_user, pqdb_error 
 
 /* The hosting exception (section 3.4, this pass only): there is no `hosting` domain. The reader does not open its
  * store_domain row and does not check the words `hosting.*` of the word_check columns that have an item of it (the
- * writer checked them against omx-clap-core's package); the other words of such a column are checked as any. Removing the exception is this one function's removal (and its two calls). */
+ * writer checked them against the contract package omx-clap); the other words of such a column are checked as any. Removing the exception is this one function's removal (and its two calls). */
 static int hosting_exception(const char *domain)
 {
     return strcmp(domain, "hosting") == 0;

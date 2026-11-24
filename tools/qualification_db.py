@@ -28,11 +28,12 @@ if not os.path.exists(SCHEMA_SQL):
 RECORD_SCHEMA = "plugin-qualify.qualification-record/1"
 DOMAINS = ("qualification", "machine", "probe", "plugin-db", "hosting")
 # the first four are domain documents: <contractdir>/<domain>/<domain>.json. `hosting` is the one exception (the owner froze
-# vocabulary moves on 2026-11-19): its words are the codes of the package omx-clap-core (its data/hosting.json and
-# data/hosting/*.json, items of kind codes), installed by its `make install-contract` as
-# <contractdir>/<schema major>/omx-clap-core/; store_domain holds hosting at the version of that package's MANIFEST.json.
+# vocabulary moves on 2026-11-19): its words are the codes of the contract package omx-clap (omx-clap-core's data/hosting.json
+# and data/hosting/*.json, items of kind codes), installed by its `make install-contract` as
+# <contractdir>/<schema major>/omx-clap/ since 0.34.0 (package omx-clap-contract); the name before 0.34.0 is not read.
+# store_domain holds hosting at the version of that package's MANIFEST.json.
 HOSTING = "hosting"
-HOSTING_PACKAGE = "omx-clap-core"
+HOSTING_PACKAGE = "omx-clap"
 DOCUMENT_DOMAINS = tuple(d for d in DOMAINS if d != HOSTING)
 
 
@@ -519,7 +520,7 @@ class Domains:
         self._hosting(contract_dir)
 
     def _hosting(self, contract_dir):
-        """The package's own files: <contractdir>/<schema major>/omx-clap-core/{hosting.json, hosting/*.json, MANIFEST.json}.
+        """The package's own files: <contractdir>/<schema major>/omx-clap/{hosting.json, hosting/*.json, MANIFEST.json}.
         An item of kind codes holds its words as the `code` of each of its `codes`; the version is the MANIFEST's."""
         found = sorted(glob.glob(os.path.join(glob.escape(contract_dir), "[0-9]*", HOSTING_PACKAGE, "MANIFEST.json")))
         if not found:

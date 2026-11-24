@@ -39,7 +39,7 @@ BuildRequires: python3-jsonschema
 BuildRequires: plugin-qualify-contract >= 0.20.7
 BuildRequires: plugin-hostd-contract >= 0.20.8
 BuildRequires: plugin-db-contract >= 0.4.7
-BuildRequires: omx-clap-core-contract >= 0.33.1
+BuildRequires: omx-clap-contract >= 0.34.0
 
 # BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
 %ifarch x86_64

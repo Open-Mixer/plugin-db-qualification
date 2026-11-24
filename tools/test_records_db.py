@@ -10,7 +10,8 @@ The words come from the owners' contract documents. The test assembles a contrac
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
 (plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
 PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them (<contractdir>/3/omx-clap-core/ and its MANIFEST.json), the hosting exception of the spec. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
+`make install-contract` lays them (<contractdir>/3/<package>/ and its MANIFEST.json, <package> the name that tree installs
+under: omx-clap since 0.34.0), the hosting exception of the spec; tools/sibling_contract.py assembles it. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
 """
 import contextlib
 import copy
@@ -33,11 +34,8 @@ SCHEMA = os.path.join(REPO, "schema", "qualification.sql")
 TSV = os.path.join(HERE, "testdata", "field-columns.tsv")
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 SRC_SET = ("x86-64", "fedora44-48000-512")
-DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
-               "plugin-db": "plugin-db"}
-
-SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
-REF = os.environ.get("PDQ_REF", "origin/main")
+sys.path.insert(0, HERE)
+from sibling_contract import DOMAIN_REPO, contract_dir, hosting_dir, remove  # noqa: E402
 
 SENTENCE_PATHS = ("binary.unpinnable", "run.steps[].detail", "measurements.grid[].memory.unmeasuredDetail",
                   "measurements.unmeasured[].detail", "tiers.dimmed")
@@ -55,70 +53,10 @@ ARRAY_TABLES = {
     "adapter.cells[]": "adapter_cell", "memoryRun.cells[]": "memory_run_cell", "rejudged.owes[]": "rejudged_owe",
 }
 
-_contract = {}
-
-
-def git_show(clone, ref, path):
-    r = subprocess.run(["git", "-C", clone, "show", f"{ref}:{path}"], capture_output=True)
-    if r.returncode:
-        raise unittest.SkipTest(f"{os.path.basename(clone)} {ref}: {path}: {r.stderr.decode().strip()}")
-    return r.stdout
-
-
-def contract_dir():
-    """The contract directory assembled from the sibling clones, once; skips the test when they are not given. The
-    domains are documents (<domain>/<domain>.json); the hosting words are the package omx-clap-core's data/, installed as
-    `make install-contract` does: <schema major>/omx-clap-core/ with the files as they are and a MANIFEST.json."""
-    if "dir" in _contract:
-        return _contract["dir"]
-    if not SIBLINGS:
-        raise unittest.SkipTest("PDQ_SIBLINGS is not set: no sibling clones to read the owners' words from "
-                                "(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core)")
-    root = tempfile.mkdtemp(prefix="pdq-contract-")
-    for dom, repo in DOMAIN_REPO.items():
-        clone = os.path.join(SIBLINGS, repo)
-        if not os.path.isdir(clone):
-            raise unittest.SkipTest(f"{clone}: no such sibling clone")
-        os.makedirs(os.path.join(root, dom))
-        doc = json.loads(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
-        if dom == "qualification":
-            # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
-            # in its line 3, and the words of the pin verdicts and the history (QUALIFICATION_PIN_VERDICTS, _HISTORY_MOVES, _HISTORY_REASONS,
-            # from plugin-qualify's pins-file.ts and history-adjust.ts); until its domain publishes the items the fixture adds them
-            doc["components"]["schemas"].setdefault("QUALIFICATION_ADAPTER_HOSTS", {
-                "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_PIN_VERDICTS", {
-                "oneOf": [{"const": w} for w in ("in-process", "isolated", "refused")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_BLOCKERS", {
-                "oneOf": [{"const": w} for w in ("refused", "unknown", "no-deciding-reason")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_MOVES", {
-                "oneOf": [{"const": w} for w in ("demote", "promote", "none")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_REASONS", {
-                "oneOf": [{"const": "history." + w} for w in ("crashed", "xruns-grouped", "crashed-alone", "steady", "no-record",
-                                                              "no-change", "not-liftable")]})
-        with open(os.path.join(root, dom, dom + ".json"), "w") as f:
-            json.dump(doc, f)
-    core = os.path.join(SIBLINGS, "omx-clap-core")
-    if not os.path.isdir(core):
-        raise unittest.SkipTest(f"{core}: no such sibling clone")
-    names = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", REF, "data"], capture_output=True, text=True,
-                           check=True).stdout.split("\n")
-    dest = os.path.join(root, "3", "omx-clap-core")
-    for n in sorted(x for x in names if x.endswith(".json")):
-        rel = n[len("data/"):]
-        os.makedirs(os.path.join(dest, os.path.dirname(rel)), exist_ok=True)
-        with open(os.path.join(dest, rel), "wb") as f:
-            f.write(git_show(core, REF, n))
-    with open(os.path.join(dest, "MANIFEST.json"), "w") as f:
-        json.dump({"package": "omx-clap-core", "version": git_show(core, REF, "VERSION").decode().strip(),
-                   "schemaMajor": 3, "files": {}}, f)
-    _contract["dir"] = root
-    return root
 
 
 def tearDownModule():
-    if "dir" in _contract:
-        shutil.rmtree(_contract["dir"], ignore_errors=True)
+    remove()
 
 
 def run_tool(records, out, contract, *extra):
@@ -814,7 +752,7 @@ class MinDomain(Base):
 
 class Packaging(unittest.TestCase):
     """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
-    CONTRACTS = ("plugin-qualify-contract", "plugin-hostd-contract", "plugin-db-contract", "omx-clap-core-contract")
+    CONTRACTS = ("plugin-qualify-contract", "plugin-hostd-contract", "plugin-db-contract", "omx-clap-contract")
 
     def read(self, *path):
         with open(os.path.join(REPO, *path), encoding="utf-8") as f:
@@ -833,11 +771,15 @@ class Packaging(unittest.TestCase):
         self.assertNotRegex(deps, r"\(<|<<|<=")
         self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)", "", deps), r"\(=")
 
-    def test_the_omx_clap_core_floor_is_the_release_this_pass_pairs_with(self):
-        """omx-clap-core 0.33.1 is the release this pass pairs with: the floor is that release (floors only)."""
+    def test_the_omx_clap_contract_floor_is_the_release_that_installs_the_package_omx_clap(self):
+        """omx-clap-core 0.34.0 installs the hosting words as the contract package omx-clap (<contractdir>/3/omx-clap/),
+        shipped as omx-clap-contract: the floor is that release, and the package's name before it is named nowhere."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
-        self.assertRegex(control, r"omx-clap-core-contract \(>= 0\.33\.1~\)")
-        self.assertRegex(self.read("packaging", "plugin-qualification-records.spec"), r"BuildRequires: omx-clap-core-contract >= 0\.33\.1\n")
+        spec = self.read("packaging", "plugin-qualification-records.spec")
+        self.assertRegex(control, r"omx-clap-contract \(>= 0\.34\.0~\)")
+        self.assertRegex(spec, r"BuildRequires: omx-clap-contract >= 0\.34\.0\n")
+        self.assertNotIn("omx-clap-core-contract", control)
+        self.assertNotIn("omx-clap-core-contract", spec)
 
     def test_rpm_build_requires_hold_floors_only(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")
@@ -890,7 +832,7 @@ class SmallStore(Base):
         self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["hosting"]))
         for dom, version in domains.items():
             if dom == "hosting":
-                self.assertEqual(version, load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))["version"])
+                self.assertEqual(version, load(os.path.join(hosting_dir(), "MANIFEST.json"))["version"])
             else:
                 self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
         checked = {(t, c) for t, c in self.rows("SELECT DISTINCT tbl, col FROM word_check")}

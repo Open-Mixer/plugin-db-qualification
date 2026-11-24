@@ -9,7 +9,7 @@ refusal by its exact name.
 
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones
 (TEST ONLY, the writer reads no variable for it): PDQ_SIBLINGS names the directory that holds the clones
-(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
+(plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
 (default origin/main); the hosting words come from the data/ of omx-clap-core at the same ref, laid out as its
 `make install-contract` lays them out (<contractdir>/3/<package>/ and its MANIFEST.json, <package> the name that tree
 installs under: omx-clap since 0.34.0); tools/sibling_contract.py assembles it. Without PDQ_SIBLINGS the tests that need the words are

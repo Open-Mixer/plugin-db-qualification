@@ -8,7 +8,7 @@ and 8, change 2). The round trip runs over every record of records/; the refusal
 
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones:
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
-(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
+(plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
 PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap-core at the same ref, laid out as its
 `make install-contract` lays them (<contractdir>/3/<package>/ and its MANIFEST.json, <package> the name that tree installs
 under: omx-clap since 0.34.0), the hosting exception of the spec; tools/sibling_contract.py assembles it. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.

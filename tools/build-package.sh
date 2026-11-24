@@ -96,10 +96,15 @@ p = json.loads(text) if text.lstrip().startswith("{") else json.load(open(text, 
 p["grid"] = sys.argv[2]
 json.dump(p, open(sys.argv[3], "w", encoding="utf-8"), indent=2)' "$provenance" "$grid" "$prov"
     fi
-    "$tool" "$qdir" --host-class "$class" --set "$name" --provenance "$prov" --version "$version" --out "$work"
+    # plugin-qualify >= 0.20 names each package's set <set>-<rate>-<quantum> itself, one per cell it finds: it is
+    # given the set without the cell, and the cell's name must come back as the set name asked for here
+    local asked=$name
+    [ -n "$grid" ] && asked=${name%-"${grid%/*}"-"${grid#*/}"}
+    "$tool" "$qdir" --host-class "$class" --set "$asked" --provenance "$prov" --version "$version" --out "$work"
     deb=$(ls "$work"/*.deb)
     rel=usr/share/omx/qualification/$class/$name
-    (cd "$work" && ar x "$deb" && tar -xJf data.tar.xz "./$rel")
+    (cd "$work" && ar x "$deb" && tar -xJf data.tar.xz "./$rel") || {
+        echo "$deb holds no ./$rel: the tool named the set otherwise (tar -tJf the package's data.tar.xz)" >&2; return 1; }
     # a host comparison was measured on the old set's plugins: it goes with them, and the new set's is added after
     if ls "$root/records/$class/$name/"*.comparison.json >/dev/null 2>&1; then
         echo "records/$class/$name: its host comparison is dropped with the old records; add the new set's (README, \"The host comparison\")" >&2

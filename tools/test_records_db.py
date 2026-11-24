@@ -752,7 +752,9 @@ class MinDomain(Base):
 
 class Packaging(unittest.TestCase):
     """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
-    CONTRACTS = ("plugin-qualify-contract", "plugin-hostd-contract", "plugin-db-contract", "omx-clap-contract")
+    # the contract packages the build reads its words from: each domain's owner (the repositories the fixture reads them
+    # from, each shipping <repo>-contract) and omx-clap-contract for the hosting words
+    CONTRACTS = tuple(sorted({repo + "-contract" for repo in DOMAIN_REPO.values()} | {"omx-clap-contract"}))
 
     def read(self, *path):
         with open(os.path.join(REPO, *path), encoding="utf-8") as f:
@@ -780,6 +782,19 @@ class Packaging(unittest.TestCase):
         self.assertRegex(spec, r"BuildRequires: omx-clap-contract >= 0\.34\.0\n")
         self.assertNotIn("omx-clap-core-contract", control)
         self.assertNotIn("omx-clap-core-contract", spec)
+
+    def test_the_build_names_no_contract_package_but_the_owners(self):
+        """A contract package the build reads no domain from is no build dependency: plugin-qualify-contract ships the
+        qualification files plugin-hostd-contract 0.21.0 took over, and the two cannot be installed together."""
+        control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
+        deps = re.search(r"^Build-Depends: (.*)$", control, re.M).group(1)
+        self.assertEqual(sorted(set(re.findall(r"([a-z0-9-]+-contract) \(", deps))), list(self.CONTRACTS))
+        spec = self.read("packaging", "plugin-qualification-records.spec")
+        self.assertEqual(sorted(set(re.findall(r"(?m)^BuildRequires: ([a-z0-9-]+-contract) ", spec))), list(self.CONTRACTS))
+        self.assertRegex(deps, r"plugin-hostd-contract \(>= 0\.21\.0~\)")
+        self.assertRegex(spec, r"(?m)^BuildRequires: plugin-hostd-contract >= 0\.21\.0$")
+        self.assertRegex(deps, r"plugin-hostd-protocol-contract \(>= 0\.8\.0~\)")
+        self.assertRegex(spec, r"(?m)^BuildRequires: plugin-hostd-protocol-contract >= 0\.8\.0$")
 
     def test_rpm_build_requires_hold_floors_only(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")

@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 static const char *FX, *CT;
+static const char *skip_reason;
 static int checks, failures;
 
 #define CHECK(cond, ...) do { checks++; if (!(cond)) { failures++; \
@@ -213,11 +214,89 @@ static int matches_expect(const rows *o, const char *file)
     return ok;
 }
 
+static int count_formats(const char *format, long plugins, long offered, long not_offered, void *ctx)
+{
+    (void)format; (void)plugins; (void)offered; (void)not_offered;
+    ++*(int *)ctx;
+    return 0;
+}
+static void write_file(const char *path, const char *bytes, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) { perror(path); exit(2); }
+    if (n) fwrite(bytes, 1, n, f);
+    fclose(f);
+}
+
+/* ruling 2026-11-20: an absent base is a valid empty base layer; the answer says so, the user layer answers alone */
 static void t01_absent_base(void)
 {
+    pqdb *db;
+    rows o;
+    pqdb_query q = any();
+    int n = 0;
+    if (open_ok(fx("missing.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_base_absent(db) == 1, "the handle does not say the base is absent");
+    CHECK(walk(db, &q, &o) == 0 && o.n > 0, "walk");
+    CHECK(matches_expect(&o, fx("expect-user.tsv")), "results are not the user layer's alone");
+    q.layer = "base";
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "the absent base gave %d rows", o.n);
+    CHECK(pqdb_counts(db, "base", count_formats, &n) == 0 && n == 0, "counts of the absent base: %d formats", n);
+    pqdb_close(db);
+    CHECK(access(fx("missing.sqlite"), F_OK) != 0, "the absent base was created");
+    if (open_ok(fx("missing.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open with no user layer"); return; }
+    CHECK(pqdb_base_absent(db) == 1, "no user layer: base not said absent");
+    q = any();
+    CHECK(walk(db, &q, &o) == 0 && o.n == 0, "no layer at all gave %d rows", o.n);
+    pqdb_close(db);
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_base_absent(db) == 0, "a present base is said absent");
+    pqdb_close(db);
+}
+/* a base path that exists but cannot be used is still refused by name, one arm each */
+static void t01_base_is_a_directory(void)
+{
     pqdb_error e;
-    expect_refusal(fx("missing.sqlite"), NULL, GOOD, "qualification-db.absent", &e);
-    CHECK(strstr(e.message, "missing.sqlite") != NULL, "message does not name the file: %s", e.message);
+    char *root = tmpdir();
+    mkdirs(under(root, "base.sqlite"));
+    expect_refusal(under(root, "base.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "base.sqlite") != NULL, "%s", e.message);
+}
+static void t01_base_is_junk(void)
+{
+    pqdb_error e;
+    char *root = tmpdir();
+    write_file(under(root, "short.sqlite"), "not sqlite", 10);
+    expect_refusal(under(root, "short.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "short.sqlite") != NULL, "%s", e.message);
+    write_file(under(root, "empty.sqlite"), "", 0);
+    expect_refusal(under(root, "empty.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
+}
+static void t01_base_wrong_version(void)
+{
+    pqdb_error e;
+    expect_refusal(fx("base-v2.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    expect_refusal(fx("base-v2.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    CHECK(strstr(e.message, "base-v2.sqlite") != NULL, "%s", e.message);
+}
+static void t01_base_not_readable(void)
+{
+    pqdb_error e;
+    char *root = tmpdir();
+    if (geteuid() == 0) { skip_reason = "running as root: a mode 000 file is readable"; return; }
+    copy(fx("base.sqlite"), under(root, "denied.sqlite"));
+    CHECK(chmod(under(root, "denied.sqlite"), 0) == 0, "chmod");
+    expect_refusal(under(root, "denied.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "denied.sqlite") != NULL, "%s", e.message);
+}
+/* only ENOENT is absent: a path through a file (ENOTDIR) is a wrong path, refused */
+static void t01_base_under_a_file(void)
+{
+    pqdb_error e;
+    char *root = tmpdir();
+    write_file(under(root, "afile"), "x", 1);
+    expect_refusal(under(root, "afile/qualification.sqlite"), NULL, GOOD, "qualification-db.unreadable", &e);
+    CHECK(strstr(e.message, "afile") != NULL, "%s", e.message);
 }
 static void t02_absent_user(void)
 {
@@ -726,6 +805,93 @@ static void spec20_counts(void)
     pqdb_close(db);
 }
 
+/* ruling 2026-11-20: when the base holds one plugin at one cell from a set of the reference tier and from a set of
+ * another tier, every read answers with the reference tier's record (the store spec, section 4). The fixtures hold the
+ * provisional record and the reference one in both orders; neither the order of the sets nor of the records decides. */
+static void tier_pick(void)
+{
+    static const char *const files[] = { "base-tiers-ref-last.sqlite", "base-tiers-ref-first.sqlite" };
+    for (int i = 0; i < 2; i++) {
+        pqdb *db;
+        rows o;
+        tally t;
+        flist f;
+        pqdb_verdict v;
+        pqdb_result r;
+        pqdb_query q = any();
+        const char *in = files[i];
+        memset(&v, 0, sizeof v);
+        if (open_ok(fx(in), NULL, GOOD, &db)) { CHECK(0, "open %s", in); continue; }
+        /* pqdb_each, as plugin-hostd reads: no filter, the cell's filter, the key's filter, the base layer by name */
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1, "%s: %d results for one plugin at one cell", in, o.n);
+        CHECK(o.n >= 1 && strcmp(o.r[0].set, "fedora44-rt-48000-256") == 0 && o.r[0].median == 100.0 && o.r[0].p_ns == 110.0 &&
+              o.r[0].latency == 128 && o.r[0].mem_first == 2048 && strcmp(o.r[0].bpath, "ref/p1.clap") == 0,
+              "%s: the first result is set %s (median %g, binary %s), not the reference tier's", in, o.n ? o.r[0].set : "-",
+              o.n ? o.r[0].median : 0.0, o.n ? o.r[0].bpath : "-");
+        q.sha256 = SHA('a'); q.format = "clap"; q.uri = "urn:p1"; q.offer = "default"; q.host_class = "x86-64";
+        q.rate = 48000; q.quantum = 256;
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].set, "fedora44-rt-48000-256") == 0,
+              "%s: the key at its cell gives %d results, the first of set %s", in, o.n, o.n ? o.r[0].set : "-");
+        q.layer = "base";
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].set, "fedora44-rt-48000-256") == 0,
+              "%s: the base layer by name gives %d results", in, o.n);
+        /* what a result leads to is the same record: its file list and its verdict */
+        if (o.n >= 1) {
+            memset(&r, 0, sizeof r);
+            r.layer = o.r[0].layer; r.sha256 = o.r[0].sha; r.format = o.r[0].format; r.uri = o.r[0].uri;
+            r.offer = o.r[0].offer; r.host_class = o.r[0].cls; r.rate = o.r[0].rate; r.quantum = o.r[0].quantum;
+            memset(&f, 0, sizeof f);
+            CHECK(pqdb_files(db, &r, collect_file, &f) == 0 && f.n == 1 && strcmp(f.path[0], "ref/p1.clap") == 0,
+                  "%s: the file list is %s (%d entries), not the reference record's", in, f.n ? f.path[0] : "-", f.n);
+            CHECK(pqdb_verdict_of(db, &r, "omx-clap-host", &v) == 0 && strcmp(v.rating, "qualified") == 0,
+                  "%s: the verdict is %s, not the reference record's", in, v.rating ? v.rating : "-");
+        }
+        /* the counts: one plugin, offered only by the provisional record, which answers for no cell */
+        memset(&t, 0, sizeof t);
+        CHECK(pqdb_counts(db, "base", collect_count, &t) == 0 && t.n == 1 && strcmp(t.fmt[0], "clap") == 0 &&
+              t.plugins[0] == 1 && t.offered[0] == 0 && t.not_offered[0] == 1,
+              "%s: counts %d formats, clap %ld plugins, %ld offered, %ld not", in, t.n, t.plugins[0], t.offered[0], t.not_offered[0]);
+        pqdb_close(db);
+    }
+}
+
+/* ruling 2026-11-20: when the base holds one plugin at one cell from two sets of one tier, every read answers with the
+ * record of the set measured later (record_set.measured; the store spec, section 4), in either order of the sets. */
+static void newer_pick(void)
+{
+    static const char *const files[] = { "base-newer-new-last.sqlite", "base-newer-new-first.sqlite" };
+    for (int i = 0; i < 2; i++) {
+        pqdb *db;
+        rows o;
+        flist f;
+        pqdb_verdict v;
+        pqdb_result r;
+        pqdb_query q = any();
+        const char *in = files[i];
+        memset(&v, 0, sizeof v);
+        if (open_ok(fx(in), NULL, GOOD, &db)) { CHECK(0, "open %s", in); continue; }
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1, "%s: %d results for one plugin at one cell", in, o.n);
+        CHECK(o.n >= 1 && strcmp(o.r[0].set, "zynthian-vangelis-48000-256") == 0 && o.r[0].median == 120.0 &&
+              strcmp(o.r[0].bpath, "new/p1.clap") == 0,
+              "%s: the result is set %s (median %g), not the newer set's", in, o.n ? o.r[0].set : "-", o.n ? o.r[0].median : 0.0);
+        q.sha256 = SHA('a'); q.format = "clap"; q.uri = "urn:p1"; q.offer = "default"; q.host_class = "rpi5";
+        q.rate = 48000; q.quantum = 256;
+        CHECK(walk(db, &q, &o) == 0 && o.n == 1 && strcmp(o.r[0].set, "zynthian-vangelis-48000-256") == 0,
+              "%s: the key at its cell gives %d results, the first of set %s", in, o.n, o.n ? o.r[0].set : "-");
+        if (o.n >= 1) {
+            memset(&r, 0, sizeof r);
+            r.layer = o.r[0].layer; r.sha256 = o.r[0].sha; r.format = o.r[0].format; r.uri = o.r[0].uri;
+            r.offer = o.r[0].offer; r.host_class = o.r[0].cls; r.rate = o.r[0].rate; r.quantum = o.r[0].quantum;
+            memset(&f, 0, sizeof f);
+            CHECK(pqdb_files(db, &r, collect_file, &f) == 0 && f.n == 1 && strcmp(f.path[0], "new/p1.clap") == 0,
+                  "%s: the file list is %s, not the newer record's", in, f.n ? f.path[0] : "-");
+            CHECK(pqdb_verdict_of(db, &r, "omx-clap-host", &v) == 0 && strcmp(v.rating, "qualified") == 0,
+                  "%s: the verdict is %s, not the newer record's", in, v.rating ? v.rating : "-");
+        }
+        pqdb_close(db);
+    }
+}
+
 typedef struct { pqdb *db; int docs, bad, last_n; char last_key[200]; char *last_doc; } jwalk;
 static int check_json(const pqdb_result *x, void *ctx)
 {
@@ -894,7 +1060,6 @@ static void number_edges(void)
 
 /* ---- the document does not depend on the host's locale: a program that called setlocale(LC_ALL, "") under a comma
  * locale gets the same bytes ---- */
-static const char *skip_reason;
 static void comma_locale(void)
 {
     static const char *const cands[] = { "ca_ES.UTF-8", "ca_ES.utf8", "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8" };
@@ -1013,9 +1178,15 @@ static void t11_no_environment(void)
     setenv("PLUGIN_QUALIFICATION_DB_USER", fx("user.sqlite"), 1);
     setenv("OMX_CONTRACT_PATH", CT, 1);
     int rc = pqdb_open(PQDB_SCOPE_USER, &db, &e);
-    CHECK(rc != 0 && strcmp(e.code, "qualification-db.absent") == 0, "open with a variable set: %s", rc ? e.code : "succeeded");
-    CHECK(strstr(e.message, "/usr/share/omx/qualification/qualification.sqlite") != NULL, "%s", e.message);
-    if (!rc) pqdb_close(db);
+    CHECK(rc == 0, "open with a variable set: %s", rc ? e.code : "succeeded");
+    if (rc) return;
+    {
+        rows o;
+        pqdb_query q = any();
+        CHECK(pqdb_base_absent(db) == 1, "the installed base is not there: the handle must say so");
+        CHECK(walk(db, &q, &o) == 0 && o.n == 0, "a variable stood in for the installed places: %d rows", o.n);
+    }
+    pqdb_close(db);
     unsetenv("PLUGIN_QUALIFICATION_DB_BASE"); unsetenv("PLUGIN_QUALIFICATION_DB_USER"); unsetenv("OMX_CONTRACT_PATH");
 }
 static void t15_scopes(void)
@@ -1050,7 +1221,9 @@ static void t15_scopes(void)
 
 typedef struct { const char *name; void (*fn)(void); int scoped; } test;
 static const test TESTS[] = {
-    { "01 absent base", t01_absent_base, 0 }, { "02 absent user layer", t02_absent_user, 0 },
+    { "01 absent base is an empty base layer", t01_absent_base, 0 }, { "01 a base that is a directory", t01_base_is_a_directory, 0 },
+    { "01 a base that is junk", t01_base_is_junk, 0 }, { "01 a base of another version", t01_base_wrong_version, 0 },
+    { "01 a base that cannot be read", t01_base_not_readable, 0 }, { "01 a base path through a file", t01_base_under_a_file, 0 }, { "02 absent user layer", t02_absent_user, 0 },
     { "03 one schema version", t03_versions, 0 }, { "04 word not in the domain", t04_word_unknown, 0 },
     { "05 domain too old", t05_domain_too_old, 0 }, { "06 whole-record merge", t06_whole_record_merge, 0 },
     { "07 a user record shadows the whole base record", t07_shadows_whole, 0 },
@@ -1062,6 +1235,8 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
+    { "the reference tier answers where two tiers hold a cell", tier_pick, 0 },
+    { "the newer set answers where two sets of one tier hold a cell", newer_pick, 0 },
     { "hosting words passed over, nothing else narrowed", hosting_columns, 0 }, { "hosting-skip-ends", hosting_skip_ends, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
     { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 },
     { "pqdb_each refuses a non-finite figure", each_non_finite, 0 }, { "pqdb_number", number_writer, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },

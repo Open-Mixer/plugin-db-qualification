@@ -88,7 +88,8 @@ class BuildPackage(unittest.TestCase):
     def assert_folded_by_the_rpm(self, names):
         text = self.spec_text()
         for n in names:
-            self.assertIn(f"Provides: {n} = %{{version}}-%{{release}}\nObsoletes: {n} < %{{version}}-%{{release}}\n", text)
+            self.assertNotIn(n, text)
+        self.assertNotRegex(text, r"(?m)^(Provides|Obsoletes|Conflicts):")
 
     def read(self, *path):
         with open(os.path.join(self.tree, *path), encoding="utf-8") as f:
@@ -101,7 +102,7 @@ class BuildPackage(unittest.TestCase):
         self.assertEqual(prov["hostClass"], cls)
         self.assertEqual(prov["package"], {"name": f"plugin-db-qualification-{cls}-{name}", "version": VERSION})
         self.assertEqual(prov["grid"], cell)
-        self.assertEqual(prov["hostProfile"], "openmixer-console")
+        self.assertEqual(prov["hostProfile"], "omx-clap-host")
         # the records are the device's bytes, the unmeasured plugin stays out
         q = os.path.join(RUN, base, "qualification")
         shipped = sorted(f for f in os.listdir(d) if f != "provenance.json")
@@ -119,7 +120,7 @@ class BuildPackage(unittest.TestCase):
         for suffix, cell in CELLS.items():
             self.assert_cell_set("x86-64", f"fedora44-{suffix}", cell, f"b{suffix}")
         self.assertIn(f"\nVersion: {VERSION}\n", self.spec_text())
-        # the one package takes over each set's older name; nothing in debian/ is per set
+        # the package carries no relation to the older names (they are pruned from the channel); nothing in debian/ is per set
         self.assert_folded_by_the_rpm(["plugin-db-qualification-x86-64-fedora44", "omx-qualification-x86-64-fedora44",
                                        "plugin-db-qualification-x86-64-fedora44-48000-512",
                                        "plugin-db-qualification-x86-64-fedora44-96000-256"])
@@ -144,14 +145,16 @@ class BuildPackage(unittest.TestCase):
         # gains the new sets' names and nothing else moves
         self.assertEqual(self.snapshot("debian"), self.debian)
         spec = self.spec_text()
-        for suffix in CELLS:
-            self.assertIn(f"Provides: plugin-db-qualification-rpi5-zynthian-vangelis-{suffix} = ", spec)
-        self.assertEqual([l for l in spec.split("\n") if "rpi5" not in l], [l for l in spec_before.split("\n") if "rpi5" not in l])
+        self.assertNotRegex(spec, r"(?m)^(Provides|Obsoletes|Conflicts):")
+        self.assertEqual(spec, spec_before)
         self.assertEqual(os.listdir(self.other), ["provenance.json"])
         self.assertEqual(sets.problems(self.tree), [])
         out = subprocess.run(["python3", os.path.join(self.tree, "tools", "sets.py"), "substvars", "arm64"],
                              capture_output=True, text=True, check=True).stdout
-        self.assertIn(f"plugin-db-qualification-rpi5-zynthian-vangelis-48000-512 (= {VERSION})", out)
+        # the floor is packaging/arch-classes' value for arm64, not a number written here
+        floor = [c["from"] for c in sets.arch_classes(self.tree) if c["deb"] == "arm64"]
+        self.assertEqual(len(floor), 1)
+        self.assertEqual(out, f"qualify:Depends=plugin-qualify (>= {floor[0]}~)\n")
 
     def test_the_version_goes_where_it_lives(self):
         r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101")

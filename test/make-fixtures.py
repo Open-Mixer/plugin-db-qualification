@@ -78,15 +78,18 @@ def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok
     return dict(rate=rate, quantum=quantum, cost=cost, lat=lat, mem=mem, outcome=outcome)
 
 def rec(key, offer, cls, cells, set=None, pkg=None, adapter_code=None, cell_code=None, verdict_rating="qualified",
-        bpath=None, files=None, layout=None, unpinnable=None, tested=None, offered=False):
+        bpath=None, files=None, layout=None, unpinnable=None, tested=None, offered=False, tier="reference",
+        measured="2026-11-09"):
     """bpath: the binary's path below its install root (default: the file's own name); files: the per-file list as
     (path, sha256) in byte order of the path, which holds bpath at the key's SHA-256 (default: that one entry);
     layout: (scheme, sha256); unpinnable: 1 for a record that holds it; tested: testedVersion;
-    offered: the record has a tier_offered row (a tier the plugin is offered on)."""
+    offered: the record has a tier_offered row (a tier the plugin is offered on); tier: the tier of the record's set
+    (record_set.tier); measured: its set's measurement date (record_set.measured)."""
     bpath = bpath or key[2].split(":")[-1] + (".clap" if key[1] == "clap" else ".so")
     return dict(key=key, offer=offer, cls=cls, cells=cells, set=set, pkg=pkg, adapter_code=adapter_code,
                 cell_code=cell_code, verdict_rating=verdict_rating, bpath=bpath, files=files or [(bpath, key[0])],
-                layout=layout or (None, None), unpinnable=unpinnable, tested=tested, offered=offered)
+                layout=layout or (None, None), unpinnable=unpinnable, tested=tested, offered=offered, tier=tier,
+                measured=measured)
 
 BASE = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", adapter_code="omx-clap-host.signal-SIGSEGV",
@@ -121,6 +124,28 @@ def word_checks(c):
     c.executemany("INSERT INTO store_domain VALUES (?, ?)", sorted(DOMAINS.items()))
     c.executemany("INSERT INTO word_check VALUES (?, ?, ?, ?)", WORD_CHECK)
 
+def claimants(records):
+    """{record index: the cells it claims} by the base's rule (the store spec, section 4): one record per key, offer, class
+    and cell; when a set of the reference tier and a set of another tier both hold a cell, the reference tier's record
+    claims it, whichever comes first; when two sets of one tier hold it, the record of the set measured later claims it
+    (an equal date is refused, claim-duplicate)."""
+    held = {}
+    for n, r in enumerate(records):
+        for ce in r["cells"]:
+            held.setdefault((r["key"], r["offer"], r["cls"], ce["rate"], ce["quantum"]), []).append(n)
+    out = {n: set() for n in range(len(records))}
+    for (key, offer, cls, rate, quantum), ns in held.items():
+        ref = [n for n in ns if records[n]["tier"] == "reference"]
+        pool = ref or ns
+        if len({records[n]["tier"] for n in pool}) > 1:
+            raise SystemExit("claim-duplicate: %s %s %s at %d/%d" % (key[2], offer, cls, rate, quantum))
+        newest = max(records[n]["measured"] for n in pool)
+        top = [n for n in pool if records[n]["measured"] == newest]
+        if len(top) != 1:
+            raise SystemExit("claim-duplicate: %s %s %s at %d/%d" % (key[2], offer, cls, rate, quantum))
+        out[top[0]].add((rate, quantum))
+    return out
+
 def build(path, layer, records, version=VERSION, adapter_code_override=None, filler=False):
     if os.path.exists(path):
         os.unlink(path)
@@ -133,6 +158,7 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
               (layer, None if layer else "0123456789abcdef0123456789abcdef01234567"))
     word_checks(c)
     plugin, sets = {}, {}
+    claims = claimants(records)
     for n, r in enumerate(records):
         pid = plugin.setdefault(r["key"], len(plugin) + 1)
         if pid == len(plugin) and c.execute("SELECT 1 FROM plugin WHERE plugin_id = ?", (pid,)).fetchone() is None:
@@ -142,9 +168,9 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
             skey = (r["cls"], r["set"])
             if skey not in sets:
                 sets[skey] = len(sets) + 1
-                c.execute("INSERT INTO record_set VALUES (?, ?, ?, 'plugin-qualify.provenance/1', 'reference', "
-                          "'omx-clap-host', 'fixture', '2026-11-19', 'plugin-qualification-records', '1')",
-                          (sets[skey], r["cls"], r["set"]))
+                c.execute("INSERT INTO record_set VALUES (?, ?, ?, 'plugin-qualify.provenance/1', ?, "
+                          "'omx-clap-host', ?, '2026-11-19', 'plugin-qualification-records', '1')",
+                          (sets[skey], r["cls"], r["set"], r["tier"], r["measured"]))
             set_id = sets[skey]
         pkg = r["pkg"] or (None,) * 6
         code = adapter_code_override or r["adapter_code"]
@@ -181,7 +207,8 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
                 mem_first_instance_kb, mem_per_instance_kb) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                       (rid, o, ce["rate"], ce["quantum"], ce["outcome"], ce["lat"][0], ce["lat"][1],
                        co[0], co[1], co[2], me[0], me[1]))
-            c.execute("INSERT INTO claim VALUES (?, ?, ?, ?, ?, ?)", (rid, pid, r["offer"], r["cls"], ce["rate"], ce["quantum"]))
+            if (ce["rate"], ce["quantum"]) in claims[n]:
+                c.execute("INSERT INTO claim VALUES (?, ?, ?, ?, ?, ?)", (rid, pid, r["offer"], r["cls"], ce["rate"], ce["quantum"]))
         if r["cell_code"]:
             c.execute("INSERT INTO adapter_cell VALUES (?, 0, 48000, 256, 1, 1, ?, 0)", (rid, r["cell_code"]))
     if filler:
@@ -194,6 +221,42 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
     c.close()
 
 # ---- the records store: rich records, to read back whole (spec section 8, change 3, case 21) ----
+# the tier pick: the same key, offer, class and cell from a provisional set and from a reference set
+TIERS = [
+    rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", tier="provisional", verdict_rating="conditional",
+        offered=True, bpath="prov/p1.clap", files=[("prov/p1.clap", P1)], cells=[cell(48000, 256, (900.0, 95, 990.0), (64, 640), (8192, 4096))]),
+    rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-rt-48000-256", tier="reference", verdict_rating="qualified",
+        bpath="ref/p1.clap", files=[("ref/p1.clap", P1)], cells=[cell(48000, 256, (100.0, 95, 110.0), (64, 128), (2048, 512))]),
+]
+
+# the newer pick (ruling 2026-11-20): the same key, offer, class and cell from two sets of one tier (hardware), the
+# whole-grid set measured 2026-11-06 and the one-cell set measured again on 2026-11-08
+NEWER = [
+    rec((P1, "clap", "urn:p1"), "default", "rpi5", set="zynthian-vangelis", tier="hardware", measured="2026-11-06",
+        verdict_rating="conditional", bpath="old/p1.clap", files=[("old/p1.clap", P1)],
+        cells=[cell(48000, 256, (300.0, 95, 450.0), (None, 200), None)]),
+    rec((P1, "clap", "urn:p1"), "default", "rpi5", set="zynthian-vangelis-48000-256", tier="hardware", measured="2026-11-08",
+        verdict_rating="qualified", bpath="new/p1.clap", files=[("new/p1.clap", P1)],
+        cells=[cell(48000, 256, (120.0, 95, 130.0), (None, 64), None)]),
+]
+
+# the claimant of each cell (the store spec, section 4), with two cells a key: the sets hold one key at two cells, and
+# the winner of the first cell is not the winner of the second. The winner is named to sort LAST in byte order of the
+# sets' names, so no order of names picks it: for the tier pair the provisional set claims 96000/256 alone and the
+# reference set 48000/256; for the re-measure the old set claims 96000/256 alone and the newer one 48000/256
+CLAIMANTS = [
+    rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", tier="provisional", bpath="prov/p1.clap",
+        files=[("prov/p1.clap", P1)], verdict_rating="conditional",
+        cells=[cell(48000, 256, (900.0, 95, 990.0), (64, 640), (8192, 4096)), cell(96000, 256, (950.0, 95, 995.0), (64, 640), (8192, 4096))]),
+    rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-rt-48000-256", tier="reference", bpath="ref/p1.clap",
+        files=[("ref/p1.clap", P1)], cells=[cell(48000, 256, (100.0, 95, 110.0), (64, 128), (2048, 512))]),
+    rec((P2, "clap", "urn:p2"), "default", "x86-64", set="a-old", tier="hardware", measured="2026-11-06", bpath="old/p2.clap",
+        files=[("old/p2.clap", P2)], verdict_rating="conditional",
+        cells=[cell(48000, 256, (70.0, 95, 80.0), (None, 70), None), cell(96000, 256, (71.0, 95, 81.0), (None, 71), None)]),
+    rec((P2, "clap", "urn:p2"), "default", "x86-64", set="z-new", tier="hardware", measured="2026-11-08", bpath="new/p2.clap",
+        files=[("new/p2.clap", P2)], cells=[cell(48000, 256, (60.0, 95, 65.0), (None, 60), None)]),
+]
+
 RICH = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", adapter_code="omx-clap-host.signal-SIGSEGV",
         cell_code="omx-clap-host.resp-3", verdict_rating="conditional", layout=("elf-sections", sha("f")), tested="1.2.3",
@@ -417,6 +480,17 @@ def main(out):
                                               [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))], offered=offered)
     build(p("counts-user.sqlite"), 1, [one("urn:cx", "clap", "default", True), one("urn:cx", "clap", "custom", False),
                                        one("urn:cy", "clap", "default", False), one("urn:cz", "lv2", "default", True)])
+    # two sets hold one plugin at one cell: a non-real-time set (tier provisional) and a real-time one (tier reference),
+    # each record with its own figures, verdict, file list and offer; built in both orders. The reference tier's record
+    # claims the cell (the store spec, section 4), and every read answers with it alone
+    for order, recs in (("ref-last", TIERS), ("ref-first", TIERS[::-1])):
+        build(p("base-tiers-%s.sqlite" % order), 0, recs)
+    # two sets of one tier at one cell, built in both orders: the newer set's record claims it
+    for order, recs in (("new-last", NEWER), ("new-first", NEWER[::-1])):
+        build(p("base-newer-%s.sqlite" % order), 0, recs)
+    # the claimant of each of two cells, the sets in both orders (the command's --records at a cell)
+    for order, recs in (("winner-last", CLAIMANTS), ("winner-first", CLAIMANTS[::-1])):
+        build(p("base-claimants-%s.sqlite" % order), 0, recs)
     # stores whose key is not the binary's entry (section 3.7): opened fine, refused by check
     for name, sql in (("key-mismatch", "UPDATE record_file SET sha256 = '%s' WHERE record_id = 1" % sha("9")),
                       ("key-no-entry", "UPDATE record SET binary_path = 'other.clap' WHERE record_id = 1")):

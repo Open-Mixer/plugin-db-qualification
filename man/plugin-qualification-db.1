@@ -107,15 +107,17 @@ Prints one JSON object per line for every RECORD the filters match (the results 
 .BR format ,
 .BR uri ,
 .BR offer ,
-.B host_class
-and
+.BR host_class ,
+.B set
+(the record's set, null for a user-layer record) and
 .BR record ,
-the whole record as a document of plugin-qualify.qualification-record/1. The same filters apply, but a record is not a
-cell:
+the whole record as a document of plugin-qualify.qualification-record/1. The same filters apply. With
 .B \-\-rate
 and
-.B \-\-quantum
-are refused (exit 2).
+.BR \-\-quantum ,
+given together (one alone is refused, exit 2), the records printed are the ones that claim that cell, one for each
+plugin key: the reference tier's record first, and within a tier the set measured later, as the claim table of the
+base says. A key nobody holds at that cell prints no line.
 .TP
 .B counts \-\-json
 Prints one JSON object per line for every format, in format order:
@@ -173,6 +175,21 @@ as stored: relative to the install root, case-sensitive, no suffix match.
 .BI \-\-layer " user|base"
 (query, counts) Only that layer's records: the user layer's every record of the filters, none shadowed, or the base's,
 including a record the user layer shadows. Without it, the merged answer.
+.SH ABSENT BASE
+A base file that does not exist is an empty base layer, not a refusal: the answer is the user layer's alone and the exit
+status 0. The command says so on standard error, never on standard output, which holds records only: one line,
+.BR "plugin-qualification-db: base-absent: <path>: the base layer is empty" ,
+is written by
+.B query \-\-json
+and
+.BR "counts \-\-json" ,
+and
+.B check
+prints
+.BR "ok base-absent" .
+A present base writes no such line.
+Only a missing file is absent; a base that exists and cannot be used (a directory, no read permission, not a SQLite
+database, another schema version) is refused by name.
 .SH ENVIRONMENT
 .BR PLUGIN_QUALIFICATION_DB_BASE ,
 .BR PLUGIN_QUALIFICATION_DB_USER
@@ -181,8 +198,7 @@ and
 are read by this command only, and a flag beats its variable. The library reads no environment variable.
 .SH EXIT STATUS
 0 on success; 1 when the store is refused (the code is
-.B qualification-db.absent ,
-.BR qualification-db.unreadable ,
+.B qualification-db.unreadable ,
 .BR qualification-db.not-a-store ,
 .BR qualification-db.schema-mismatch ,
 .BR qualification-db.schema-other ,

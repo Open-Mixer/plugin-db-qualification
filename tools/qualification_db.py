@@ -194,9 +194,9 @@ def _cell():
             "processErrors": O(c, "rt_process_errors", "int"),
             "ownThreads": O(c, "rt_own_threads", "int"),
             "otherThreads": Obj({
-                "allocationsInRun": O(c, "rt_other_allocations", "int"),
-                "locksInRun": O(c, "rt_other_locks", "int"),
-                "syscallsInRun": O(c, "rt_other_syscalls", "int"),
+                "allocations": O(c, "rt_other_allocations", "int"),
+                "locks": O(c, "rt_other_locks", "int"),
+                "syscalls": O(c, "rt_other_syscalls", "int"),
             }),
             "events": Arr("cell_event", Leaf("cell_event", "event", "text", True),
                           by=(("record_id", "record_id"), ("cell_ord", "ord")), always=True),

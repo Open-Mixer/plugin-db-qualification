@@ -26,16 +26,16 @@
 #define BUSY_MS 250
 
 /* the statuses: negative, named by pqdb_code(); a callback of pqdb_each returns a positive value of its own */
-enum { S_OK = 0, S_ABSENT = -1, S_UNREADABLE = -2, S_NOT_A_STORE = -3, S_SCHEMA_MISMATCH = -4, S_SCHEMA_OTHER = -5,
-       S_DOMAIN_TOO_OLD = -6, S_WORD_UNKNOWN = -7, S_HOT_JOURNAL = -8, S_BUSY = -9, S_CONTRACT = -10, S_LAYER = -11 };
+enum { S_OK = 0, S_UNREADABLE = -1, S_NOT_A_STORE = -2, S_SCHEMA_MISMATCH = -3, S_SCHEMA_OTHER = -4,
+       S_DOMAIN_TOO_OLD = -5, S_WORD_UNKNOWN = -6, S_HOT_JOURNAL = -7, S_BUSY = -8, S_CONTRACT = -9, S_LAYER = -10 };
 static const char *const CODES[] = {
-    NULL, "qualification-db.absent", "qualification-db.unreadable", "qualification-db.not-a-store",
+    NULL, "qualification-db.unreadable", "qualification-db.not-a-store",
     "qualification-db.schema-mismatch", "qualification-db.schema-other", "qualification-db.domain-too-old",
     "qualification-db.word-unknown", "qualification-db.hot-journal", "qualification-db.busy", NULL,
     "qualification-db.layer-unknown" };
 
 struct pqdb {
-    sqlite3 *base, *user;
+    sqlite3 *base, *user;           /* base NULL: no base file, an empty base layer (pqdb_base_absent) */
     char verdict_rating[64], verdict_deciding[64];
     char msg[256];                  /* what the last refusal of pqdb_each said */
 };
@@ -419,16 +419,18 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
 static int open_internal(const char *base, const char *user, const char *cdir, pqdb **out, pqdb_error *err)
 {
     pqdb *db;
-    int vb = 0, vu = 0, st, e;
+    int vb = 0, vu = 0, st, e, have_base;
     domains ds;
     *out = NULL;
-    if (!exists(base, &e))
-        return fail(err, e == ENOENT || e == ENOTDIR ? S_ABSENT : S_UNREADABLE, "%s: the base database %s: %s", base,
-                    e == ENOENT || e == ENOTDIR ? "does not exist" : "cannot be read", strerror(e));
+    /* only ENOENT is an absent base, an empty layer; any other reason the file cannot be reached (ENOTDIR, EACCES, ...)
+     * leaves it refused by name below */
+    have_base = exists(base, &e);
+    if (!have_base && e != ENOENT)
+        return fail(err, S_UNREADABLE, "%s: the base database cannot be read: %s", base, strerror(e));
     db = calloc(1, sizeof *db);
     if (!db)
         return fail(err, S_UNREADABLE, "out of memory");
-    if ((st = open_layer(base, 0, &db->base, &vb, err)) != S_OK)
+    if (have_base && (st = open_layer(base, 0, &db->base, &vb, err)) != S_OK)
         goto bad;
     if (user) {
         if (exists(user, &e)) {
@@ -439,15 +441,15 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
             goto bad;
         }
     }
-    if (db->user && vb != vu) {
+    if (db->base && db->user && vb != vu) {
         st = fail(err, S_SCHEMA_MISMATCH, "the base %s is at user_version %d and the user layer %s at %d", base, vb, user, vu);
         goto bad;
     }
     for (int i = 0; i < 2; i++) {
         int v = i ? vu : vb;
         const char *p = i ? user : base;
-        if (i && !db->user)
-            break;
+        if (!(i ? db->user : db->base))
+            continue;
         if (v == 0) { st = fail(err, S_NOT_A_STORE, "%s: user_version 0: not a qualification store", p); goto bad; }
         if (v != PQDB_SCHEMA_VERSION) {
             st = fail(err, S_SCHEMA_OTHER, "%s: user_version %d, this reader reads %d", p, v, PQDB_SCHEMA_VERSION);
@@ -459,7 +461,7 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
     for (int i = 0; i < 2; i++) {
         sqlite3 *h = i ? db->user : db->base;
         if (!h)
-            break;
+            continue;
         if ((st = open_domains(h, i ? user : base, cdir, &ds, err)) != S_OK)
             goto bad;
         st = check_words(h, i ? user : base, &ds, err);
@@ -496,6 +498,11 @@ int pqdb_open(pqdb_scope scope, pqdb **out, pqdb_error *err)
     return open_internal(BASE_PATH, user, NULL, out, err);
 }
 
+int pqdb_base_absent(const pqdb *db)
+{
+    return db && !db->base;
+}
+
 void pqdb_close(pqdb *db)
 {
     if (!db)
@@ -506,6 +513,9 @@ void pqdb_close(pqdb *db)
 }
 
 /* ---- results ---- */
+/* A layer answers for a cell with the record that claims it (section 4): a cell of a record without the claim is no
+   result. In the base, when a set of the reference tier and a set of another tier both hold a key at a cell, the
+   reference tier's record holds the claim; the join below reads it through claim's primary key. */
 static const char *const SELECT =
     "SELECT p.sha256, p.format, p.uri, r.offer, r.host_class, s.name, "
     "r.pkg_format, r.pkg_name, r.pkg_version, r.pkg_release, r.pkg_distro, r.pkg_arch, "
@@ -513,6 +523,8 @@ static const char *const SELECT =
     "c.latency_measured_frames, c.latency_declared_frames, c.mem_first_instance_kb, c.mem_per_instance_kb, "
     "r.binary_path, r.layout_scheme, r.layout_sha256, r.tested_version, r.unpinnable "
     "FROM cell c JOIN record r ON r.record_id = c.record_id JOIN plugin p ON p.plugin_id = r.plugin_id "
+    "JOIN claim cl ON cl.plugin_id = r.plugin_id AND cl.offer = r.offer AND cl.host_class = r.host_class "
+    "AND cl.rate = c.rate AND cl.quantum = c.quantum AND cl.record_id = r.record_id "
     "LEFT JOIN record_set s ON s.set_id = r.set_id "
     "WHERE (?1 IS NULL OR p.sha256 = ?1) AND (?2 IS NULL OR p.format = ?2) AND (?3 IS NULL OR p.uri = ?3) "
     "AND (?4 IS NULL OR r.offer = ?4) AND (?5 IS NULL OR r.host_class = ?5) AND (?6 < 0 OR c.rate = ?6) "
@@ -624,7 +636,7 @@ int pqdb_each(const pqdb *db, const pqdb_query *q, int (*each)(const pqdb_result
     }
     if (want_user && db->user && (ret = walk_layer((pqdb *)db, db->user, "user", NULL, q, each, ctx)) != 0)
         return ret;
-    return want_base ? walk_layer((pqdb *)db, db->base, "base", shadow, q, each, ctx) : 0;
+    return want_base && db->base ? walk_layer((pqdb *)db, db->base, "base", shadow, q, each, ctx) : 0;
 }
 
 /* the list of the record a result is a cell of: the record_file rows in ord order (section 3.7) */
@@ -772,7 +784,10 @@ static int collect_plugins(sqlite3 *h, sqlite3 *shadow_db, plugs *out)
     int rc, ret = S_OK;
     if (sqlite3_prepare_v2(h, "SELECT p.format, p.uri, r.offer, r.host_class, p.sha256, "
                            "EXISTS (SELECT 1 FROM tier_offered t WHERE t.record_id = r.record_id) "
-                           "FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id", -1, &st, NULL) != SQLITE_OK)
+                           "FROM record r JOIN plugin p ON p.plugin_id = r.plugin_id "
+                           /* a record that claims no cell answers for nothing and is not counted (section 4) */
+                           "WHERE EXISTS (SELECT 1 FROM claim cl WHERE cl.plugin_id = r.plugin_id AND cl.offer = r.offer "
+                           "AND cl.host_class = r.host_class AND cl.record_id = r.record_id)", -1, &st, NULL) != SQLITE_OK)
         return status_of(h);
     if (shadow_db && sqlite3_prepare_v2(shadow_db, SHADOWED, -1, &sh, NULL) != SQLITE_OK) {
         ret = status_of(shadow_db);
@@ -827,7 +842,7 @@ int pqdb_counts(const pqdb *db, const char *layer, int (*each)(const char *forma
     }
     if (want_user && db->user)
         ret = collect_plugins(db->user, NULL, &all);
-    if (ret == S_OK && want_base)
+    if (ret == S_OK && want_base && db->base)
         ret = collect_plugins(db->base, shadow, &all);
     if (ret == S_OK && all.n > 0) {
         size_t i = 0, w = 0;

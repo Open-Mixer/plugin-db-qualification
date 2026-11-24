@@ -255,12 +255,21 @@ class Columns(Layer):
         def put(r):
             rt = r["measurements"]["grid"][0]["rtSafety"]
             rt["ownThreads"] = 2
-            rt["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+            rt["otherThreads"] = {"allocations": 5, "locks": 0, "syscalls": 7}
         got = self.put_back(self.edited(put))
         rt = got["measurements"]["grid"][0]["rtSafety"]
-        self.assertEqual((rt["ownThreads"], rt["otherThreads"]), (2, {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}))
+        self.assertEqual((rt["ownThreads"], rt["otherThreads"]), (2, {"allocations": 5, "locks": 0, "syscalls": 7}))
         self.assertEqual(self.rows("SELECT rt_own_threads, rt_other_allocations, rt_other_locks, rt_other_syscalls FROM cell "
                                    "WHERE rt_own_threads IS NOT NULL"), [(2, 5, 0, 7)])
+
+    def test_24_other_threads_with_the_inrun_names_is_refused_by_name(self):
+        """The record format has no such fields (plugin-qualify spreads the probe point's names): not an alias."""
+        def put(r):
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"allocationsInRun": 5, "locksInRun": 0, "syscallsInRun": 7}
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(self.edited(put))
+        self.assertEqual(cm.exception.name, "field-unmapped")
+        self.assertIn("otherThreads.allocationsInRun", str(cm.exception))
 
     def test_24_records_of_today_hold_none(self):
         got = self.put_back(self.rec)
@@ -271,7 +280,7 @@ class Columns(Layer):
 
     def test_24_other_threads_with_one_count_only_is_refused_by_the_schema(self):
         def put(r):
-            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locksInRun": 1}
+            r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locks": 1}
         self.refused("schema-refused", rec=self.edited(put))
 
 
@@ -447,6 +456,21 @@ class Put(Layer):
         self.assertEqual(self.rows("SELECT count(*) FROM record_set"), [(0,)])
         self.assertEqual(sorted(d for (d,) in self.rows("SELECT domain FROM store_domain")), sorted(q.DOMAINS))
         self.assertGreater(self.rows("SELECT count(*) FROM word_check")[0][0], 50)
+
+    def test_a_layer_is_written_with_no_base_anywhere(self):
+        """An absent base is a valid empty base layer (store spec, section 6): the writer never looks for one, and
+        writes the user and the system layer whether or not a base exists."""
+        for scope in ("user", "system"):
+            root = os.path.join(self.tmp, scope)
+            os.makedirs(root)
+            self.assertEqual(os.listdir(root), [])
+            self.put(scope=scope, root=root)
+            found = [os.path.join(d, f) for d, _, fs in os.walk(root) for f in fs if f.endswith(".sqlite")]
+            self.assertEqual(len(found), 1, found)
+            with contextlib.closing(sqlite3.connect(found[0])) as db:
+                self.assertEqual(db.execute("SELECT user_layer FROM store_info").fetchall(), [(1,)])
+                self.assertEqual(db.execute("SELECT count(*) FROM record").fetchone(), (1,))
+            self.assertFalse([f for f in found if "base" in os.path.basename(f)])
 
     def test_the_record_reads_back_equal(self):
         self.put()

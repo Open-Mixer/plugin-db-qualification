@@ -677,7 +677,7 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `cell.mem_limit_mechanism` | plugin-qualify | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
 | `cell.note_sweep_dialect` | plugin-qualify | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
 | `run_step.step` | plugin-qualify | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
-| `run_step.result` | plugin-qualify, plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...) and `PROBE_OUTCOMES` | added |
+| `run_step.result` | plugin-qualify, plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...), `PROBE_OUTCOMES` and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (a step ends `probe.oom` when plugin-qualify's own bound stops it) | added |
 | `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
 | `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
 | `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
@@ -746,7 +746,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |
 | `measurements.grid[].memoryLimit.bytes`, `.mechanism` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
 | `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`) |
-| `measurements.grid[].rtSafety.otherThreads.allocationsInRun`, `.locksInRun`, `.syscallsInRun` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` |
+| `measurements.grid[].rtSafety.otherThreads.allocations`, `.locks`, `.syscalls` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (the record's grid carries the probe point's names for these counts) |
 | `hostExtensions[]` (a CLAP record's; the probe output's `offer.clapExtensions`, section 6.2) | `record_extension.extension`; presence: `record.host_extensions` |
 | `measurements.grid[].rtSafety.events[]` | `cell_event.event` |
 | `measurements.grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `cell.note_sweep_*` |
@@ -774,7 +774,19 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 
 `provenance.json` of a set: `schema`, `set`, `hostClass`, `hostProfile`, `tier`, `measured`, `date`, `package.name`,
 `package.version` → `record_set`; `packages.<name>` and `passes.<name>` → `set_package` (`pass` 0 and 1); `settings.<key>` (but `note`)
-→ `set_setting`.
+→ `set_setting`. `cell` (`{rate, quantum}`, written by plugin-qualify for a set of one cell) is checked, not stored: it
+must be two integers equal to the cell of the set's name (`<set>-<rate>-<quantum>`), else the set is refused
+(`field-type`, `cell-mismatch`); `record_set.name` and the set's `cell` rows hold it.
+
+**The console key is held back** (issue #5's ruling, 2026-11-11: the console key waits for its desk run; applied to
+the store 2026-11-20). The base holds no judgment of the `openmixer-console` profile. A record judged under
+`omx-clap-host` that also carries one is kept, and its `verdicts[]` and `cost[]` entries whose `host` is
+`openmixer-console`, and a `tiers.inProcess` or `tiers.isolated` that profile hosts, are left out as the migration reads
+the file: the record file is not edited, and the rest of the record is stored whole. A record whose only verdict is the
+console's is kept as a row with no verdict (ruling 2026-11-20: nothing is dropped; its console verdict is held back
+like any other, and it answers with no verdict until the console key's desk run). A set whose `provenance.hostProfile` is `openmixer-console` is refused
+(`console-profile`). `tiers.dimmed`, a sentence, is not stored either way. The round trip compares each record with
+its file less those judgments.
 
 **The package fields, field by field.** No current record or provenance holds the package of a binary, so the
 migration writes NULL in all six for every one of the 12,953 records:
@@ -932,8 +944,27 @@ and no key changes. After that commit:
 - **No tombstone.** A user cannot hide a base record except by measuring the same key, which shadows it. Removing a
   user record brings the base records back. Hiding without measuring would need a new word and a new
   rule; nothing asks for it today.
-- **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell. In the
-  base, the migration refuses a second claim, naming both files (no current set has one). In the user layer, a newer
+- **Conflicts.** Within one layer, the `claim` primary key allows one record per key, offer, class and cell, and a layer
+  answers for a cell with the record that claims it: `pqdb_each` (and so `query` and every reader on it, plugin-hostd's
+  among them), the files and verdicts of a result, and `pqdb_counts` read claimed records only; a cell of a record
+  that does not claim it is no result, and a record that claims no cell is not counted.
+- **Two tiers at one cell: the reference tier answers** (ruling 2026-11-20). In the base, a set of the reference tier
+  (`record_set.tier` `reference`: measured with real-time priority) and a set of another tier (`provisional`, measured
+  without it) may hold one key, offer and class at one cell: the x86-64 sets `fedora44-rt-<rate>-<quantum>` beside
+  `fedora44-<rate>-<quantum>`. The migration gives the claim to the record of the reference tier, whichever set comes
+  first in byte order, and keeps the other record whole in the base, without the claim at that cell. So every read
+  answers with the reference tier's record; nothing is dropped and no record changes. The rule lives in the claim the
+  base build writes, and the reader follows the claim (the query of `pqdb_each` joins `claim` on its primary key); no
+  column is added. A claim at one key and cell from two tiers neither of which is `reference` is refused
+  (`claim-duplicate`), naming both files.
+- **One tier at one cell: the set measured later answers** (ruling 2026-11-20). Two sets of one tier may hold one key,
+  offer and class at one cell: the rpi5 set `zynthian-vangelis`, measured 2026-11-06 over its whole grid, beside
+  `zynthian-vangelis-48000-256` and `-96000-256`, samplv1 and drumkv1 measured again on 2026-11-08. The migration gives
+  the claim to the record of the set whose provenance `measured` (`record_set.measured`, `YYYY-MM-DD`) is later,
+  whichever set comes first in byte order, and keeps the other record whole without the claim; every read answers
+  with the newer record. An equal `measured` is refused (`claim-duplicate`, "measured on one date", naming both
+  files), and a contending set whose `measured` is not a date is refused (`claim-undated`); neither is guessed. No
+  column is added. In the user layer, a newer
   user record for a shadow key replaces the user's earlier record for that key, whole, in one transaction, even when it
   holds fewer cells. Decided (#17): a newer user record shadows the whole base record (the user-first merge), and the
   base is never deleted. Across layers there is no conflict: the user's record wins and each result says its `layer`.
@@ -962,7 +993,13 @@ and no key changes. After that commit:
   whose content is `$Format:%H$` and which `.gitattributes` marks `export-subst`: `git archive` writes the commit into
   it. The tool takes `--built-from-file BUILT_FROM` from `debian/rules` and the spec file. A tree with neither a `.git`
   nor a substituted `BUILT_FROM` (the file still holding `$Format:%H$`) is refused (`built-from-unknown`); the commit is
-  never guessed and never left NULL in the base.
+  never guessed and never left NULL in the base. In a git checkout `BUILT_FROM` still holds the placeholder: the tool
+  then takes `git rev-parse HEAD`, and outside one it refuses.
+- **Domain floors.** `--min-domain <domain>=<version>` (repeatable) refuses a domain whose `info.version` is lower
+  (`qualification-db.domain-too-old`, naming the domain and both versions). The spec names no floor value: the
+  package's floors are its Build-Depends on the contract packages (section 7), which is what guarantees the
+  `info.version` the words need, so the packaging does not pass the flag; it is for a caller with a contract directory
+  of its own.
 - **The round-trip proof** (`tools/test_records_db.py`, `unittest` like the repository's other tools):
   - build the base database of every set of `records/` (both classes, not one architecture);
   - for every record file, export the record from the database and compare it with the parsed file as JSON values,
@@ -1016,8 +1053,10 @@ typedef struct { const char *code; char message[256]; } pqdb_error;  /* names th
 int  pqdb_open(pqdb_scope scope, pqdb **out, pqdb_error *err);
 /* TEST AND COMMAND ONLY: the base, the user layer (NULL: none) and the contract directory, given. */
 int  pqdb_open_at(const char *base, const char *user, const char *contract_dir, pqdb **out, pqdb_error *err);
+/* 1 when the open found no base file: the base layer is empty, every answer is the user layer's alone (section 6). */
+int  pqdb_base_absent(const pqdb *db);
 void pqdb_close(pqdb *db);
-const char *pqdb_code(int status);                 /* "qualification-db.absent" ... */
+const char *pqdb_code(int status);                 /* "qualification-db.unreadable" ... */
 
 /* every field optional: a string of NULL, and a rate or quantum of -1, is "any"; 0 is not. Start from PQDB_QUERY_ANY. */
 #define PQDB_QUERY_ANY { NULL, NULL, NULL, NULL, NULL, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL }
@@ -1087,9 +1126,14 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
   for byte after JSON normalisation, for every record of the fixtures (section 8, change 3).
 - **Pointers** in a result are valid until the callback returns; a caller copies what it keeps.
 - **Refused, by name** (`pqdb_code` gives the string; each refusal names the file):
-  - `qualification-db.absent`: the base file does not exist. An absent USER layer is not an error: it is an empty
-    layer;
-  - `qualification-db.unreadable`: it exists and SQLite cannot open or read it;
+  - an ABSENT base is not a refusal (ruling of 2026-11-20): the store has no base records until the records migration
+    ships, and the sync writes the user and system layers from day one, so a base file that does not exist is a valid
+    EMPTY base layer, as an absent user layer is. Only `ENOENT` is absent. `pqdb_base_absent(db)` is 1 for it, and the
+    command's answers say it (below); nothing fakes a base, and no layer or record is invented. `qualification-db.absent`
+    is retired from the code list: nothing refuses with it;
+  - `qualification-db.unreadable`: the base or the user layer exists, or its path cannot be walked (`ENOTDIR`, a
+    path through a file, is a wrong path, not an absent base; `EACCES` likewise), and SQLite cannot open or read it: a
+    directory, a file with no read permission, a file that is no SQLite database (a short or corrupt one);
   - `qualification-db.not-a-store`: `user_version` 0, or no `store_info` row, or a `user_layer` that is not the
     file's (a user file opened as the base), or a REAL column of a record holding a value that is not finite (no
     JSON number writes it; the message names the layer, the record and the column);
@@ -1135,12 +1179,24 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     (`deciding` a string or `null`). `files` is the record's list in its order: an
     array of `{"path": "...", "sha256": "..."}`, never empty. No other key; an absent figure is `null`, as today;
   - `query ... --json --records`: one JSON object per line per RECORD (the results of one record are one line):
-    `{"layer": ..., "sha256": ..., "format": ..., "uri": ..., "offer": ..., "host_class": ..., "record": <the record of
-    pqdb_record_json>}`. The same filters apply; `--rate` and `--quantum` are refused with `--records` (a usage error,
-    exit 2), because a record is not a cell;
+    `{"layer": ..., "sha256": ..., "format": ..., "uri": ..., "offer": ..., "host_class": ..., "set": ..., "record": <the
+    record of pqdb_record_json>}`. `set` is the record's set (`record_set.name`; `null` for a user-layer record, which
+    has none): every line carries it, with a cell or without, so one line shape serves both and a caller never has to
+    ask a second time which set a record came from. The same filters apply.
+    With `--rate R --quantum Q` (given together; one alone is a usage error, exit 2) the lines are the records that
+    CLAIM that cell (section 4), one a key: a consumer that asks for the record of its machine's cell takes the
+    claimant whole. The command reads the claim through `pqdb_each`, whose results at a cell are the claimants'; the
+    rule (the reference tier first, then the set measured later within a tier) is held once, in the `claim` table the
+    base build writes, and is not copied here. A key nobody holds at that cell prints no line. Without them the
+    command prints the records of the filters as before, now with `set`;
   - `counts [--layer user|base] --json`: one JSON object per line per format, in format order:
     `{"format": "clap", "plugins": 248, "offered": 224, "not_offered": 24}`;
-  - `check`: opens both layers, verifies section 3.7's key rule for every record of both, and prints `ok`, or the code and message; exit 0, or 1 with the code;
+  - an absent base is told, never silent, and stdout stays records only (a reader parses each line as a record, and a
+    box with no base must not meet a line a box with a base never prints): when `pqdb_base_absent` is 1, `query --json`
+    and `counts --json` exit 0, print the user layer's lines alone (none when it has none) and write ONE line to
+    stderr, `plugin-qualification-db: base-absent: <path>: the base layer is empty`; a present base writes nothing to
+    stderr;
+  - `check`: opens both layers, verifies section 3.7's key rule for every record of both, and prints `ok` (`ok base-absent` when the base is absent), or the code and message; exit 0, or 1 with the code;
   - `--base`, `--user`, `--contract-dir` and their variables, as section 2 says; and `--scope user|system` (default
     `user`), which opens the production places of that scope (`pqdb_open`) when neither `--base` nor `--user` is given.
     `--scope` with either of them is a usage error. Exit 2 on a usage error.
@@ -1228,7 +1284,7 @@ function that does; a field the table says nothing decides is carried into the j
 | `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` not stored, and not read |
 | `grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls` | `rtSafetyOfProbeOutput`, `rtSafetyReasons`, `processCalls` | `cell.rt_interposer`, `.rt_swept`, `.rt_sweep_applicable`, `.rt_blocks`, `.rt_allocations`, `.rt_locks`, `.rt_syscalls` |
 | `grid[].rtSafety.threadViolations`, `.processErrors` | `clapRtReasons` | `cell.rt_thread_violations`, `.rt_process_errors` |
-| `grid[].rtSafety.ownThreads`, `.otherThreads.allocationsInRun`, `.locksInRun`, `.syscallsInRun` | not read on plugin-qualify's `main`; read by the judge once plugin-qualify#119 merges (`hosting.rt-safety.own-threads` is conditional, and the other-thread counts are a figure, never the verdict) | NEW: `cell.rt_own_threads`, `.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (NULL where not taken; the three counts all or none). Records of today hold none |
+| `grid[].rtSafety.ownThreads`, `.otherThreads.allocations`, `.locks`, `.syscalls` | not read on plugin-qualify's `main`; read by the judge once plugin-qualify#119 merges (`hosting.rt-safety.own-threads` is conditional, and the other-thread counts are a figure, never the verdict) | NEW: `cell.rt_own_threads`, `.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (NULL where not taken; the three counts all or none; the record's grid carries the probe point's names for them). Records of today hold none |
 | `grid[].rtSafety.events[]` | carried into the document; no reason | `cell_event` rows |
 | `grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `noteSweepOfProbeOutput`, `noteSweepReasons` | `cell.note_sweep_applicable`, `.note_sweep_dialect`, `.note_sweep_allocations`, `.note_sweep_locks`, `.note_sweep_syscalls` |
 | `grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.notesHeldKb`, `.unmeasuredReason` | `gridMemoryReadings`, `hostingMemoryReasons` (`firstInstanceKb` and `perInstanceKb` are computed from these by `memory-budget.ts`) | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_notes_held_kb`, `.mem_unmeasured_reason` |
@@ -1256,7 +1312,7 @@ probe judge over every record of `records/`.
 
 | package | ships | built how | new dependencies (floors only) |
 | --- | --- | --- | --- |
-| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `pkg-config` and `libomx-contract-dev` for the contract directory's path; RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same three contract floors. Run time: none |
+| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `omx-clap-core-contract (>= <the release publishing the `hosting` domain>~)`, `pkg-config` and the contract directory's path (the `contractdir` variable of `libomx-domain.pc`, which the reader's Build-Depends already carry); RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same four contract floors. Run time: none |
 | `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
 | `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` (its `schema` variable names the DDL of `plugin-qualification-db-schema`) | | `libplugin-qualification-db0 (= ${binary:Version})`, `plugin-qualification-db-schema (= ${source:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
@@ -1299,8 +1355,11 @@ makes it fail.
    pass), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
-   from the record's, an empty object, and a second claim on one key and cell each refuse by name and leave no output
-   file. Fails when a partial file is left at `--out`.
+   from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by
+   name and leave no output file; so do two sets of one tier measured on one date at one key and cell
+   (`claim-duplicate`), and such a set without a date (`claim-undated`). A reference-tier set and a provisional set at
+   one key and cell give the claim to the reference record, and two sets of one tier to the one measured later, in
+   either byte order of the sets (section 4). Fails when a partial file is left at `--out`.
 10. **Key constraints.** A record with a 63-character SHA-256 or a format `vst3` is refused by the schema. Fails when
     the `CHECK`s are dropped.
 11. **Package contents.** The built `plugin-qualification-records` (deb and rpm) holds `qualification.sqlite` and every
@@ -1320,8 +1379,9 @@ makes it fail.
 16. **Formats against plugin-db's own item.** With a fixture `plugin-db` domain whose `PLUGIN_DB_ADDRESS_FORMATS`
     holds `clap` only, an LV2 record is refused as `word-unknown`, naming `plugin.format` and `lv2`. Fails when the
     writer checks the formats against a list of its own or of the `qualification` domain.
-17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string. Fails when a word list
-    is written into a `CHECK`.
+17. **No word list in the DDL.** `schema/qualification.sql` holds no `IN (` with a quoted string, apart from the SQLite
+    type names of `typeof(c) IN ('integer', 'real')` (the param numbers of section 3.3), which the check skips: only a
+    list of words is refused. Fails when a word list is written into a `CHECK`.
 18. **Fractional reason param.** A fixture reason with `params.coreFractionP95: 0.37` and another with `params.blocks: 40` read back as 0.37 and 40, the second an integer (`typeof` `integer`, `real` for the first). Fails when `reason_param.number` is `INTEGER` (the fraction is refused or rounded) or when the exporter writes 40 as 40.0.
 19. **Adapter params round trip.** A fixture record with `adapter.params: {}`, one with `adapter.params: {"resp": 3, "step": "add"}`, one without `params`, and an adapter cell with `params: {"peak": 0.5}` and one with `params: {}` read back exactly, `{}` staying `{}` and absence staying absent. Fails when presence is not stored (`record.adapter_params`, `adapter_cell.params`) or a param is dropped.
 20. **Binary path relative, and no conversion.** After the one-time rewrite, every CLAP record of `records/` has a relative
@@ -1351,7 +1411,7 @@ makes it fail.
 
 ### Change 3: the reader
 
-1. **Absent base** → `qualification-db.absent` with the path. Fails when open succeeds on an empty layer.
+1. **Absent base** → open succeeds, `pqdb_base_absent` is 1, the results are the user layer's alone, a `base`-layer query and `pqdb_counts` give none, no file is created; the command exits 0 with records only on stdout and the one `base-absent` line on stderr (`ok base-absent` for `check`), and a present base writes no such line. Fails when open is refused, when the base is said present, when stdout holds a line that is no record, or when a base appears. A base that exists and cannot be used is still refused by name, one arm each: a permission-denied file (skipped as root) and a directory and a short non-SQLite file (`qualification-db.unreadable`), a file at another `user_version` (`schema-other`), an empty file (`not-a-store`), a path through a file (`ENOTDIR`, `unreadable`). Fails when any of them reads as absent. The writer puts the user and the system layer with no base anywhere.
 2. **Absent user layer** → open succeeds; results are the base's. Fails when an absent user file is refused or created.
 3. **One schema version.** A base at `user_version` 2 (and a reader at 1) → `schema-other`; a base at 1 with a user
    layer at 2 → `schema-mismatch`, naming both files; **0** → `not-a-store`; a user file opened as the base →
@@ -1413,7 +1473,8 @@ makes it fail.
     `pqdb_error`. Fails when a column is missing or a number changes type (sabotage: a fraction read as an integer).
 22. **The command's widened shape.** `query --json` prints exactly the keys of section 6 in that order (a test checks
     the key list), `files` a non-empty array of `path` and `sha256`, `unpinnable` 0 or 1, absent figures `null`.
-    `query --json --records` prints one line per record, with the record document; with `--rate` it exits 2.
+    `query --json --records` prints one line per record, with its `set` and the record document; with `--rate` and
+    `--quantum` it prints the record that claims that cell, and either alone exits 2.
     `counts --json` prints one line per format. `--scope` with `--base` or `--user` exits 2; `--scope system` reads the
     system place and never the home's (the test's `open` trace, as 15). Fails when a key is added, dropped or
     reordered, or `--records` prints one line per cell.
@@ -1425,6 +1486,17 @@ makes it fail.
 25. **The row judge, from the reader.** The case C6b, run over the reader: a base built from `records/` is read through
     `pqdb_record_json` and judged; every record's verdicts, tiers and cost equal the probe judge's. Fails with the same
     sabotages as C6b, and when `pqdb_record_json` drops a cell, a column of section 6.2 or the cells' order.
+26. **The reference tier answers where two tiers hold a cell.** Two fixture bases hold one plugin at 48000/256 from a
+    provisional set and from a reference set, the sets in both orders, each record with its own figures, verdict,
+    file list and offer, the claim on the reference record (section 4). `pqdb_each` (no filter, the key at its cell,
+    the base layer by name), `query --json`, `pqdb_files` and `pqdb_verdict_of` of the result, and `pqdb_counts` answer
+    with the reference record alone, in both orders. Fails when the reader reads a cell without its claim (two
+    results, and in one order the provisional set's first) or counts a record that claims no cell.
+27. **The newer set answers where two sets of one tier hold a cell.** Two fixture bases hold one plugin at 48000/256
+    from two rpi5 sets of tier hardware, measured 2026-11-06 and 2026-11-08, the sets in both orders, the claim on
+    the newer record (section 4). `pqdb_each` (no filter, the key at its cell), `query --json`, and `pqdb_files` and
+    `pqdb_verdict_of` of the result answer with the newer record alone, once. Fails when the claim follows the order of
+    the sets or the reader reads a cell without its claim.
 
 ### The consumer switch (red-first tests of plugin-qualify's repository)
 
@@ -1443,7 +1515,7 @@ C4. **The sync writes the store.** After a run in a fixture home, the user layer
     (`binary_path` relative, list in order, key rule held) and no `*.qualification.json`, `*.probe.json` or
     `*.unmeasured.json` exists under any directory the sync used. Fails when any file is written.
 C5. **No directory is read.** With a directory of valid old `*.qualification.json` and `*.probe.json` files present, and
-    with the store absent, the sync refuses by `qualification-db.absent` and takes nothing from the files; with the
+    with no base file (an empty base layer, section 6) the sync takes nothing from the files and writes its layer; with the
     store present, `qualify-rejudge`, `pruneStale` and `pluginCounts` give the store's answers and the open trace shows
     no read of that directory. Fails when any function falls back, or reads both.
 C6. **`qualify-rejudge` on the store.** It judges the user layer's records again with no probe output on disk, `put`s only

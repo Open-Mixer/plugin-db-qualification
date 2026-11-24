@@ -72,8 +72,58 @@ pk=$("$cmd" query --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --con
 c=$("$cmd" check --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
 [ $rc -eq 0 ] && [ "$c" = "ok" ] || note "check: exit $rc, output '$c'"
 c=$("$cmd" check --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
-case "$c" in qualification-db.absent*) ;; *) note "check of an absent base printed '$c'" ;; esac
-[ $rc -eq 1 ] || note "check of an absent base exited $rc, expected 1"
+[ $rc -eq 0 ] && [ "$c" = "ok base-absent" ] || note "check of an absent base: exit $rc, output '$c'"
+
+# an absent base is an empty base layer: exit 0, the answer says so, the user layer answers alone
+# stdout holds records only (each line a stored record, or none); stderr carries the one named line
+want="plugin-qualification-db: base-absent: $fx/missing.sqlite: the base layer is empty"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] || note "query with an absent base exited $rc"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "query with an absent base: stderr is '$(cat "$fx/abs.err")'"
+u=$("$cmd" query --json --layer user --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>/dev/null)
+[ "$a" = "$u" ] && [ -n "$u" ] || note "query with an absent base is not the user layer's alone"
+printf '%s\n' "$a" | python3 -I -c '
+import json, sys
+for l in sys.stdin.read().splitlines():
+    o = json.loads(l)
+    assert "sha256" in o and "layer" in o and "base" not in o, l' || note "stdout of query with an absent base holds a line that is no record"
+a=$("$cmd" counts --json --base "$fx/missing.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] || note "counts with an absent base exited $rc"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "counts with an absent base: stderr is '$(cat "$fx/abs.err")'"
+printf '%s\n' "$a" | python3 -I -c '
+import json, sys
+for l in sys.stdin.read().splitlines():
+    o = json.loads(l)
+    assert "format" in o and "plugins" in o and "base" not in o, l' || note "stdout of counts with an absent base holds a line that is no count"
+a=$("$cmd" query --json --base "$fx/missing.sqlite" --user '' --contract-dir "$good" 2>"$fx/abs.err"); rc=$?
+[ $rc -eq 0 ] && [ -z "$a" ] || note "no layer at all: exit $rc, stdout '$a'"
+[ "$(cat "$fx/abs.err")" = "$want" ] || note "no layer at all: stderr is '$(cat "$fx/abs.err")'"
+for v in query counts; do
+    "$cmd" $v --json --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" >/dev/null 2>"$fx/abs.err"
+    [ ! -s "$fx/abs.err" ] || note "$v with a base present wrote to stderr: $(cat "$fx/abs.err")"
+done
+# a base that exists and cannot be used is refused by name
+mkdir -p "$fx/base-dir.sqlite"
+for arm in "base-dir.sqlite" ; do
+    c=$("$cmd" query --json --base "$fx/$arm" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1); rc=$?
+    case "$c" in qualification-db.unreadable*) ;; *) note "a directory as the base printed '$c'" ;; esac
+    [ $rc -eq 1 ] || note "a directory as the base exited $rc"
+done
+printf 'not sqlite' > "$fx/junk.sqlite"
+c=$("$cmd" counts --json --base "$fx/junk.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+case "$c" in qualification-db.unreadable*) ;; *) note "a junk base printed '$c'" ;; esac
+[ $rc -eq 1 ] || note "a junk base exited $rc"
+c=$("$cmd" check --base "$fx/base-v2.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+case "$c" in qualification-db.schema-other*) ;; *) note "a base of version 2 printed '$c'" ;; esac
+[ $rc -eq 1 ] || note "a base of version 2 exited $rc"
+if [ "$(id -u)" -ne 0 ]; then
+    cp "$fx/base.sqlite" "$fx/denied.sqlite"; chmod 000 "$fx/denied.sqlite"
+    c=$("$cmd" query --json --base "$fx/denied.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+    case "$c" in qualification-db.unreadable*) ;; *) note "an unreadable base printed '$c'" ;; esac
+    [ $rc -eq 1 ] || note "an unreadable base exited $rc"
+else
+    echo "skip   unreadable base: running as root, a mode 000 file is readable"
+fi
 c=$("$cmd" check --base "$fx/base.sqlite" --contract-dir "$ct/contract-no-conditional" --user '' 2>&1); rc=$?
 case "$c" in qualification-db.word-unknown*) ;; *) note "check with a missing word printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "check with a missing word exited $rc"
@@ -118,20 +168,58 @@ if len(lines) != 3:
     print("  FAIL: --records printed %d lines, expected one a record (3)" % len(lines)); bad = 1
 for l in lines:
     o = json.loads(l)
-    if list(o) != ["layer", "sha256", "format", "uri", "offer", "host_class", "record"]:
+    if list(o) != ["layer", "sha256", "format", "uri", "offer", "host_class", "set", "record"]:
         print("  FAIL: --records keys %s" % list(o)); bad = 1; continue
     name = "%s-%s.%s.%s.json" % (o["format"], o["uri"].split(":")[-1], o["offer"], o["host_class"])
     doc = open(os.path.join(sys.argv[2], name), encoding="utf-8").read()
-    head = '{"layer":"%s","sha256":"%s","format":"%s","uri":"%s","offer":"%s","host_class":"%s","record":' % (
-        o["layer"], o["sha256"], o["format"], o["uri"], o["offer"], o["host_class"])
+    if not isinstance(o["set"], str) or not o["set"]:
+        print("  FAIL: --records line of %s names no set" % o["uri"]); bad = 1; continue
+    head = '{"layer":"%s","sha256":"%s","format":"%s","uri":"%s","offer":"%s","host_class":"%s","set":"%s","record":' % (
+        o["layer"], o["sha256"], o["format"], o["uri"], o["offer"], o["host_class"], o["set"])
     if l != head + doc + "}":
         print("  FAIL: --records line of %s is not the record document of the library" % name); bad = 1
 sys.exit(bad)
 PY
+# --records at a cell: the whole record of the set that claims the cell, with its set (the store spec, section 4). The
+# fixtures hold two keys at two cells each: the sets of one key are a provisional one and a reference one (the
+# reference one claims 48000/256, the provisional one 96000/256), and of the other an older and a newer measurement of
+# one tier (the newer claims 48000/256, the older 96000/256); the winner of 48000/256 sorts last by name. Both orders.
+for order in winner-last winner-first; do
+    for cell in "48000 256" "96000 256" "192000 256"; do
+        set -- $cell
+        # shellcheck disable=SC2086
+        "$cmd" query --json --records --rate "$1" --quantum "$2" --base "$fx/base-claimants-$order.sqlite" --user '' --contract-dir "$good" > "$fx/command-claimants.out" 2>&1; rc=$?
+        [ $rc -eq 0 ] || note "--records at $1/$2 ($order) exited $rc"
+        python3 -I - "$fx/command-claimants.out" "$1/$2" "$order" <<'PY' || fail=1
+import json, sys
+lines = [l for l in open(sys.argv[1], encoding="utf-8").read().split("\n") if l]
+cell, order = sys.argv[2], sys.argv[3]
+want = {"48000/256": {"urn:p1": ("fedora44-rt-48000-256", "ref/p1.clap", "prov/p1.clap"), "urn:p2": ("z-new", "new/p2.clap", "old/p2.clap")},
+        "96000/256": {"urn:p1": ("fedora44-48000-256", "prov/p1.clap", "ref/p1.clap"), "urn:p2": ("a-old", "old/p2.clap", "new/p2.clap")},
+        "192000/256": {}}[cell]
+bad = 0
+if len(lines) != len(want):
+    print("  FAIL: --records at %s (%s) printed %d lines, expected %d" % (cell, order, len(lines), len(want))); bad = 1
+for l in lines:
+    o = json.loads(l)
+    if list(o) != ["layer", "sha256", "format", "uri", "offer", "host_class", "set", "record"]:
+        print("  FAIL: --records at %s keys %s" % (cell, list(o))); bad = 1; continue
+    w = want.get(o["uri"])
+    if not w:
+        print("  FAIL: --records at %s printed %s" % (cell, o["uri"])); bad = 1; continue
+    if o["set"] != w[0]:
+        print("  FAIL: --records at %s (%s): %s is set %s, expected the claimant %s" % (cell, order, o["uri"], o["set"], w[0])); bad = 1
+    if w[1] not in l or w[2] in l:
+        print("  FAIL: --records at %s (%s): the record of %s is not the claimant's whole record (%s)" % (cell, order, o["uri"], w[1])); bad = 1
+sys.exit(bad)
+PY
+    done
+done
+# a cell is both: one alone is a usage error
 "$cmd" query --json --records --rate 48000 --base "$fx/base.sqlite" --user '' --contract-dir "$good" >/dev/null 2>&1; rc=$?
-[ $rc -eq 2 ] || note "--records with --rate exited $rc, expected 2"
+[ $rc -eq 2 ] || note "--records with --rate alone exited $rc, expected 2"
 "$cmd" query --json --records --quantum 256 --base "$fx/base.sqlite" --user '' --contract-dir "$good" >/dev/null 2>&1; rc=$?
-[ $rc -eq 2 ] || note "--records with --quantum exited $rc, expected 2"
+[ $rc -eq 2 ] || note "--records with --quantum alone exited $rc, expected 2"
 
 # --layer
 n=$("$cmd" query --json --layer user --base "$fx/base.sqlite" --user "$fx/user.sqlite" --contract-dir "$good" 2>&1 | wc -l)
@@ -222,5 +310,24 @@ for l in open(sys.argv[1]).read().splitlines():
         print("  FAIL: a figure is written with an exponent where JSON.stringify writes none: %s" % l[:120]); bad = 1
 sys.exit(bad)
 PY
+# ruling 2026-11-20: one plugin at one cell from a reference-tier set and a provisional set answers once, from the
+# reference tier, in either order of the sets (the store spec, section 4)
+for order in ref-last ref-first; do
+    out=$("$cmd" query --json --base "$fx/base-tiers-$order.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+    [ $rc -eq 0 ] || note "query --json of base-tiers-$order exited $rc: $out"
+    n=$(printf '%s\n' "$out" | grep -c '"sha256"')
+    [ "$n" -eq 1 ] || note "query --json of base-tiers-$order gave $n results for one plugin at one cell"
+    case "$out" in *'"set":"fedora44-48000-256"'*) note "query --json of base-tiers-$order answers with the provisional set" ;; esac
+    case "$out" in *'"set":"fedora44-rt-48000-256"'*) ;; *) note "query --json of base-tiers-$order does not answer with the reference tier's set" ;; esac
+done
+# ruling 2026-11-20: one plugin at one cell from two sets of one tier answers once, from the set measured later, in
+# either order of the sets (the store spec, section 4)
+for order in new-last new-first; do
+    out=$("$cmd" query --json --base "$fx/base-newer-$order.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+    [ $rc -eq 0 ] || note "query --json of base-newer-$order exited $rc: $out"
+    n=$(printf '%s\n' "$out" | grep -c '"sha256"')
+    [ "$n" -eq 1 ] || note "query --json of base-newer-$order gave $n results for one plugin at one cell"
+    case "$out" in *'"set":"zynthian-vangelis-48000-256"'*) ;; *) note "query --json of base-newer-$order does not answer with the newer set" ;; esac
+done
 if [ $fail -eq 0 ]; then echo "ok     14, 22 and 23 the command"; else echo "not ok 14, 22 and 23 the command"; fi
 exit $fail

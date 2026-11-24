@@ -48,7 +48,7 @@ MAP_PATHS = ("verdicts[].reasons[].params.*", "cost[].reasons[].params.*", "adap
 ARRAY_TABLES = {
     "binary.files[]": "record_file", "run.steps[]": "run_step", "probe.ends[]": "probe_end", "verdicts[]": "verdict",
     "cost[]": "cost_entry", "tiers.offeredOn[]": "tier_offered", "measurements.grid[]": "cell",
-    "measurements.grid[].rtSafety.events[]": "cell_event", "measurements.unmeasured[]": "unmeasured",
+    "measurements.grid[].rtSafety.events[]": "cell_event", "measurements.grid[].cost.voiceCurve[]": "cell_voice_point", "measurements.unmeasured[]": "unmeasured",
     "measurements.behaviour.features.required[]": "feature_required", "notMeasured[]": "not_measured",
     "adapter.cells[]": "adapter_cell", "memoryRun.cells[]": "memory_run_cell", "rejudged.owes[]": "rejudged_owe",
 }
@@ -339,6 +339,83 @@ class DdlColumns(Base):
             r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locks": 1}
         d, f = self.made(put)
         self.refused("schema-refused", f)
+
+
+class InstrumentFields(Base):
+    """Case 26 (#72, ruling 12): the fields plugin-qualify 0.20.6 writes for an instrument and for the adapter's content,
+    which the three reference sets of #67 carry and no column held: cost[].voices, a cell's cost.voiceCurve[], a cell
+    whose rtSafety carries no counts, and adapter.params content, loaded, refused (names) and problem (a sentence)."""
+    made, exported, same = DdlColumns.made, DdlColumns.exported, DdlColumns.same
+    CURVE = [{"held": 1, "median": 11.5752, "percentile": {"p": 95, "value": 11.7705}},
+             {"held": 16, "median": 11.8682, "percentile": {"p": 95, "value": 12.3027}}]
+    CONTENT = ("http://drumkv1.sourceforge.net/lv2#P101_SAMPLE_FILE http://drumkv1.sourceforge.net/lv2#P204_TUNING_SCALE_FILE")
+    REFUSED = "http://drumkv1.sourceforge.net/lv2#P204_TUNING_SCALE_FILE (resp -3)"
+
+    def test_26_cost_voices_round_trip(self):
+        d, f = self.made(lambda r: r["cost"][0].update(voices={"held": 16, "basis": "probe"}))
+        self.assertEqual(self.same(d, f)["cost"][0]["voices"], {"held": 16, "basis": "probe"})
+        self.assertEqual(self.rows("SELECT voices_held, voices_basis, voices_capacity FROM cost_entry WHERE voices_held IS NOT NULL"),
+                         [(16, "probe", None)])
+
+    def test_26_a_voices_basis_outside_its_domain_is_refused(self):
+        d, f = self.made(lambda r: r["cost"][0].update(voices={"held": 16, "basis": "guessed"}))
+        self.refused("word-unknown", f, "cost[0].voices.basis")
+
+    def test_26_a_voice_curve_round_trips_in_order(self):
+        def put(r):
+            r["measurements"]["grid"][0]["cost"] = {"median": 24.8711, "percentile": {"p": 95, "value": 30.2271}, "blocks": 512,
+                                                    "warmupBlocks": 64, "voices": {"held": 16, "basis": "probe"},
+                                                    "voiceCurve": copy.deepcopy(self.CURVE)}
+        d, f = self.made(put)
+        self.assertEqual(self.same(d, f)["measurements"]["grid"][0]["cost"]["voiceCurve"], self.CURVE)
+        self.assertEqual(self.rows("SELECT cell_ord, ord, held, median, percentile_p, percentile_value FROM cell_voice_point "
+                                   "ORDER BY cell_ord, ord"),
+                         [(0, 0, 1, 11.5752, 95, 11.7705), (0, 1, 16, 11.8682, 95, 12.3027)])
+
+    def test_26_a_cell_with_no_audio_thread_counts_round_trips(self):
+        def put(r):
+            rt = r["measurements"]["grid"][0]["rtSafety"]
+            for k in list(rt):
+                if k not in ("interposer", "swept", "sweepApplicable", "blocks"):
+                    del rt[k]
+            rt.update(swept=False, sweepApplicable=True)
+        d, f = self.made(put)
+        self.assertEqual(self.same(d, f)["measurements"]["grid"][0]["rtSafety"],
+                         {"interposer": True, "swept": False, "sweepApplicable": True, "blocks": 512})
+        self.assertEqual(self.rows("SELECT rt_events, rt_allocations FROM cell WHERE ord = 0 AND rt_events IS NULL"), [(None, None)])
+
+    def test_26_counts_without_their_events_are_refused_by_the_schema(self):
+        d, f = self.made(lambda r: r["measurements"]["grid"][0]["rtSafety"].pop("events"))
+        self.refused("schema-refused", f)
+
+    def test_26_one_audio_thread_count_alone_is_refused_by_the_schema(self):
+        def put(r):
+            rt = r["measurements"]["grid"][0]["rtSafety"]
+            del rt["locks"], rt["syscalls"]
+        d, f = self.made(put)
+        self.refused("schema-refused", f)
+
+    def test_26_the_adapter_content_round_trips_and_the_problem_is_not_stored(self):
+        def put(r):
+            r["adapter"] = {"host": "omx-clap-host", "measured": True, "admitted": True,
+                            "params": {"peak": 0.167938381, "notes": 30, "content": self.CONTENT, "loaded": self.CONTENT,
+                                       "refused": self.REFUSED, "problem": "jack_peak: usage: jack_peak <client:port> ..."}}
+        d, f = self.made(put)
+        got = self.same(d, f)["adapter"]["params"]
+        self.assertEqual(list(got), ["peak", "notes", "content", "loaded", "refused"])
+        self.assertEqual(self.rows("SELECT adapter_content, adapter_loaded, adapter_refused FROM record WHERE adapter_content IS NOT NULL"),
+                         [(self.CONTENT, self.CONTENT, self.REFUSED)])
+        self.assertEqual(self.rows("SELECT name FROM adapter_param ORDER BY rowid"), [("peak",), ("notes",)])
+        with open(self.db, "rb") as fh:
+            self.assertNotIn(b"jack_peak: usage", fh.read())
+
+    def test_26_content_in_an_adapter_cell_is_refused(self):
+        def put(r):
+            r["adapter"] = {"host": "omx-clap-host", "measured": True, "admitted": True,
+                            "cells": [{"rate": 48000, "quantum": 512, "admitted": True, "measured": True,
+                                       "params": {"content": self.CONTENT}}]}
+        d, f = self.made(put)
+        self.refused("word-unknown", f, "adapter.cells[0].params.content")
 
 
 class Refusals(Base):
@@ -900,6 +977,8 @@ class RoundTrip(unittest.TestCase):
             c.get("memory", {}).pop("unmeasuredDetail", None)
         for u in rec["measurements"].get("unmeasured", []):
             u.pop("detail", None)
+        if isinstance(rec.get("adapter"), dict) and isinstance(rec["adapter"].get("params"), dict):
+            rec["adapter"]["params"].pop("problem", None)
         return rec
 
     @staticmethod
@@ -1068,8 +1147,8 @@ class RoundTrip(unittest.TestCase):
             elif table == "reason":
                 parent = "verdict_ord" if path.startswith("verdicts") else "cost_ord"
                 sql = f"SELECT record_id, {parent}, ord, {col} FROM reason WHERE {parent} IS NOT NULL"
-            elif table == "cell_event":
-                sql = f"SELECT record_id, cell_ord, ord, {col} FROM cell_event"
+            elif table in ("cell_event", "cell_voice_point"):
+                sql = f"SELECT record_id, cell_ord, ord, {col} FROM {table}"
             else:
                 sql = f"SELECT record_id, ord, {col} FROM {table}"
             queries.append((path, table, col, mode, {tuple(r[:-1]): r[-1] for r in self.db.execute(sql)}, [0]))
@@ -1083,7 +1162,8 @@ class RoundTrip(unittest.TestCase):
                     self.assertTrue(want == got, f"{c}/{s}/{f}: {path}{list(idx)} is {want!r} in the file, "
                                                  f"{table}.{col} holds {got!r}")
         for path, table, col, mode, sqlvals, seen in queries:
-            self.assertGreater(seen[0], 0, f"{path}: no record holds it")
+            if mode != "fixture":   # a fixture line: no record of records/ holds it yet, a case of its own proves it
+                self.assertGreater(seen[0], 0, f"{path}: no record holds it")
             self.assertGreaterEqual(seen[0], len([v for v in sqlvals.values() if v is not None]), f"{path}: rows without a field")
 
     def check_provenance_line(self, jpath, table, col):

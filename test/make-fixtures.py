@@ -276,6 +276,7 @@ def fill_nulls(c, table, where, skip=(), flags=(), bools=()):
     checked = {col for t, col, _, _ in WORD_CHECK if t == table}
     cols = c.execute("PRAGMA table_info(%s)" % table).fetchall()
     n = 10
+    sets = {}
     for _, name, typ, notnull, _, pk in cols:
         v = c.execute("SELECT %s FROM %s WHERE %s" % (name, table, where)).fetchone()[0]
         if v is not None or name in skip or name in checked or pk:
@@ -284,7 +285,10 @@ def fill_nulls(c, table, where, skip=(), flags=(), bools=()):
         val = (1 if name in bools else n * 7 + 1) if typ == "INTEGER" else (n + 0.25 if typ == "REAL" else "w_" + name)
         if name in flags:
             val = 1
-        c.execute("UPDATE %s SET %s = ? WHERE %s" % (table, name, where), (val,))
+        sets[name] = val
+    # one UPDATE, so a CHECK over several columns (all three counts or none) sees them together
+    if sets:
+        c.execute("UPDATE %s SET %s WHERE %s" % (table, ", ".join("%s = ?" % k for k in sets), where), list(sets.values()))
 
 # numbers as JSON.stringify writes them (the cell's latencyMs, the record's latencyLineMs): what is stored, in the order of
 # the cells, and what the document must hold for each
@@ -325,12 +329,14 @@ def build_records(path):
     c.execute("UPDATE cell SET latency_ms = 2.0 WHERE record_id = 3 AND ord = 0")
     c.execute("UPDATE record SET host_extensions = 1 WHERE record_id = 3")
     c.execute("UPDATE record SET adapter_params = NULL WHERE record_id = 3")
+    # record 1's adapter.params is present: its rows (resp, step, gain) and its content names reach the document
+    c.execute("UPDATE record SET adapter_params = 1 WHERE record_id = 1")
     for rid in (1, 2, 3):
         c.execute("UPDATE record SET layout_scheme = NULL, layout_sha256 = NULL WHERE record_id = ? AND ? <> 1", (rid, rid))
-    fill_nulls(c, "cell", "record_id = 1 AND ord = 0", skip=("rt_other_allocations", "rt_other_locks", "rt_other_syscalls", "latency_ms"), bools=("rt_interposer", "rt_swept", "rt_sweep_applicable", "note_sweep_applicable"))
+    fill_nulls(c, "cell", "record_id = 1 AND ord = 0", skip=("rt_other_allocations", "rt_other_locks", "rt_other_syscalls", "latency_ms"), bools=("rt_interposer", "rt_swept", "rt_sweep_applicable", "note_sweep_applicable"), flags=("rt_events",))
     c.execute("UPDATE cell SET rt_other_allocations = 11, rt_other_locks = 12, rt_other_syscalls = 13 WHERE record_id = 1 AND ord = 0")
     c.execute("UPDATE cell SET rt_own_threads = 2 WHERE record_id = 1 AND ord = 1")   # own threads, and no other-thread counts
-    c.execute("UPDATE cell SET rt_interposer = 0, rt_swept = 0, rt_sweep_applicable = 0, rt_blocks = 0, rt_allocations = 0, rt_locks = 0, rt_syscalls = 0 WHERE record_id = 1 AND ord = 1")
+    c.execute("UPDATE cell SET rt_interposer = 0, rt_swept = 0, rt_sweep_applicable = 0, rt_blocks = 0, rt_allocations = 0, rt_locks = 0, rt_syscalls = 0, rt_events = 1 WHERE record_id = 1 AND ord = 1")
     c.executemany("INSERT INTO record_extension VALUES (1, ?, ?)", [(0, "clap.log"), (1, "clap.params")])
     c.executemany("INSERT INTO cell_event VALUES (1, 0, ?, ?)", [(0, "malloc"), (1, "pthread_mutex_lock")])
     c.executemany("INSERT INTO record_version VALUES (1, ?, ?, ?)", [(0, "omx-clap-host", "1.0"), (0, "other", "2.0"), (1, "omx-clap-host", "1.1")])
@@ -352,7 +358,10 @@ def build_records(path):
                    (1, 0, "omx-clap-host", "in-process", "in-process", "none", "history.no-record", None)])
     c.executemany("INSERT INTO history_blocked VALUES (1, 0, 1, ?, ?)", [(0, "refused"), (1, "hosting.cost.above-ceiling"), (2, "no-deciding-reason")])
     c.executemany("INSERT INTO probe_end VALUES (1, ?, ?, ?, ?, ?)", [(0, "process", "probe.ok", 0, None), (1, "exit", "probe.crashed", None, "SIGSEGV")])
-    c.executemany("INSERT INTO cost_entry VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
+    c.executemany("INSERT INTO cost_entry (record_id, ord, host, rate, quantum) VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
+    fill_nulls(c, "cost_entry", "record_id = 1 AND ord = 0")   # the voices an instrument's entry was taken with (ruling 12)
+    # an instrument's cost at each count of notes held, in ord (ruling 12)
+    c.executemany("INSERT INTO cell_voice_point VALUES (1, 0, ?, ?, ?, 95, ?)", [(0, 1, 11.5752, 11.7705), (1, 16, 11.8682, 12.3027)])
     c.executemany("INSERT INTO reason (reason_id, record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (?, 1, ?, ?, ?, ?, ?, ?)",
                   [(1, 0, None, 0, "cost", "conditional", "hosting.cost.above-ceiling"), (2, 0, None, 1, "memory", "qualified", "hosting.memory.within-ceiling"),
                    (3, None, 0, 0, "cost", "conditional", "hosting.cost.above-ceiling")])

@@ -118,6 +118,9 @@ CREATE TABLE record (
   adapter_code     TEXT CHECK (adapter_code IS NULL OR (length(adapter_code) > 0 AND instr(adapter_code, ' ') = 0 AND instr(adapter_code, char(9)) = 0 AND instr(adapter_code, char(10)) = 0)),
   adapter_measured_at TEXT,
   adapter_params   INTEGER CHECK (adapter_params IS NULL OR adapter_params IN (0, 1)),   -- NULL: no adapter object; 1: adapter.params present
+  adapter_content  TEXT,                   -- adapter.params.content: the content parameters an instrument declares, as written (names, space-separated)
+  adapter_loaded   TEXT,                   -- adapter.params.loaded: the ones the host took, as written
+  adapter_refused  TEXT,                   -- adapter.params.refused: the ones it did not take, each with the host's answer, as written
   -- memory pass
   memory_run_measured_at TEXT, memory_run_id TEXT, memory_run_runner TEXT, memory_run_child TEXT,
   -- rejudgement
@@ -179,6 +182,8 @@ CREATE TABLE cost_entry (                  -- cost[]
   host      TEXT NOT NULL CHECK ((length(host) > 0 AND instr(host, ' ') = 0 AND instr(host, char(9)) = 0 AND instr(host, char(10)) = 0)),
   rate      INTEGER NOT NULL,
   quantum   INTEGER NOT NULL,
+  voices_basis    TEXT CHECK (voices_basis IS NULL OR (length(voices_basis) > 0 AND instr(voices_basis, ' ') = 0 AND instr(voices_basis, char(9)) = 0 AND instr(voices_basis, char(10)) = 0)),   -- cost[].voices: the notes an instrument's entry was taken with
+  voices_capacity INTEGER, voices_held INTEGER,
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
@@ -253,10 +258,13 @@ CREATE TABLE cell (                        -- measurements.grid[]
   rt_thread_violations INTEGER, rt_process_errors INTEGER,
   rt_own_threads INTEGER,                  -- threads the plugin started itself (judged under hosting.rt-safety.own-threads); NULL: not taken
   rt_other_allocations INTEGER, rt_other_locks INTEGER, rt_other_syscalls INTEGER,   -- what threads other than the audio thread did; all three or none
+  rt_events INTEGER CHECK (rt_events IS NULL OR rt_events = 1),   -- 1: rtSafety.events is present (cell_event, possibly empty); NULL: absent
   note_sweep_applicable INTEGER CHECK (note_sweep_applicable IN (0, 1)),
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR (length(note_sweep_dialect) > 0 AND instr(note_sweep_dialect, ' ') = 0 AND instr(note_sweep_dialect, char(9)) = 0 AND instr(note_sweep_dialect, char(10)) = 0)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
   CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
+  CHECK ((rt_allocations IS NULL) = (rt_locks IS NULL) AND (rt_locks IS NULL) = (rt_syscalls IS NULL)),   -- the audio thread's counts: all three or none
+  CHECK ((rt_events IS NULL) = (rt_allocations IS NULL)),   -- the interposer's tally: its events and its counts together, or neither
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;
@@ -266,6 +274,16 @@ CREATE TABLE cell_event (                  -- measurements.grid[].rtSafety.event
   cell_ord  INTEGER NOT NULL,
   ord       INTEGER NOT NULL,
   event     TEXT NOT NULL,                 -- a symbol name as the interposer wrote it
+  PRIMARY KEY (record_id, cell_ord, ord),
+  FOREIGN KEY (record_id, cell_ord) REFERENCES cell (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE cell_voice_point (            -- measurements.grid[].cost.voiceCurve[]: an instrument's cost at each count of notes held
+  record_id INTEGER NOT NULL,
+  cell_ord  INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  held      INTEGER NOT NULL,              -- the notes held
+  median    REAL NOT NULL, percentile_p INTEGER NOT NULL, percentile_value REAL NOT NULL,
   PRIMARY KEY (record_id, cell_ord, ord),
   FOREIGN KEY (record_id, cell_ord) REFERENCES cell (record_id, ord) ON DELETE CASCADE
 ) STRICT;

@@ -292,6 +292,14 @@ static void cell(buf *b, ctx *c, sqlite3_stmt *st)
         OBJ(b, "percentile", 0, LEAVES(b, st, { "p", "cost_percentile_p", 'I' }, { "value", "cost_percentile_value", 'R' }));
         LEAVES(b, st, { "blocks", "cost_blocks", 'I' }, { "warmupBlocks", "cost_warmup_blocks", 'I' });
         OBJ(b, "voices", 0, LEAVES(b, st, { "basis", "voices_basis", 'T' }, { "capacity", "voices_capacity", 'I' }, { "held", "voices_held", 'I' }));
+        ARR(b, "voiceCurve", 0, {
+            ROWS(b, c, vp, "SELECT * FROM cell_voice_point WHERE record_id = ?1 AND cell_ord = ?2 ORDER BY ord", 2, c->rid, ord) {
+                elem(b); bc(b, '{');
+                LEAVES(b, vp, { "held", "held", 'I' }, { "median", "median", 'R' });
+                OBJ(b, "percentile", 1, LEAVES(b, vp, { "p", "percentile_p", 'I' }, { "value", "percentile_value", 'R' }));
+                bc(b, '}');
+            }
+        });
     });
     OBJ(b, "memory", 0, LEAVES(b, st, { "afterInstantiateKb", "mem_after_instantiate_kb", 'I' }, { "afterActivateKb", "mem_after_activate_kb", 'I' },
                                 { "atRestKb", "mem_at_rest_kb", 'I' }, { "secondInstanceKb", "mem_second_instance_kb", 'I' },
@@ -305,7 +313,8 @@ static void cell(buf *b, ctx *c, sqlite3_stmt *st)
                { "threadViolations", "rt_thread_violations", 'I' }, { "processErrors", "rt_process_errors", 'I' }, { "ownThreads", "rt_own_threads", 'I' });
         OBJ(b, "otherThreads", 0, LEAVES(b, st, { "allocations", "rt_other_allocations", 'I' }, { "locks", "rt_other_locks", 'I' },
                                           { "syscalls", "rt_other_syscalls", 'I' }));
-        strings(b, c, "events", 1, "SELECT event FROM cell_event WHERE record_id = ?1 AND cell_ord = ?2 ORDER BY ord", 2, c->rid, ord);
+        if (!null_of(st, "rt_events", b))
+            strings(b, c, "events", 1, "SELECT event FROM cell_event WHERE record_id = ?1 AND cell_ord = ?2 ORDER BY ord", 2, c->rid, ord);
     });
     OBJ(b, "noteSweep", 0, LEAVES(b, st, { "applicable", "note_sweep_applicable", 'B' }, { "dialect", "note_sweep_dialect", 'T' },
                                    { "allocations", "note_sweep_allocations", 'I' }, { "locks", "note_sweep_locks", 'I' },
@@ -438,6 +447,7 @@ static void record(buf *b, ctx *c, sqlite3_stmt *r)
         ROWS(b, c, st, "SELECT * FROM cost_entry WHERE record_id = ?1 ORDER BY ord", 1, rid, 0) {
             elem(b); bc(b, '{');
             LEAVES(b, st, { "host", "host", 'T' }, { "rate", "rate", 'I' }, { "quantum", "quantum", 'I' });
+            OBJ(b, "voices", 0, LEAVES(b, st, { "basis", "voices_basis", 'T' }, { "capacity", "voices_capacity", 'I' }, { "held", "voices_held", 'I' }));
             reasons(b, c, "cost_ord", sqlite3_column_int64(st, ci(st, "ord", b)));
             bc(b, '}');
         }
@@ -491,6 +501,10 @@ static void record(buf *b, ctx *c, sqlite3_stmt *r)
         if (!null_of(r, "adapter_params", b) && sqlite3_column_int(r, ci(r, "adapter_params", b)) == 1) {
             key(b, "params");
             params(b, c, "SELECT name, number, word FROM adapter_param WHERE record_id = ?1 ORDER BY rowid", 1, rid, 0);
+            /* the content, names as written, after the figures (section 9, ruling 12) */
+            trunc_to(b, b->n - 1);
+            LEAVES(b, r, { "content", "adapter_content", 'T' }, { "loaded", "adapter_loaded", 'T' }, { "refused", "adapter_refused", 'T' });
+            bc(b, '}');
         }
         ARR(b, "cells", 0, {
             ROWS(b, c, st, "SELECT * FROM adapter_cell WHERE record_id = ?1 ORDER BY ord", 1, rid, 0) {

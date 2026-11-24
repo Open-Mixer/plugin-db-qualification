@@ -473,30 +473,37 @@ class Substvars(Tree):
     def names(self, field):
         return [re.match(r"(\S+) \(", n).group(1) for n in field.split(", ")]
 
-    def test_arm64_takes_plugin_qualify_0_20_7_and_folds_the_rpi5_names(self):
-        self.with_two_cells()
-        v = self.vars("arm64")
-        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.21.0~)"})
+    def floors(self):
+        """{(deb arch, rpm arch): floor} as the tree's own packaging/arch-classes, which the fixture copied, says."""
+        with open(self.path("packaging", "arch-classes"), encoding="utf-8") as f:
+            rows = [l.split() for l in f if l.strip() and not l.startswith("#")]
+        self.assertTrue(rows)
+        return {(r[0], r[1]): r[3] for r in rows}
 
-    def test_amd64_takes_plugin_qualify_0_20_7_and_folds_every_cell(self):
+    def test_each_architecture_depends_on_the_floor_of_its_class(self):
+        """Audit rows 1-2, 2026-11-16: the deb substvar and the rpm block of every architecture carry the floor the
+        tree's arch-classes names, read from the fixture, never a literal typed here."""
         self.with_two_cells()
-        v = self.vars("amd64")
-        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.21.0~)"})
-
-    def test_the_rpm_folds_its_classes_names(self):
-        self.with_two_cells()
-        block = sets.spec_block(self.root)
-        self.assertIn("%ifarch x86_64\nRequires: plugin-qualify >= 0.21.0\n", block)
-        self.assertNotRegex(block, r"(?m)^(Provides|Obsoletes|Conflicts):")
+        floors = self.floors()
+        self.assertEqual(len(floors), 2)
+        block = sets.spec_block(self.root).split("\n")[1:-1]
+        want = []
+        for (deb, rpm), floor in floors.items():
+            self.assertEqual(self.vars(deb), {"qualify:Depends": f"plugin-qualify (>= {floor}~)"})
+            want += [f"%ifarch {rpm}", f"Requires: plugin-qualify >= {floor}", "%endif"]
+        self.assertEqual(block, want)
+        self.assertNotRegex("\n".join(block), r"(?m)^(Provides|Obsoletes|Conflicts):")
         # each architecture's block names its own classes only
-        self.assertNotIn("rpi5", block.split("%endif")[0])
-        self.assertIn("%ifarch aarch64\nRequires: plugin-qualify >= 0.21.0\n", block)
-        self.assertNotIn("x86-64", block.split("%ifarch aarch64")[1])
+        self.assertNotIn("rpi5", "\n".join(block).split("%endif")[0])
+        self.assertNotIn("x86-64", "\n".join(block).split("%ifarch aarch64")[1])
         if shutil.which("rpmspec"):
+            rpm, floor = next((k[1], v) for k, v in floors.items() if k[1] == "x86_64")
+            out = subprocess.run(["rpmspec", "-q", "--target", rpm, "--requires", self.path(SPEC)],
+                                 capture_output=True, text=True, check=True).stdout
+            self.assertIn(f"plugin-qualify >= {floor}", out)
             def q(*what):
-                return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
+                return subprocess.run(["rpmspec", "-q", "--target", rpm, *what, self.path(SPEC)],
                                       capture_output=True, text=True, check=True).stdout
-            self.assertIn("plugin-qualify >= 0.21.0", q("--requires"))
             self.assertEqual(q("--obsoletes").split(), [])
             self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 

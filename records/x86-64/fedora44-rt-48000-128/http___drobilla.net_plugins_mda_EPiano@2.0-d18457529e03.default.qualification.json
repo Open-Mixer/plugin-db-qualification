@@ -1,0 +1,349 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://drobilla.net/plugins/mda/EPiano"
+  },
+  "testedVersion": "2.0",
+  "binary": {
+    "path": "EPiano.so",
+    "sha256": "d18457529e03c4acd4bacce187121bbedbfb1f7237cbaea53fda285a0d95aa6b",
+    "files": [
+      {
+        "path": "EPiano.so",
+        "sha256": "d18457529e03c4acd4bacce187121bbedbfb1f7237cbaea53fda285a0d95aa6b"
+      },
+      {
+        "path": "EPiano.ttl",
+        "sha256": "c80cbc65b9a4e23ba2fb862e458788112ae9ce8ed6852db23393ea74b3de4c64"
+      },
+      {
+        "path": "manifest.ttl",
+        "sha256": "59885e241ea75af0c88ea3cc21568ea07b113a65184a6d5814d03c4d33799792"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "2bc17156385b555a61190f4397fc78d005246c874dcca3d0c78ecbadffc62f97"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
+          "params": {
+            "blocks": 512,
+            "events": 0
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
+          "params": {
+            "blocks": 512,
+            "events": 0
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {
+    "host": "omx-clap-host",
+    "measured": true,
+    "admitted": true,
+    "params": {}
+  },
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "voices": {
+        "held": 16,
+        "basis": "probe"
+      },
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "suitable",
+          "code": "hosting.cost.within-ceiling",
+          "params": {
+            "coreFractionP95": 0.007915728,
+            "ceiling": 0.05
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 256,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 94.5117,
+          "percentile": {
+            "p": 95,
+            "value": 164.911
+          },
+          "blocks": 512,
+          "warmupBlocks": 64,
+          "voices": {
+            "held": 16,
+            "basis": "probe"
+          },
+          "voiceCurve": [
+            {
+              "held": 1,
+              "median": 11.6641,
+              "percentile": {
+                "p": 95,
+                "value": 14.4062
+              }
+            },
+            {
+              "held": 8,
+              "median": 140.305,
+              "percentile": {
+                "p": 95,
+                "value": 152.504
+              }
+            },
+            {
+              "held": 16,
+              "median": 147.5,
+              "percentile": {
+                "p": 95,
+                "value": 164.797
+              }
+            },
+            {
+              "held": 32,
+              "median": 92.8711,
+              "percentile": {
+                "p": 95,
+                "value": 119.254
+              }
+            },
+            {
+              "held": 48,
+              "median": 84.1406,
+              "percentile": {
+                "p": 95,
+                "value": 107.023
+              }
+            },
+            {
+              "held": 64,
+              "median": 67,
+              "percentile": {
+                "p": 95,
+                "value": 95.9453
+              }
+            }
+          ]
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "midi",
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 4268,
+          "afterActivateKb": 4268,
+          "atRestKb": 4268,
+          "notesHeldKb": 4280,
+          "secondInstanceKb": 20,
+          "basis": "probe",
+          "firstInstanceKb": 4280,
+          "perInstanceKb": 32
+        },
+        "latencyMs": 0
+      }
+    ],
+    "behaviour": {
+      "lifecycle": {
+        "cycles": 30,
+        "instantiated": 30,
+        "failed": 0
+      },
+      "threads": {
+        "before": 1,
+        "afterFirstInstantiate": 1,
+        "afterAllFreed": 1
+      },
+      "features": {
+        "required": [
+          "http://lv2plug.in/ns/ext/urid#map"
+        ]
+      }
+    }
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "lv2_measure",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-24T00:54:23+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "http___drobilla.net_plugins_mda_EPiano@2.0-d18457529e03.default.probe.json",
+    "sha256": "2e188bbd2d21255c1519ec43987c15b26641a73823d70a54c17ed7e2b144431b",
+    "bytes": 10879,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 2.94,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261124T005423Z-165f9-d7d5ab42",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 0.6666666666666666,
+          "xruns": 0,
+          "midiInputsLinked": 1
+        }
+      }
+    ]
+  }
+}

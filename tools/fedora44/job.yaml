@@ -15,7 +15,9 @@
 #
 # It runs in omx-qualify-rt, whose pod security is privileged: the container adds SYS_NICE and IPC_LOCK, so jackd runs
 # at SCHED_FIFO 70 with memory locked (measure.sh refuses a base whose server did not), and the records are the
-# reference tier. PLUGINS is the worker image's set, lv2-plugins then clap-plugins.
+# reference tier. PLUGINS is the worker image's set, lv2-plugins then clap-plugins, and after the worker image's LV2
+# packages the ones the OpenMixer console's catalog serves from (the owning package of each of its plugins): without
+# them the x86-64 class held no record, so no memory footprint, for 756 of the catalog's 958 LV2 plugins.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -57,6 +59,40 @@ spec:
             lv2-airwindows
             lv2-dragonfly-reverb
             lv2-stereocrossdelay
+            lsp-plugins-lv2
+            lv2-x42-plugins
+            lv2-swh-plugins
+            lv2-guitarix-plugins
+            lv2-ll-plugins
+            lv2-calf-plugins
+            lv2-mdala-plugins
+            DISTRHO-Ports
+            lv2-carla
+            lv2-zam-plugins
+            lv2-eq10q
+            lv2-rubberband-plugins
+            lv2-noise-repellent
+            yoshimi
+            lv2-drumkv1
+            lv2-cloudreverb
+            lv2-abGate
+            lv2-vocoder-plugins
+            lv2-zynadd-plugins
+            lv2-samplv1
+            lv2-synthv1
+            lv2-ir-plugins
+            lv2-fabla
+            lv2-sorcer
+            lv2-newtonator
+            lv2-bankstown
+            lv2-classicreverb-re02
+            lv2-classicreverb-re03
+            lv2-zl-compressor
+            lv2-dm-graindelay
+            lv2-dm-reverb
+            lv2-hybridreverb2
+            lv2-qdelay
+            lv2-roomreverb
             clap-actuate
             clap-adt
             clap-aeolus_plugin

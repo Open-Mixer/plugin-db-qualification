@@ -69,7 +69,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -90,7 +90,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -98,7 +98,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -112,7 +112,7 @@
     "outcome": "probe.ok",
     "latency": {
      "declaredFrames": 0,
-     "measuredFrames": 1
+     "measuredFrames": 0
     },
     "rtSafety": {
      "interposer": true,
@@ -151,13 +151,14 @@
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 26780,
-     "afterActivateKb": 27580,
-     "atRestKb": 27944,
+     "afterInstantiateKb": 27520,
+     "afterActivateKb": 28280,
+     "atRestKb": 28664,
      "secondInstanceKb": 9868,
      "unmeasuredReason": "voices-unknown",
      "unmeasuredDetail": "no count of notes to hold for the footprint"
-    }
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -168,15 +169,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T13:40:47+00:00",
+ "measuredAt": "2026-11-23T22:03:57+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "org.baconpaul.six-sines@unversioned-77dcc12fbb00.default.probe.json",
-  "sha256": "ab5a1b7b37be261bdd8e14f7718cc5f8ea835dba68337285dea179409e0a40fc",
-  "bytes": 10453,
+  "sha256": "c4a4b669073184ef95a920ae88d168ae8988c60682f32ab2271307db388e0bbd",
+  "bytes": 10458,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -194,12 +197,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 10.58,
+   "loadavg1": 4.88,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T134047Z-732-095ab110",
+  "id": "20261123T220357Z-4d8-68d220e8",
   "steps": [
    {
     "step": "scan",
@@ -216,6 +219,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

@@ -53,7 +53,7 @@
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
       "allocations": 0,
-      "syscalls": 8,
+      "syscalls": 6,
       "locks": 0
      }
     },
@@ -63,7 +63,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -84,7 +84,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -92,7 +92,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -109,10 +109,10 @@
      "measuredFrames": 1
     },
     "cost": {
-     "median": 265.223,
+     "median": 260.641,
      "percentile": {
       "p": 95,
-      "value": 4811.27
+      "value": 4506.14
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -124,12 +124,10 @@
      "blocks": 512,
      "allocations": 0,
      "locks": 0,
-     "syscalls": 8,
+     "syscalls": 6,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
-      "nanosleep",
-      "nanosleep",
       "nanosleep",
       "nanosleep",
       "nanosleep",
@@ -142,13 +140,14 @@
      "applicable": false
     },
     "memory": {
-     "afterInstantiateKb": 22788,
-     "afterActivateKb": 51380,
-     "atRestKb": 52704,
+     "afterInstantiateKb": 23208,
+     "afterActivateKb": 51868,
+     "atRestKb": 53236,
      "secondInstanceKb": 33132,
-     "firstInstanceKb": 52704,
+     "firstInstanceKb": 53236,
      "perInstanceKb": 33132
-    }
+    },
+    "latencyMs": 0.020833
    }
   ]
  },
@@ -159,15 +158,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:19:22+00:00",
+ "measuredAt": "2026-11-23T22:45:36+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "in.lsp-plug.referencer_stereo@unversioned-823d2c8dab8c.default.probe.json",
-  "sha256": "8aee26c0a5eed1efbb60f894fefb48780d4ba4dda554ad2bfcfc83f3ab01f3ea",
-  "bytes": 10428,
+  "sha256": "319550c976a4de437b097f423f41dd2a98f0627f5fcfc9ac8146610f8dcc3214",
+  "bytes": 10379,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -185,12 +186,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 10.04,
+   "loadavg1": 3.31,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T141922Z-5fe6-730e71cc",
+  "id": "20261123T224536Z-6a58-66dd3e1d",
   "steps": [
    {
     "step": "scan",
@@ -207,6 +208,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

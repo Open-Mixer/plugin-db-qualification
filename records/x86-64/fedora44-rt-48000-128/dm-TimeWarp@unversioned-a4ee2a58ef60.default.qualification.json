@@ -72,7 +72,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -93,7 +93,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -101,7 +101,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -118,10 +118,10 @@
      "measuredFrames": 0
     },
     "cost": {
-     "median": 142.531,
+     "median": 112.008,
      "percentile": {
       "p": 95,
-      "value": 291.765
+      "value": 201.574
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -140,16 +140,16 @@
       "calloc",
       "free",
       "calloc",
-      "calloc",
-      "free",
-      "calloc",
-      "free",
-      "calloc",
       "free",
       "free",
       "calloc",
       "free",
       "calloc",
+      "calloc",
+      "free",
+      "free",
+      "calloc",
+      "free",
       "calloc",
       "free",
       "free"
@@ -163,13 +163,14 @@
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 5444,
-     "afterActivateKb": 5676,
-     "atRestKb": 5924,
+     "afterInstantiateKb": 5528,
+     "afterActivateKb": 5724,
+     "atRestKb": 5920,
      "secondInstanceKb": 316,
-     "firstInstanceKb": 5924,
+     "firstInstanceKb": 5920,
      "perInstanceKb": 316
-    }
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -180,15 +181,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:09:34+00:00",
+ "measuredAt": "2026-11-23T22:36:05+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "dm-TimeWarp@unversioned-a4ee2a58ef60.default.probe.json",
-  "sha256": "542801639a7361d252acc052ac14dd846e8908e9759ed6941f2269504c4a8062",
-  "bytes": 10504,
+  "sha256": "883dd72ade3569efaafee59209fb5c268d1d3b733fa2d6a4c84aa020cae1a80e",
+  "bytes": 10499,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -206,12 +209,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 8.38,
+   "loadavg1": 3.35,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T140934Z-3374-75426e54",
+  "id": "20261123T223605Z-3e3c-155ee2fd",
   "steps": [
    {
     "step": "scan",
@@ -228,6 +231,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

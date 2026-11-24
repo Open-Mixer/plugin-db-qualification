@@ -52,9 +52,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
-      "allocations": 2128,
+      "allocations": 2773,
       "syscalls": 0,
-      "locks": 1910
+      "locks": 2028
      }
     },
     {
@@ -62,9 +62,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-under-notes",
      "params": {
-      "allocations": 5064,
+      "allocations": 5619,
       "syscalls": 0,
-      "locks": 2080
+      "locks": 2079
      }
     },
     {
@@ -73,7 +73,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -94,7 +94,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -102,7 +102,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -123,45 +123,46 @@
      "swept": true,
      "sweepApplicable": true,
      "blocks": 512,
-     "allocations": 2128,
-     "locks": 1910,
+     "allocations": 2773,
+     "locks": 2028,
      "syscalls": 0,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "malloc",
+      "malloc",
+      "malloc",
+      "malloc",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "malloc",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
       "malloc",
       "free",
-      "free",
-      "free",
-      "pthread_mutex_lock",
-      "pthread_mutex_lock",
-      "pthread_mutex_lock",
       "pthread_mutex_lock",
       "free",
-      "free",
-      "free",
-      "pthread_mutex_lock",
-      "free",
-      "pthread_mutex_lock",
-      "free",
-      "pthread_mutex_lock"
+      "free"
      ]
     },
     "noteSweep": {
      "applicable": true,
      "dialect": "midi",
-     "allocations": 5064,
-     "locks": 2080,
+     "allocations": 5619,
+     "locks": 2079,
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 9876,
-     "afterActivateKb": 9880,
-     "atRestKb": 10140,
+     "afterInstantiateKb": 9420,
+     "afterActivateKb": 9424,
+     "atRestKb": 9652,
      "secondInstanceKb": 2136,
      "unmeasuredReason": "voices-unknown",
      "unmeasuredDetail": "no count of notes to hold for the footprint"
-    }
+    },
+    "latencyMs": 0.020833
    }
   ]
  },
@@ -172,15 +173,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T13:55:43+00:00",
+ "measuredAt": "2026-11-23T22:21:21+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.unplugred.MPaint@unversioned-9036c91bd4dc.default.probe.json",
-  "sha256": "8c93cb3fb308a9b773bc35d4d6ef7f14e490d2135456acc45ac643654727a389",
-  "bytes": 10544,
+  "sha256": "eae81d17f5fe41b92992409283d47682dc7902a44ca8dea47a4844ce9e92ee0f",
+  "bytes": 10527,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -198,12 +201,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 10.28,
+   "loadavg1": 6.17,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T135543Z-1ba1-cdc2f4bb",
+  "id": "20261123T222121Z-2174-32a5b145",
   "steps": [
    {
     "step": "scan",
@@ -220,6 +223,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

@@ -53,8 +53,8 @@
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
       "allocations": 1533,
-      "syscalls": 0,
-      "locks": 1252
+      "syscalls": 2,
+      "locks": 1256
      }
     },
     {
@@ -63,8 +63,8 @@
      "code": "hosting.rt-safety.violations-under-notes",
      "params": {
       "allocations": 1546,
-      "syscalls": 0,
-      "locks": 137958
+      "syscalls": 2,
+      "locks": 137949
      }
     },
     {
@@ -73,7 +73,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -94,7 +94,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -102,7 +102,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -124,8 +124,8 @@
      "sweepApplicable": true,
      "blocks": 512,
      "allocations": 1533,
-     "locks": 1252,
-     "syscalls": 0,
+     "locks": 1256,
+     "syscalls": 2,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
@@ -151,17 +151,18 @@
      "applicable": true,
      "dialect": "midi",
      "allocations": 1546,
-     "locks": 137958,
-     "syscalls": 0
+     "locks": 137949,
+     "syscalls": 2
     },
     "memory": {
-     "afterInstantiateKb": 216312,
-     "afterActivateKb": 316992,
-     "atRestKb": 317300,
-     "secondInstanceKb": 278564,
+     "afterInstantiateKb": 216400,
+     "afterActivateKb": 317336,
+     "atRestKb": 317664,
+     "secondInstanceKb": 279260,
      "unmeasuredReason": "voices-unknown",
      "unmeasuredDetail": "no count of notes to hold for the footprint"
-    }
+    },
+    "latencyMs": 0.020833
    }
   ]
  },
@@ -172,15 +173,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T13:39:51+00:00",
+ "measuredAt": "2026-11-23T22:02:51+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.ArthurBenilov.Aeolus@unversioned-71c7dad3506e.default.probe.json",
-  "sha256": "e6547839323a3999f821efff6f32dfd5cc76e97b2bda354be0a9fce12974a4bb",
-  "bytes": 10677,
+  "sha256": "a4b12ac622174fe453b2e9353344814e25330fcee5ebf1eb87cc90f317b8933b",
+  "bytes": 10671,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -198,12 +201,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 11.77,
+   "loadavg1": 2.58,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T133951Z-5ad-d4dd1194",
+  "id": "20261123T220251Z-293-4bda3b1e",
   "steps": [
    {
     "step": "scan",
@@ -220,6 +223,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

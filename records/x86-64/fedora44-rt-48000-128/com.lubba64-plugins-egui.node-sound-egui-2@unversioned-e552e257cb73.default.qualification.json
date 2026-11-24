@@ -60,7 +60,7 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-under-notes",
      "params": {
-      "allocations": 31426,
+      "allocations": 31418,
       "syscalls": 0,
       "locks": 0
      }
@@ -71,7 +71,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -92,7 +92,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -100,7 +100,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -131,18 +131,19 @@
     "noteSweep": {
      "applicable": true,
      "dialect": "clap",
-     "allocations": 31426,
+     "allocations": 31418,
      "locks": 0,
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 7300,
-     "afterActivateKb": 7372,
-     "atRestKb": 7372,
+     "afterInstantiateKb": 8028,
+     "afterActivateKb": 8032,
+     "atRestKb": 8036,
      "secondInstanceKb": 360,
      "unmeasuredReason": "voices-unknown",
      "unmeasuredDetail": "no count of notes to hold for the footprint"
-    }
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -153,15 +154,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:24:14+00:00",
+ "measuredAt": "2026-11-23T22:50:18+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.lubba64-plugins-egui.node-sound-egui-2@unversioned-e552e257cb73.default.probe.json",
-  "sha256": "6b5989ca6a463eab55c0516611255587bf46cd5688d0cbc3ee6f08694f434db7",
-  "bytes": 10344,
+  "sha256": "ec8c9869a6b9fbea2eb607499e97594219b88739306f1c42e5f4ef1492c0e2b4",
+  "bytes": 10363,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -179,12 +182,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 10.98,
+   "loadavg1": 2.29,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T142414Z-7a39-91de667a",
+  "id": "20261123T225018Z-8355-e8022313",
   "steps": [
    {
     "step": "scan",
@@ -201,6 +204,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

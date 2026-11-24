@@ -52,9 +52,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
-      "allocations": 2278,
+      "allocations": 2224,
       "syscalls": 0,
-      "locks": 651
+      "locks": 641
      }
     },
     {
@@ -63,7 +63,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -84,7 +84,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -92,7 +92,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -109,10 +109,10 @@
      "measuredFrames": 1
     },
     "cost": {
-     "median": 440.359,
+     "median": 370.227,
      "percentile": {
       "p": 95,
-      "value": 738.23
+      "value": 609.218
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -122,15 +122,14 @@
      "swept": true,
      "sweepApplicable": true,
      "blocks": 512,
-     "allocations": 2278,
-     "locks": 651,
+     "allocations": 2224,
+     "locks": 641,
      "syscalls": 0,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
       "pthread_mutex_lock",
       "pthread_mutex_lock",
-      "pthread_mutex_lock",
       "malloc",
       "free",
       "pthread_mutex_lock",
@@ -139,10 +138,11 @@
       "pthread_mutex_lock",
       "pthread_mutex_lock",
       "free",
-      "pthread_mutex_lock",
       "malloc",
       "malloc",
       "free",
+      "free",
+      "malloc",
       "free"
      ]
     },
@@ -150,13 +150,14 @@
      "applicable": false
     },
     "memory": {
-     "afterInstantiateKb": 8944,
-     "afterActivateKb": 9944,
-     "atRestKb": 10544,
+     "afterInstantiateKb": 8408,
+     "afterActivateKb": 9600,
+     "atRestKb": 10328,
      "secondInstanceKb": 1384,
-     "firstInstanceKb": 10544,
+     "firstInstanceKb": 10328,
      "perInstanceKb": 1384
-    }
+    },
+    "latencyMs": 0.020833
    }
   ]
  },
@@ -167,15 +168,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:26:04+00:00",
+ "measuredAt": "2026-11-23T22:52:37+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.brummer10.ToneShiftEQ.Live@unversioned-b200bc4a3381.default.probe.json",
-  "sha256": "a637b8fa02d6950fe07aa3a2dbdf7dfe6c7e872de817984792761d844e3f9d00",
-  "bytes": 10541,
+  "sha256": "8412afd8e2f9127c2fd0a65d79336e3aa744152b3af34dd2c806087057570eeb",
+  "bytes": 10499,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -193,12 +196,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 7.22,
+   "loadavg1": 1.25,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T142604Z-7f2b-10ac4078",
+  "id": "20261123T225237Z-8910-4c35ec3d",
   "steps": [
    {
     "step": "scan",
@@ -215,6 +218,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

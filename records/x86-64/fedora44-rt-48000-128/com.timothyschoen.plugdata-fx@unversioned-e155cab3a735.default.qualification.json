@@ -52,9 +52,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
-      "allocations": 2005534,
-      "syscalls": 2,
-      "locks": 116011
+      "allocations": 1994957,
+      "syscalls": 1,
+      "locks": 116598
      }
     },
     {
@@ -62,9 +62,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-under-notes",
      "params": {
-      "allocations": 909919,
+      "allocations": 1062131,
       "syscalls": 0,
-      "locks": 91992
+      "locks": 102062
      }
     },
     {
@@ -73,7 +73,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -94,7 +94,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -102,7 +102,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -119,10 +119,10 @@
      "measuredFrames": 65
     },
     "cost": {
-     "median": 2676.27,
+     "median": 2006.93,
      "percentile": {
       "p": 95,
-      "value": 3235.3
+      "value": 2087.83
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -132,16 +132,17 @@
      "swept": true,
      "sweepApplicable": true,
      "blocks": 512,
-     "allocations": 2005534,
-     "locks": 116011,
-     "syscalls": 2,
+     "allocations": 1994957,
+     "locks": 116598,
+     "syscalls": 1,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
       "malloc",
-      "malloc",
-      "malloc",
       "free",
+      "free",
+      "pthread_mutex_lock",
+      "malloc",
       "free",
       "pthread_mutex_lock",
       "malloc",
@@ -149,28 +150,28 @@
       "free",
       "malloc",
       "malloc",
-      "malloc",
       "free",
       "free",
-      "malloc",
-      "malloc"
+      "free",
+      "free"
      ]
     },
     "noteSweep": {
      "applicable": true,
      "dialect": "midi",
-     "allocations": 909919,
-     "locks": 91992,
+     "allocations": 1062131,
+     "locks": 102062,
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 67304,
-     "afterActivateKb": 67860,
-     "atRestKb": 70256,
-     "secondInstanceKb": 10296,
-     "firstInstanceKb": 70256,
-     "perInstanceKb": 10296
-    }
+     "afterInstantiateKb": 114200,
+     "afterActivateKb": 114288,
+     "atRestKb": 116832,
+     "secondInstanceKb": 4048,
+     "firstInstanceKb": 116832,
+     "perInstanceKb": 4048
+    },
+    "latencyMs": 1.354167
    }
   ]
  },
@@ -181,15 +182,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:24:29+00:00",
+ "measuredAt": "2026-11-23T22:50:36+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.timothyschoen.plugdata-fx@unversioned-e155cab3a735.default.probe.json",
-  "sha256": "52a72efc4dea550b20645551bb68bb4bdb6edd582dfa7eefa41ef5d633f1e2fc",
-  "bytes": 10671,
+  "sha256": "c8285702ec4892ef04330f5d2cade2d88cf10d82f87efe54f8c5a30aad54e7d6",
+  "bytes": 10663,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -207,12 +210,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 9.73,
+   "loadavg1": 2.31,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T142429Z-7ac5-f3325c58",
+  "id": "20261123T225036Z-83e7-75605855",
   "steps": [
    {
     "step": "scan",
@@ -229,6 +232,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

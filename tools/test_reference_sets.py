@@ -23,14 +23,18 @@ spec = importlib.util.spec_from_file_location("sets", os.path.join(HERE, "sets.p
 sets = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sets)
 
-# the 22 runs of the fedora44 Job with real-time priority, one set per cell
+# the 22 runs of the fedora44 Job with real-time priority, one set per cell, and the two cells of the console's runs
+# of 2026-11-23 (#66), 96000/1024 and 192000/1024
 REFERENCE = sorted([f"fedora44-rt-{r}-{q}" for r in (44100, 48000, 88200, 96000) for q in (64, 128, 256, 512)]
-                   + [f"fedora44-rt-{r}-{q}" for r in (176400, 192000) for q in (128, 256, 512)])
+                   + [f"fedora44-rt-{r}-{q}" for r in (176400, 192000) for q in (128, 256, 512)]
+                   + ["fedora44-rt-96000-1024", "fedora44-rt-192000-1024"])
 # the non-real-time sets: the ten main held before the reference tier joined, and the run at 192000/128
 # (records/fedora44/20261109-c192000-128), which joins as a set of its own
 PROVISIONAL = sorted([f"fedora44-{r}-{q}" for r in (48000, 96000) for q in (64, 128, 256, 512)]
                      + [f"fedora44-192000-{q}" for q in (128, 256, 512)])
 RECORDS_PER_SET = 1109
+# the runs of 2026-11-23 (#66) carry the LV2 packages the console serves beside the worker image's set
+RECORDS_IN = {name: 1860 for name in ("fedora44-rt-48000-128", "fedora44-rt-96000-1024", "fedora44-rt-192000-1024")}
 
 
 def provenance(name):
@@ -40,7 +44,7 @@ def provenance(name):
 
 class ReferenceSets(unittest.TestCase):
     def test_the_sets(self):
-        """The x86-64 class holds the 22 reference sets and the 11 non-real-time sets, and nothing else."""
+        """The x86-64 class holds the 24 reference sets and the 11 non-real-time sets, and nothing else."""
         self.assertEqual(sorted(os.listdir(X86)), sorted(REFERENCE + PROVISIONAL))
 
     def test_tier_from_the_name(self):
@@ -58,7 +62,7 @@ class ReferenceSets(unittest.TestCase):
                     self.assertNotIn("-rt-", name)
 
     def test_each_set_whole(self):
-        """Each reference set: its own name and package in its provenance, its one cell, 1109 records each with its
+        """Each reference set: its own name and package in its provenance, its one cell, 1109 records each (1860 in the runs of #66) with its
         probe output, the provenance, and nothing else."""
         for name in REFERENCE:
             with self.subTest(set=name):
@@ -71,10 +75,10 @@ class ReferenceSets(unittest.TestCase):
                 files = os.listdir(os.path.join(X86, name))
                 recs = [f for f in files if f.endswith(".qualification.json")]
                 probes = [f for f in files if f.endswith(".probe.json")]
-                self.assertEqual(len(recs), RECORDS_PER_SET)
+                self.assertEqual(len(recs), RECORDS_IN.get(name, RECORDS_PER_SET))
                 self.assertEqual(sorted(f[: -len(".qualification.json")] for f in recs),
                                  sorted(f[: -len(".probe.json")] for f in probes))
-                self.assertEqual(len(files), 2 * RECORDS_PER_SET + 1)
+                self.assertEqual(len(files), 2 * RECORDS_IN.get(name, RECORDS_PER_SET) + 1)
 
     def test_the_non_real_time_run_at_192000_128(self):
         """The run without real-time priority at 192000/128 is a set of its own, tier provisional, 120 records with

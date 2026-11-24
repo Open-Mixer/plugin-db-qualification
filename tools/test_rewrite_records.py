@@ -219,8 +219,10 @@ class Corpus(unittest.TestCase):
                         bad.append(f"{c}/{s}/{f}")
         self.assertEqual(bad[:3], [], f"{len(bad)} records are not in the form")
         # the migration's sets (9262 CLAP, 3691 LV2), the 22 reference sets (19,228, 5170), fedora44-192000-128 (88, 32)
-        # and the Raspberry Pi re-measure (0, 4)
-        self.assertEqual((clap, lv2), (9262 + 19228 + 88, 3691 + 5170 + 32 + 4))
+        # and the Raspberry Pi re-measure (0, 4); the runs of 2026-11-23 with the LV2 packages the console serves
+        # (#66): fedora44-rt-48000-128 holds (874, 986) where it held (874, 235), and fedora44-rt-96000-1024 and
+        # fedora44-rt-192000-1024 are new, (874, 986) each
+        self.assertEqual((clap, lv2), (9262 + 19228 + 88 + 2 * 874, 3691 + 5170 + 32 + 4 + 986 - 235 + 2 * 986))
 
     def test_every_key_is_the_sha256_of_its_binary_entry_and_every_list_is_in_byte_order(self):
         for c, s in sets():

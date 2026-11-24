@@ -53,7 +53,7 @@
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
       "allocations": 1,
-      "syscalls": 1,
+      "syscalls": 0,
       "locks": 1
      }
     },
@@ -63,7 +63,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -84,7 +84,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -92,7 +92,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -109,10 +109,10 @@
      "measuredFrames": 0
     },
     "cost": {
-     "median": 547.629,
+     "median": 469.004,
      "percentile": {
       "p": 95,
-      "value": 1939.26
+      "value": 1659.67
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -124,26 +124,26 @@
      "blocks": 512,
      "allocations": 1,
      "locks": 1,
-     "syscalls": 1,
+     "syscalls": 0,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
       "malloc",
-      "pthread_mutex_lock",
-      "nanosleep"
+      "pthread_mutex_lock"
      ]
     },
     "noteSweep": {
      "applicable": false
     },
     "memory": {
-     "afterInstantiateKb": 20348,
-     "afterActivateKb": 23772,
-     "atRestKb": 25244,
+     "afterInstantiateKb": 20188,
+     "afterActivateKb": 23620,
+     "atRestKb": 24932,
      "secondInstanceKb": 4940,
-     "firstInstanceKb": 25244,
+     "firstInstanceKb": 24932,
      "perInstanceKb": 4940
-    }
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -154,15 +154,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:16:10+00:00",
+ "measuredAt": "2026-11-23T22:42:13+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "in.lsp-plug.mb_dyna_processor_lr@unversioned-823d2c8dab8c.default.probe.json",
-  "sha256": "dc48d5ffc23765b719a82f6da7b21652d343981f4948e597764cf39f01f51042",
-  "bytes": 10340,
+  "sha256": "2dc92671c0b968a32217f269bafd3b238eb93d44ce22ef44a3742497f1e57626",
+  "bytes": 10310,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -180,12 +182,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 8.93,
+   "loadavg1": 3.18,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T141610Z-4c7c-1f52a5c4",
+  "id": "20261123T224213Z-566b-2e78d5f8",
   "steps": [
    {
     "step": "scan",
@@ -202,6 +204,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

@@ -36,8 +36,9 @@ BuildRequires: sqlite-devel >= 3.37.0
 BuildRequires: libomx-domain-devel >= 3.20.0
 # tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
 BuildRequires: python3-jsonschema
-BuildRequires: plugin-qualify-contract >= 0.20.7
-BuildRequires: plugin-hostd-contract >= 0.20.8
+# qualification and machine are plugin-hostd's domains, probe plugin-hostd-protocol's
+BuildRequires: plugin-hostd-contract >= 0.21.0
+BuildRequires: plugin-hostd-protocol-contract >= 0.8.0
 BuildRequires: plugin-db-contract >= 0.4.7
 BuildRequires: omx-clap-contract >= 0.34.0
 

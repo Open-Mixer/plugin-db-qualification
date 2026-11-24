@@ -55,9 +55,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
-      "allocations": 1984831,
+      "allocations": 1976142,
       "syscalls": 2,
-      "locks": 115681
+      "locks": 115001
      }
     },
     {
@@ -65,9 +65,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-under-notes",
      "params": {
-      "allocations": 955006,
+      "allocations": 1053407,
       "syscalls": 0,
-      "locks": 95024
+      "locks": 101717
      }
     }
    ]
@@ -119,45 +119,46 @@
      "swept": true,
      "sweepApplicable": true,
      "blocks": 512,
-     "allocations": 1984831,
-     "locks": 115681,
+     "allocations": 1976142,
+     "locks": 115001,
      "syscalls": 2,
      "threadViolations": 0,
      "processErrors": 0,
      "events": [
+      "free",
+      "free",
+      "pthread_mutex_lock",
+      "malloc",
+      "free",
+      "free",
+      "pthread_mutex_lock",
+      "free",
+      "free",
+      "pthread_mutex_lock",
+      "malloc",
+      "free",
       "pthread_mutex_lock",
       "malloc",
       "malloc",
-      "malloc",
-      "malloc",
-      "free",
-      "free",
-      "free",
-      "free",
-      "free",
-      "free",
-      "free",
-      "malloc",
-      "malloc",
-      "malloc",
-      "free"
+      "malloc"
      ]
     },
     "noteSweep": {
      "applicable": true,
      "dialect": "midi",
-     "allocations": 955006,
-     "locks": 95024,
+     "allocations": 1053407,
+     "locks": 101717,
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 70992,
-     "afterActivateKb": 71600,
-     "atRestKb": 74252,
-     "secondInstanceKb": 10712,
+     "afterInstantiateKb": 113396,
+     "afterActivateKb": 113496,
+     "atRestKb": 116536,
+     "secondInstanceKb": 3232,
      "unmeasuredReason": "voices-unknown",
      "unmeasuredDetail": "no count of notes to hold for the footprint"
-    }
+    },
+    "latencyMs": 1.354167
    }
   ]
  },
@@ -168,15 +169,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:24:38+00:00",
+ "measuredAt": "2026-11-23T22:50:44+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.timothyschoen.plugdata@unversioned-f857009b8238.custom.probe.json",
-  "sha256": "85670799705ac5703ae0d3c28d0e80b6b182a2b63629c5394d641f00aadd4f9d",
-  "bytes": 10655,
+  "sha256": "c380d7625407aac7e41c3177491d902c943e0fedc8779827f742cf12a0dd62e8",
+  "bytes": 10686,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -194,12 +197,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 9.91,
+   "loadavg1": 2.21,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T142438Z-7b37-84276df1",
+  "id": "20261123T225044Z-8462-b80ddc7b",
   "steps": [
    {
     "step": "scan",
@@ -219,17 +222,15 @@
    },
    {
     "step": "isolated",
-    "result": "isolated",
+    "result": "refused",
+    "code": "isolated.silent-output",
+    "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
     "figures": {
      "latencyFrames": 128,
-     "cpuPercent": 5.666666666666667,
-     "xruns": 5,
+     "cpuPercent": 3.6666666666666665,
+     "xruns": 0,
      "midiInputsLinked": 1
     }
-   },
-   {
-    "step": "pool",
-    "result": "not-asked"
    }
   ]
  }

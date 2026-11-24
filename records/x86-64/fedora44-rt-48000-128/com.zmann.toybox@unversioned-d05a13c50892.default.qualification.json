@@ -71,7 +71,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -92,7 +92,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -100,7 +100,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -136,13 +136,14 @@
      "syscalls": 0
     },
     "memory": {
-     "afterInstantiateKb": 2840,
-     "afterActivateKb": 2912,
-     "atRestKb": 2976,
+     "afterInstantiateKb": 2608,
+     "afterActivateKb": 2616,
+     "atRestKb": 2684,
      "secondInstanceKb": 160,
      "unmeasuredReason": "voices-unknown",
      "unmeasuredDetail": "no count of notes to hold for the footprint"
-    }
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -153,15 +154,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:01:30+00:00",
+ "measuredAt": "2026-11-23T22:27:56+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.zmann.toybox@unversioned-d05a13c50892.default.probe.json",
-  "sha256": "289831d0534dc872a0942666358998232bef291b7f57b8d1d1b3f473b21a79b8",
-  "bytes": 10263,
+  "sha256": "16c3e052a900596447ce847a5320781e5be765e750b07ff632d1737a3eed12a5",
+  "bytes": 10244,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -179,12 +182,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 10.26,
+   "loadavg1": 6.22,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T140130Z-285a-4d9c2fa0",
+  "id": "20261123T222756Z-3029-c4d40607",
   "steps": [
    {
     "step": "scan",
@@ -201,6 +204,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

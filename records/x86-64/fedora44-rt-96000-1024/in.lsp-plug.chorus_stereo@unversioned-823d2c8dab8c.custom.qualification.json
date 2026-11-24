@@ -1,0 +1,202 @@
+{
+ "schema": "plugin-qualify.qualification-record/1",
+ "plugin": {
+  "format": "clap",
+  "id": "in.lsp-plug.chorus_stereo"
+ },
+ "binary": {
+  "path": "lsp-plugins.clap",
+  "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+  "files": [
+   {
+    "path": "lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+   }
+  ],
+  "layout": {
+   "scheme": "omx-layout/1",
+   "sha256": "3296811a3d7ba16fd83ac397b28647cd9e4e8c6bdac37bc29cf4d6ad6364b9f2"
+  }
+ },
+ "hostExtensions": [
+  "clap.log",
+  "clap.thread-check",
+  "clap.latency",
+  "clap.params",
+  "clap.audio-ports",
+  "clap.state",
+  "clap.note-ports",
+  "clap.note-name",
+  "clap.voice-info",
+  "clap.event-registry",
+  "clap.timer-support",
+  "clap.posix-fd-support",
+  "clap.thread-pool",
+  "clap.tail",
+  "clap.surround/4",
+  "clap.ambisonic/3",
+  "clap.audio-ports-config",
+  "clap.preset-load/2",
+  "clap.track-info/1",
+  "clap.remote-controls/2"
+ ],
+ "verdicts": [
+  {
+   "host": "omx-clap-host",
+   "measured": true,
+   "rating": "suitable",
+   "qualified": true,
+   "hosting": "isolated",
+   "arm": "declaration",
+   "reasons": [
+    {
+     "dimension": "rtSafety",
+     "rating": "suitable",
+     "code": "hosting.rt-safety.clean-under-sweep",
+     "params": {
+      "blocks": 512
+     }
+    }
+   ]
+  }
+ ],
+ "tiers": {
+  "isolated": {
+   "host": "omx-clap-host",
+   "measured": true,
+   "qualified": true,
+   "rating": "suitable"
+  },
+  "offeredOn": [
+   "isolated"
+  ]
+ },
+ "cost": [
+  {
+   "host": "omx-clap-host",
+   "rate": 48000,
+   "quantum": 128,
+   "reasons": [
+    {
+     "dimension": "cost",
+     "rating": "unknown",
+     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+     "params": {
+      "rate": 48000,
+      "quantum": 128
+     }
+    }
+   ]
+  }
+ ],
+ "measurements": {
+  "grid": [
+   {
+    "rate": 96000,
+    "quantum": 1024,
+    "outcome": "probe.ok",
+    "latency": {
+     "declaredFrames": 0,
+     "measuredFrames": 0
+    },
+    "cost": {
+     "median": 582.665,
+     "percentile": {
+      "p": 95,
+      "value": 1908.85
+     },
+     "blocks": 512,
+     "warmupBlocks": 64
+    },
+    "rtSafety": {
+     "interposer": true,
+     "swept": true,
+     "sweepApplicable": true,
+     "blocks": 512,
+     "allocations": 0,
+     "locks": 0,
+     "syscalls": 0,
+     "threadViolations": 0,
+     "processErrors": 0,
+     "events": []
+    },
+    "noteSweep": {
+     "applicable": false
+    },
+    "memory": {
+     "afterInstantiateKb": 18228,
+     "afterActivateKb": 18824,
+     "atRestKb": 19224,
+     "secondInstanceKb": 804,
+     "firstInstanceKb": 19224,
+     "perInstanceKb": 804
+    },
+    "latencyMs": 0
+   }
+  ]
+ },
+ "notMeasured": [
+  {
+   "dimension": "stability",
+   "code": "hosting.stability.unsoaked"
+  }
+ ],
+ "tool": {
+  "runner": "plugin-hostd-probe 0.20.7",
+  "child": "clap-qualify",
+  "interposer": "rt_interpose.so"
+ },
+ "measuredAt": "2026-11-23T22:47:52+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
+ "probe": {
+  "file": "in.lsp-plug.chorus_stereo@unversioned-823d2c8dab8c.custom.probe.json",
+  "sha256": "4a12a26e86f4e987f82681c72c2bca1bcc30869f66fd09b5ade62c84722ba4e9",
+  "bytes": 10381,
+  "protocol": {
+   "name": "plugin-hostd.probe-protocol",
+   "version": 1
+  },
+  "reason": "on-request",
+  "outcome": "probe.ok",
+  "complete": true,
+  "machineClass": {
+   "arch": "x86_64",
+   "family": "amd",
+   "coreBand": "9-16",
+   "clockBand": "4.5GHz+",
+   "preemptRt": false,
+   "cstatesLimited": false
+  },
+  "meetsProtocol": false,
+  "load": {
+   "loadavg1": 3.88,
+   "cores": 3
+  }
+ },
+ "run": {
+  "id": "20261123T224752Z-440a-3988bf39",
+  "steps": [
+   {
+    "step": "scan",
+    "result": "ok"
+   },
+   {
+    "step": "describe",
+    "result": "ok"
+   },
+   {
+    "step": "probe",
+    "result": "probe.ok"
+   },
+   {
+    "step": "rt-safety",
+    "result": "safe"
+   },
+   {
+    "step": "pool",
+    "result": "not-asked"
+   }
+  ]
+ }
+}

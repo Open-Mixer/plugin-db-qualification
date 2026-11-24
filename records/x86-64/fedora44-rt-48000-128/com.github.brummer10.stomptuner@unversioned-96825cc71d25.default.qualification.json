@@ -52,9 +52,9 @@
      "rating": "conditional",
      "code": "hosting.rt-safety.violations-in-run",
      "params": {
-      "allocations": 15,
+      "allocations": 14,
       "syscalls": 0,
-      "locks": 519
+      "locks": 526
      }
     },
     {
@@ -63,7 +63,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -84,7 +84,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -92,7 +92,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -109,10 +109,10 @@
      "measuredFrames": 0
     },
     "cost": {
-     "median": 16.3594,
+     "median": 14.0156,
      "percentile": {
       "p": 95,
-      "value": 26.4926
+      "value": 23.0078
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -122,8 +122,8 @@
      "swept": true,
      "sweepApplicable": true,
      "blocks": 512,
-     "allocations": 15,
-     "locks": 519,
+     "allocations": 14,
+     "locks": 526,
      "syscalls": 0,
      "threadViolations": 0,
      "processErrors": 0,
@@ -131,7 +131,7 @@
       "pthread_mutex_trylock",
       "pthread_mutex_trylock",
       "pthread_mutex_trylock",
-      "pthread_mutex_lock",
+      "pthread_mutex_trylock",
       "pthread_mutex_trylock",
       "pthread_mutex_trylock",
       "pthread_mutex_trylock",
@@ -150,13 +150,14 @@
      "applicable": false
     },
     "memory": {
-     "afterInstantiateKb": 10480,
-     "afterActivateKb": 10680,
-     "atRestKb": 10952,
+     "afterInstantiateKb": 10632,
+     "afterActivateKb": 10836,
+     "atRestKb": 11172,
      "secondInstanceKb": 88,
-     "firstInstanceKb": 10952,
+     "firstInstanceKb": 11172,
      "perInstanceKb": 88
-    }
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -167,15 +168,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:25:43+00:00",
+ "measuredAt": "2026-11-23T22:52:19+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "com.github.brummer10.stomptuner@unversioned-96825cc71d25.default.probe.json",
-  "sha256": "12d6f76385cc9a938f32b7aeb1356bbacf42ce5f261f262d2cae1e38a070e1e1",
-  "bytes": 10662,
+  "sha256": "b4ddb0a5a88e7c78a10bbe6edc97d2717674d7dfd2c6cfed40f983149591b4a1",
+  "bytes": 10637,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -193,12 +196,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 8.18,
+   "loadavg1": 1.21,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T142543Z-7e50-99611b6f",
+  "id": "20261123T225219Z-8811-6c5bbfb7",
   "steps": [
    {
     "step": "scan",
@@ -215,6 +218,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

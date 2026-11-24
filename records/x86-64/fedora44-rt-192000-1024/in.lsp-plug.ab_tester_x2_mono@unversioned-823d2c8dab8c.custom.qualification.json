@@ -1,0 +1,218 @@
+{
+ "schema": "plugin-qualify.qualification-record/1",
+ "plugin": {
+  "format": "clap",
+  "id": "in.lsp-plug.ab_tester_x2_mono"
+ },
+ "binary": {
+  "path": "lsp-plugins.clap",
+  "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+  "files": [
+   {
+    "path": "lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+   }
+  ],
+  "layout": {
+   "scheme": "omx-layout/1",
+   "sha256": "c97d6e0b02508b06659c21cbac103436e68bac029e5a054d9c1afd22b077ee78"
+  }
+ },
+ "hostExtensions": [
+  "clap.log",
+  "clap.thread-check",
+  "clap.latency",
+  "clap.params",
+  "clap.audio-ports",
+  "clap.state",
+  "clap.note-ports",
+  "clap.note-name",
+  "clap.voice-info",
+  "clap.event-registry",
+  "clap.timer-support",
+  "clap.posix-fd-support",
+  "clap.thread-pool",
+  "clap.tail",
+  "clap.surround/4",
+  "clap.ambisonic/3",
+  "clap.audio-ports-config",
+  "clap.preset-load/2",
+  "clap.track-info/1",
+  "clap.remote-controls/2"
+ ],
+ "verdicts": [
+  {
+   "host": "omx-clap-host",
+   "measured": true,
+   "rating": "conditional",
+   "qualified": false,
+   "hosting": "isolated",
+   "arm": "declaration",
+   "deciding": "hosting.rt-safety.violations-in-run",
+   "reasons": [
+    {
+     "dimension": "rtSafety",
+     "rating": "conditional",
+     "code": "hosting.rt-safety.violations-in-run",
+     "params": {
+      "allocations": 2,
+      "syscalls": 0,
+      "locks": 0
+     }
+    }
+   ]
+  }
+ ],
+ "tiers": {
+  "isolated": {
+   "host": "omx-clap-host",
+   "measured": true,
+   "qualified": false,
+   "rating": "conditional",
+   "deciding": "hosting.rt-safety.violations-in-run",
+   "runsAlone": true
+  },
+  "offeredOn": [
+   "isolated"
+  ]
+ },
+ "cost": [
+  {
+   "host": "omx-clap-host",
+   "rate": 48000,
+   "quantum": 128,
+   "reasons": [
+    {
+     "dimension": "cost",
+     "rating": "unknown",
+     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+     "params": {
+      "rate": 48000,
+      "quantum": 128
+     }
+    }
+   ]
+  }
+ ],
+ "measurements": {
+  "grid": [
+   {
+    "rate": 192000,
+    "quantum": 1024,
+    "outcome": "probe.ok",
+    "latency": {
+     "declaredFrames": 0,
+     "measuredFrames": 1
+    },
+    "cost": {
+     "median": 0.801758,
+     "percentile": {
+      "p": 95,
+      "value": 0.890625
+     },
+     "blocks": 512,
+     "warmupBlocks": 64
+    },
+    "rtSafety": {
+     "interposer": true,
+     "swept": true,
+     "sweepApplicable": true,
+     "blocks": 512,
+     "allocations": 2,
+     "locks": 0,
+     "syscalls": 0,
+     "threadViolations": 0,
+     "processErrors": 0,
+     "events": [
+      "free",
+      "malloc"
+     ]
+    },
+    "noteSweep": {
+     "applicable": false
+    },
+    "memory": {
+     "afterInstantiateKb": 17984,
+     "afterActivateKb": 18468,
+     "atRestKb": 19432,
+     "secondInstanceKb": 40,
+     "firstInstanceKb": 19432,
+     "perInstanceKb": 40
+    },
+    "latencyMs": 0.005208
+   }
+  ]
+ },
+ "notMeasured": [
+  {
+   "dimension": "stability",
+   "code": "hosting.stability.unsoaked"
+  }
+ ],
+ "tool": {
+  "runner": "plugin-hostd-probe 0.20.7",
+  "child": "clap-qualify",
+  "interposer": "rt_interpose.so"
+ },
+ "measuredAt": "2026-11-23T22:48:51+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
+ "probe": {
+  "file": "in.lsp-plug.ab_tester_x2_mono@unversioned-823d2c8dab8c.custom.probe.json",
+  "sha256": "45fe8fd2f3564e8418a5ed91fd1b0f30002d0e5f713043e6915ccb574dd51144",
+  "bytes": 10372,
+  "protocol": {
+   "name": "plugin-hostd.probe-protocol",
+   "version": 1
+  },
+  "reason": "on-request",
+  "outcome": "probe.ok",
+  "complete": true,
+  "machineClass": {
+   "arch": "x86_64",
+   "family": "amd",
+   "coreBand": "9-16",
+   "clockBand": "4.5GHz+",
+   "preemptRt": false,
+   "cstatesLimited": false
+  },
+  "meetsProtocol": false,
+  "load": {
+   "loadavg1": 4.64,
+   "cores": 3
+  }
+ },
+ "run": {
+  "id": "20261123T224851Z-4261-664774a5",
+  "steps": [
+   {
+    "step": "scan",
+    "result": "ok"
+   },
+   {
+    "step": "describe",
+    "result": "ok"
+   },
+   {
+    "step": "probe",
+    "result": "probe.ok"
+   },
+   {
+    "step": "rt-safety",
+    "result": "unsafe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.silent-output",
+    "detail": "no note input to link: a sine played at its audio inputs",
+    "figures": {
+     "latencyFrames": 0,
+     "cpuPercent": 0,
+     "xruns": 0,
+     "midiInputsLinked": 0
+    }
+   }
+  ]
+ }
+}

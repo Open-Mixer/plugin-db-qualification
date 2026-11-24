@@ -1,0 +1,202 @@
+{
+ "schema": "plugin-qualify.qualification-record/1",
+ "plugin": {
+  "format": "clap",
+  "id": "com.yimrakhee.ml7"
+ },
+ "binary": {
+  "path": "ml7.clap",
+  "sha256": "8666d7105023b78b7c1105e41b0d1fc45ed415159c63a975dd076caa0e83d5df",
+  "files": [
+   {
+    "path": "ml7.clap",
+    "sha256": "8666d7105023b78b7c1105e41b0d1fc45ed415159c63a975dd076caa0e83d5df"
+   }
+  ],
+  "layout": {
+   "scheme": "omx-layout/1",
+   "sha256": "a6489904311dc132622deeed822a635faf91f9e5e67f22de7910fc67fe4a7f4a"
+  }
+ },
+ "hostExtensions": [
+  "clap.log",
+  "clap.thread-check",
+  "clap.latency",
+  "clap.params",
+  "clap.audio-ports",
+  "clap.state",
+  "clap.note-ports",
+  "clap.note-name",
+  "clap.voice-info",
+  "clap.event-registry",
+  "clap.timer-support",
+  "clap.posix-fd-support",
+  "clap.thread-pool",
+  "clap.tail",
+  "clap.surround/4",
+  "clap.ambisonic/3",
+  "clap.audio-ports-config",
+  "clap.preset-load/2",
+  "clap.track-info/1",
+  "clap.remote-controls/2"
+ ],
+ "verdicts": [
+  {
+   "host": "omx-clap-host",
+   "measured": true,
+   "rating": "suitable",
+   "qualified": true,
+   "hosting": "isolated",
+   "arm": "declaration",
+   "reasons": [
+    {
+     "dimension": "rtSafety",
+     "rating": "suitable",
+     "code": "hosting.rt-safety.clean-under-sweep",
+     "params": {
+      "blocks": 512
+     }
+    }
+   ]
+  }
+ ],
+ "tiers": {
+  "isolated": {
+   "host": "omx-clap-host",
+   "measured": true,
+   "qualified": true,
+   "rating": "suitable"
+  },
+  "offeredOn": [
+   "isolated"
+  ]
+ },
+ "cost": [
+  {
+   "host": "omx-clap-host",
+   "rate": 48000,
+   "quantum": 128,
+   "reasons": [
+    {
+     "dimension": "cost",
+     "rating": "unknown",
+     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+     "params": {
+      "rate": 48000,
+      "quantum": 128
+     }
+    }
+   ]
+  }
+ ],
+ "measurements": {
+  "grid": [
+   {
+    "rate": 96000,
+    "quantum": 1024,
+    "outcome": "probe.ok",
+    "latency": {
+     "declaredFrames": 0,
+     "measuredFrames": 188
+    },
+    "cost": {
+     "median": 851.181,
+     "percentile": {
+      "p": 95,
+      "value": 1728.13
+     },
+     "blocks": 512,
+     "warmupBlocks": 64
+    },
+    "rtSafety": {
+     "interposer": true,
+     "swept": true,
+     "sweepApplicable": true,
+     "blocks": 512,
+     "allocations": 0,
+     "locks": 0,
+     "syscalls": 0,
+     "threadViolations": 0,
+     "processErrors": 0,
+     "events": []
+    },
+    "noteSweep": {
+     "applicable": false
+    },
+    "memory": {
+     "afterInstantiateKb": 13176,
+     "afterActivateKb": 17360,
+     "atRestKb": 17808,
+     "secondInstanceKb": 2064,
+     "firstInstanceKb": 17808,
+     "perInstanceKb": 2064
+    },
+    "latencyMs": 1.958333
+   }
+  ]
+ },
+ "notMeasured": [
+  {
+   "dimension": "stability",
+   "code": "hosting.stability.unsoaked"
+  }
+ ],
+ "tool": {
+  "runner": "plugin-hostd-probe 0.20.7",
+  "child": "clap-qualify",
+  "interposer": "rt_interpose.so"
+ },
+ "measuredAt": "2026-11-23T23:03:03+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
+ "probe": {
+  "file": "com.yimrakhee.ml7@unversioned-8666d7105023.custom.probe.json",
+  "sha256": "00b124b4a2912bf95e08c5ad2a745bbf620bbc5da4646b8ab72a97913b8c2f8e",
+  "bytes": 10375,
+  "protocol": {
+   "name": "plugin-hostd.probe-protocol",
+   "version": 1
+  },
+  "reason": "on-request",
+  "outcome": "probe.ok",
+  "complete": true,
+  "machineClass": {
+   "arch": "x86_64",
+   "family": "amd",
+   "coreBand": "9-16",
+   "clockBand": "4.5GHz+",
+   "preemptRt": false,
+   "cstatesLimited": false
+  },
+  "meetsProtocol": false,
+  "load": {
+   "loadavg1": 1.47,
+   "cores": 3
+  }
+ },
+ "run": {
+  "id": "20261123T230303Z-92ba-2c4128cc",
+  "steps": [
+   {
+    "step": "scan",
+    "result": "ok"
+   },
+   {
+    "step": "describe",
+    "result": "ok"
+   },
+   {
+    "step": "probe",
+    "result": "probe.ok"
+   },
+   {
+    "step": "rt-safety",
+    "result": "safe"
+   },
+   {
+    "step": "pool",
+    "result": "not-asked"
+   }
+  ]
+ }
+}

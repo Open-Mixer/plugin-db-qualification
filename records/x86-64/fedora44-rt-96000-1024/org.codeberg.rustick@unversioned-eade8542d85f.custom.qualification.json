@@ -1,0 +1,206 @@
+{
+ "schema": "plugin-qualify.qualification-record/1",
+ "plugin": {
+  "format": "clap",
+  "id": "org.codeberg.rustick"
+ },
+ "binary": {
+  "path": "rustick.clap",
+  "sha256": "eade8542d85fa518c712ae266d963a02754217f8e6bc1f0c4b22f213990eb8a4",
+  "files": [
+   {
+    "path": "rustick.clap",
+    "sha256": "eade8542d85fa518c712ae266d963a02754217f8e6bc1f0c4b22f213990eb8a4"
+   }
+  ],
+  "layout": {
+   "scheme": "omx-layout/1",
+   "sha256": "8ae17de5dd6b41a275b9e58b7d8b70e658101f8a56e6d80fe9dce1a234b9157b"
+  }
+ },
+ "hostExtensions": [
+  "clap.log",
+  "clap.thread-check",
+  "clap.latency",
+  "clap.params",
+  "clap.audio-ports",
+  "clap.state",
+  "clap.note-ports",
+  "clap.note-name",
+  "clap.voice-info",
+  "clap.event-registry",
+  "clap.timer-support",
+  "clap.posix-fd-support",
+  "clap.thread-pool",
+  "clap.tail",
+  "clap.surround/4",
+  "clap.ambisonic/3",
+  "clap.audio-ports-config",
+  "clap.preset-load/2",
+  "clap.track-info/1",
+  "clap.remote-controls/2"
+ ],
+ "verdicts": [
+  {
+   "host": "omx-clap-host",
+   "measured": true,
+   "rating": "suitable",
+   "qualified": true,
+   "hosting": "isolated",
+   "arm": "declaration",
+   "reasons": [
+    {
+     "dimension": "rtSafety",
+     "rating": "suitable",
+     "code": "hosting.rt-safety.clean-under-sweep",
+     "params": {
+      "blocks": 512
+     }
+    },
+    {
+     "dimension": "rtSafety",
+     "rating": "suitable",
+     "code": "hosting.rt-safety.clean-under-notes",
+     "params": {
+      "blocks": 512,
+      "events": 0
+     }
+    }
+   ]
+  }
+ ],
+ "tiers": {
+  "isolated": {
+   "host": "omx-clap-host",
+   "measured": true,
+   "qualified": true,
+   "rating": "suitable"
+  },
+  "offeredOn": [
+   "isolated"
+  ]
+ },
+ "cost": [
+  {
+   "host": "omx-clap-host",
+   "rate": 48000,
+   "quantum": 128,
+   "reasons": [
+    {
+     "dimension": "cost",
+     "rating": "unknown",
+     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+     "params": {
+      "rate": 48000,
+      "quantum": 128
+     }
+    }
+   ]
+  }
+ ],
+ "measurements": {
+  "grid": [
+   {
+    "rate": 96000,
+    "quantum": 1024,
+    "outcome": "probe.ok",
+    "latency": {
+     "declaredFrames": 0,
+     "measuredFrames": 1
+    },
+    "rtSafety": {
+     "interposer": true,
+     "swept": true,
+     "sweepApplicable": true,
+     "blocks": 512,
+     "allocations": 0,
+     "locks": 0,
+     "syscalls": 0,
+     "threadViolations": 0,
+     "processErrors": 0,
+     "events": []
+    },
+    "noteSweep": {
+     "applicable": true,
+     "dialect": "clap",
+     "allocations": 0,
+     "locks": 0,
+     "syscalls": 0
+    },
+    "memory": {
+     "afterInstantiateKb": 53852,
+     "afterActivateKb": 54496,
+     "atRestKb": 54524,
+     "secondInstanceKb": 6784,
+     "unmeasuredReason": "voices-unknown",
+     "unmeasuredDetail": "no count of notes to hold for the footprint"
+    },
+    "latencyMs": 0.010417
+   }
+  ]
+ },
+ "notMeasured": [
+  {
+   "dimension": "stability",
+   "code": "hosting.stability.unsoaked"
+  }
+ ],
+ "tool": {
+  "runner": "plugin-hostd-probe 0.20.7",
+  "child": "clap-qualify",
+  "interposer": "rt_interpose.so"
+ },
+ "measuredAt": "2026-11-23T23:04:44+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
+ "probe": {
+  "file": "org.codeberg.rustick@unversioned-eade8542d85f.custom.probe.json",
+  "sha256": "e19c21b2d5937d80bd2bde20aee92d9dd953afd28920a8d58bf097bc441a9ff5",
+  "bytes": 10421,
+  "protocol": {
+   "name": "plugin-hostd.probe-protocol",
+   "version": 1
+  },
+  "reason": "on-request",
+  "outcome": "probe.ok",
+  "complete": true,
+  "machineClass": {
+   "arch": "x86_64",
+   "family": "amd",
+   "coreBand": "9-16",
+   "clockBand": "4.5GHz+",
+   "preemptRt": false,
+   "cstatesLimited": false
+  },
+  "meetsProtocol": false,
+  "load": {
+   "loadavg1": 2.64,
+   "cores": 3
+  }
+ },
+ "run": {
+  "id": "20261123T230444Z-95de-5d43ec4a",
+  "steps": [
+   {
+    "step": "scan",
+    "result": "ok"
+   },
+   {
+    "step": "describe",
+    "result": "ok"
+   },
+   {
+    "step": "probe",
+    "result": "probe.ok"
+   },
+   {
+    "step": "rt-safety",
+    "result": "safe"
+   },
+   {
+    "step": "pool",
+    "result": "not-asked"
+   }
+  ]
+ }
+}

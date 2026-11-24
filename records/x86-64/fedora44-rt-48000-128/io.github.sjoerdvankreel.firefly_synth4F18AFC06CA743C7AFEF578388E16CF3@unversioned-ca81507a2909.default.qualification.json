@@ -46,10 +46,12 @@
    "reasons": [
     {
      "dimension": "rtSafety",
-     "rating": "suitable",
-     "code": "hosting.rt-safety.clean-under-sweep",
+     "rating": "conditional",
+     "code": "hosting.rt-safety.violations-in-run",
      "params": {
-      "blocks": 512
+      "allocations": 1,
+      "syscalls": 1,
+      "locks": 5
      }
     },
     {
@@ -58,7 +60,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -79,7 +81,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -87,7 +89,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -104,10 +106,10 @@
      "measuredFrames": 0
     },
     "cost": {
-     "median": 1634.62,
+     "median": 1309.99,
      "percentile": {
       "p": 95,
-      "value": 2005.68
+      "value": 1565.96
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -117,24 +119,33 @@
      "swept": true,
      "sweepApplicable": true,
      "blocks": 512,
-     "allocations": 0,
-     "locks": 0,
-     "syscalls": 0,
+     "allocations": 1,
+     "locks": 5,
+     "syscalls": 1,
      "threadViolations": 0,
      "processErrors": 0,
-     "events": []
+     "events": [
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "realloc",
+      "write",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock"
+     ]
     },
     "noteSweep": {
      "applicable": false
     },
     "memory": {
-     "afterInstantiateKb": 25736,
-     "afterActivateKb": 108020,
-     "atRestKb": 108120,
-     "secondInstanceKb": 93732,
-     "firstInstanceKb": 108120,
-     "perInstanceKb": 93732
-    }
+     "afterInstantiateKb": 26020,
+     "afterActivateKb": 108152,
+     "atRestKb": 108316,
+     "secondInstanceKb": 93736,
+     "firstInstanceKb": 108316,
+     "perInstanceKb": 93736
+    },
+    "latencyMs": 0
    }
   ]
  },
@@ -145,15 +156,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:10:09+00:00",
+ "measuredAt": "2026-11-23T22:36:54+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "io.github.sjoerdvankreel.firefly_synth4F18AFC06CA743C7AFEF578388E16CF3@unversioned-ca81507a2909.default.probe.json",
-  "sha256": "b8812b83e72da01d62a926f0ec39ce88f2f4cad57cabec5e775e8fcc826f9168",
-  "bytes": 10385,
+  "sha256": "c1d8c7e840a3b99b420c439af331c5c771b929360b32e07d3c041a8a4b36d727",
+  "bytes": 10486,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -171,12 +184,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 9.35,
+   "loadavg1": 3.06,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T141009Z-3473-d37a063c",
+  "id": "20261123T223654Z-3f5f-24671af8",
   "steps": [
    {
     "step": "scan",
@@ -198,7 +211,7 @@
     "step": "isolated",
     "result": "refused",
     "code": "isolated.not-added",
-    "detail": "add answered -509"
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

@@ -4,16 +4,17 @@
 #
 # Package the cells a fedora44 Job delivered into this tree, one set per cell, and print their outcome counts.
 #
-#   tools/fedora44/package-run.sh <RUN> <version>
+#   tools/fedora44/package-run.sh <RUN> <version> [<set>]
 #
 # Reads branch records/fedora44/<RUN> from origin (the Job's own delivery: <RUN>/b<rate>-<quantum>/qualification),
 # refuses a run whose Job is still writing it (a cell with no rest-stage record count in <RUN>/meta/job.log.tail), and
-# runs tools/build-package.sh --from-run on it with --set fedora44, so each cell becomes
-# records/x86-64/fedora44-<rate>-<quantum>. The provenance is tools/fedora44/provenance-template.json (what the Job's
+# runs tools/build-package.sh --from-run on it with --set <set> (default fedora44-rt: the Job runs in omx-qualify-rt and
+# refuses a base whose jackd is not SCHED_FIFO, so its sets are the reference tier), so each cell becomes
+# records/x86-64/<set>-<rate>-<quantum>. The provenance is tools/fedora44/provenance-template.json (what the Job's
 # manifest fixes) with what the run itself recorded in <RUN>/meta: the machine, the kernel, every package and the
 # plugin set, the date and the branch's revision. Review git diff, then commit.
 set -euo pipefail
-run=${1:?RUN}; version=${2:?version}
+run=${1:?RUN}; version=${2:?version}; set_=${3:-fedora44-rt}
 root=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -30,8 +31,8 @@ measured=$(sed -n 's/^start \([0-9-]*\)T.*/\1/p' "$work/$run/meta/job.log.tail" 
 python3 -I "$root/tools/fedora44/provenance.py" "$root/tools/fedora44/provenance-template.json" "$work/$run/meta" \
     "$work/provenance.json" "$run" "$sha" "$measured"
 "$root/tools/build-package.sh" --from-run "$work/$run" --provenance "$work/provenance.json" --version "$version" \
-    --host-class x86-64 --set fedora44
+    --host-class x86-64 --set "$set_"
 for d in "$work/$run"/b*-*/; do
     cell=$(basename "$d"); cell=${cell#b}
-    python3 "$root/tools/outcomes.py" "$root/records/x86-64/fedora44-$cell"
+    python3 "$root/tools/outcomes.py" "$root/records/x86-64/$set_-$cell"
 done

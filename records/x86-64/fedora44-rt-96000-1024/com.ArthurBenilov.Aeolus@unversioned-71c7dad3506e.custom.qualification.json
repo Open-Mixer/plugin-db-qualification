@@ -1,0 +1,237 @@
+{
+ "schema": "plugin-qualify.qualification-record/1",
+ "plugin": {
+  "format": "clap",
+  "id": "com.ArthurBenilov.Aeolus"
+ },
+ "binary": {
+  "path": "Aeolus.clap",
+  "sha256": "71c7dad3506e211025ce768e68590d72e4516ab4e2367ee30b87350a6459d185",
+  "files": [
+   {
+    "path": "Aeolus.clap",
+    "sha256": "71c7dad3506e211025ce768e68590d72e4516ab4e2367ee30b87350a6459d185"
+   }
+  ],
+  "layout": {
+   "scheme": "omx-layout/1",
+   "sha256": "8c5111378727e4f02bbbe65187720ad27cee074a6885163fd71826ee2947805c"
+  }
+ },
+ "hostExtensions": [
+  "clap.log",
+  "clap.thread-check",
+  "clap.latency",
+  "clap.params",
+  "clap.audio-ports",
+  "clap.state",
+  "clap.note-ports",
+  "clap.note-name",
+  "clap.voice-info",
+  "clap.event-registry",
+  "clap.timer-support",
+  "clap.posix-fd-support",
+  "clap.thread-pool",
+  "clap.tail",
+  "clap.surround/4",
+  "clap.ambisonic/3",
+  "clap.audio-ports-config",
+  "clap.preset-load/2",
+  "clap.track-info/1",
+  "clap.remote-controls/2"
+ ],
+ "verdicts": [
+  {
+   "host": "omx-clap-host",
+   "measured": true,
+   "rating": "conditional",
+   "qualified": false,
+   "hosting": "isolated",
+   "arm": "declaration",
+   "deciding": "hosting.rt-safety.violations-in-run",
+   "reasons": [
+    {
+     "dimension": "rtSafety",
+     "rating": "conditional",
+     "code": "hosting.rt-safety.violations-in-run",
+     "params": {
+      "allocations": 1536,
+      "syscalls": 0,
+      "locks": 2496
+     }
+    },
+    {
+     "dimension": "rtSafety",
+     "rating": "conditional",
+     "code": "hosting.rt-safety.violations-under-notes",
+     "params": {
+      "allocations": 1546,
+      "syscalls": 0,
+      "locks": 139340
+     }
+    }
+   ]
+  }
+ ],
+ "tiers": {
+  "isolated": {
+   "host": "omx-clap-host",
+   "measured": true,
+   "qualified": false,
+   "rating": "conditional",
+   "deciding": "hosting.rt-safety.violations-in-run",
+   "runsAlone": true
+  },
+  "offeredOn": [
+   "isolated"
+  ]
+ },
+ "cost": [
+  {
+   "host": "omx-clap-host",
+   "rate": 48000,
+   "quantum": 128,
+   "reasons": [
+    {
+     "dimension": "cost",
+     "rating": "unknown",
+     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+     "params": {
+      "rate": 48000,
+      "quantum": 128
+     }
+    }
+   ]
+  }
+ ],
+ "measurements": {
+  "grid": [
+   {
+    "rate": 96000,
+    "quantum": 1024,
+    "outcome": "probe.ok",
+    "latency": {
+     "declaredFrames": 0,
+     "measuredFrames": 1
+    },
+    "rtSafety": {
+     "interposer": true,
+     "swept": true,
+     "sweepApplicable": true,
+     "blocks": 512,
+     "allocations": 1536,
+     "locks": 2496,
+     "syscalls": 0,
+     "threadViolations": 0,
+     "processErrors": 0,
+     "events": [
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "pthread_mutex_lock",
+      "free"
+     ]
+    },
+    "noteSweep": {
+     "applicable": true,
+     "dialect": "midi",
+     "allocations": 1546,
+     "locks": 139340,
+     "syscalls": 0
+    },
+    "memory": {
+     "afterInstantiateKb": 216492,
+     "afterActivateKb": 317684,
+     "atRestKb": 317956,
+     "secondInstanceKb": 278984,
+     "unmeasuredReason": "voices-unknown",
+     "unmeasuredDetail": "no count of notes to hold for the footprint"
+    },
+    "latencyMs": 0.010417
+   }
+  ]
+ },
+ "notMeasured": [
+  {
+   "dimension": "stability",
+   "code": "hosting.stability.unsoaked"
+  }
+ ],
+ "tool": {
+  "runner": "plugin-hostd-probe 0.20.7",
+  "child": "clap-qualify",
+  "interposer": "rt_interpose.so"
+ },
+ "measuredAt": "2026-11-23T22:02:44+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
+ "probe": {
+  "file": "com.ArthurBenilov.Aeolus@unversioned-71c7dad3506e.custom.probe.json",
+  "sha256": "c6d28e3005d8bc5e3b6efcd489affc9a4299236ce6b84390b8855515ec91ec31",
+  "bytes": 10853,
+  "protocol": {
+   "name": "plugin-hostd.probe-protocol",
+   "version": 1
+  },
+  "reason": "on-request",
+  "outcome": "probe.ok",
+  "complete": true,
+  "machineClass": {
+   "arch": "x86_64",
+   "family": "amd",
+   "coreBand": "9-16",
+   "clockBand": "4.5GHz+",
+   "preemptRt": false,
+   "cstatesLimited": false
+  },
+  "meetsProtocol": false,
+  "load": {
+   "loadavg1": 2.29,
+   "cores": 3
+  }
+ },
+ "run": {
+  "id": "20261123T220244Z-1d7-120fa2fb",
+  "steps": [
+   {
+    "step": "scan",
+    "result": "ok"
+   },
+   {
+    "step": "describe",
+    "result": "ok"
+   },
+   {
+    "step": "probe",
+    "result": "probe.ok"
+   },
+   {
+    "step": "rt-safety",
+    "result": "unsafe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.silent-output",
+    "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
+    "figures": {
+     "latencyFrames": 0,
+     "cpuPercent": 9,
+     "xruns": 3,
+     "midiInputsLinked": 1
+    }
+   }
+  ]
+ }
+}

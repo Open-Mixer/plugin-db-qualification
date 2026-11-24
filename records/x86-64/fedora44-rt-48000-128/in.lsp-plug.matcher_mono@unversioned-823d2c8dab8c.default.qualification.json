@@ -63,7 +63,7 @@
      "code": "hosting.memory.unmeasured",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -84,7 +84,7 @@
   {
    "host": "openmixer-console",
    "rate": 96000,
-   "quantum": 1024,
+   "quantum": 256,
    "reasons": [
     {
      "dimension": "cost",
@@ -92,7 +92,7 @@
      "code": "hosting.cost.unmeasured-at-rate-and-quantum",
      "params": {
       "rate": 96000,
-      "quantum": 1024
+      "quantum": 256
      }
     }
    ]
@@ -109,10 +109,10 @@
      "measuredFrames": 4096
     },
     "cost": {
-     "median": 1016.08,
+     "median": 944.781,
      "percentile": {
       "p": 95,
-      "value": 1886.37
+      "value": 1737.84
      },
      "blocks": 512,
      "warmupBlocks": 64
@@ -150,13 +150,14 @@
      "applicable": false
     },
     "memory": {
-     "afterInstantiateKb": 19652,
-     "afterActivateKb": 19892,
-     "atRestKb": 20856,
+     "afterInstantiateKb": 19364,
+     "afterActivateKb": 19688,
+     "atRestKb": 20644,
      "secondInstanceKb": 1268,
-     "firstInstanceKb": 20856,
+     "firstInstanceKb": 20644,
      "perInstanceKb": 1268
-    }
+    },
+    "latencyMs": 85.333333
    }
   ]
  },
@@ -167,15 +168,17 @@
   }
  ],
  "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
+  "runner": "plugin-hostd-probe 0.20.7",
   "child": "clap-qualify",
   "interposer": "rt_interpose.so"
  },
- "measuredAt": "2026-11-09T14:15:21+00:00",
+ "measuredAt": "2026-11-23T22:41:21+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
  "probe": {
   "file": "in.lsp-plug.matcher_mono@unversioned-823d2c8dab8c.default.probe.json",
-  "sha256": "45a48f7358c156621d3d3f4466d57ce1251170891db0eadca2c7fd8752e000e0",
-  "bytes": 10478,
+  "sha256": "519c79df605f53f661982dda9bd611065a60c59acffe756537af5b1d915b0ce5",
+  "bytes": 10453,
   "protocol": {
    "name": "plugin-hostd.probe-protocol",
    "version": 1
@@ -193,12 +196,12 @@
   },
   "meetsProtocol": false,
   "load": {
-   "loadavg1": 8.64,
+   "loadavg1": 4.03,
    "cores": 3
   }
  },
  "run": {
-  "id": "20261109T141521Z-47ec-40b6179c",
+  "id": "20261123T224121Z-5181-afa52c11",
   "steps": [
    {
     "step": "scan",
@@ -215,6 +218,12 @@
    {
     "step": "rt-safety",
     "result": "safe"
+   },
+   {
+    "step": "isolated",
+    "result": "refused",
+    "code": "isolated.not-added",
+    "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
    }
   ]
  }

@@ -103,7 +103,7 @@
           "code": "hosting.memory.unmeasured",
           "params": {
             "rate": 96000,
-            "quantum": 256
+            "quantum": 1024
           }
         }
       ]
@@ -157,7 +157,7 @@
     {
       "host": "openmixer-console",
       "rate": 96000,
-      "quantum": 256,
+      "quantum": 1024,
       "reasons": [
         {
           "dimension": "cost",
@@ -165,7 +165,7 @@
           "code": "hosting.cost.unmeasured-at-rate-and-quantum",
           "params": {
             "rate": 96000,
-            "quantum": 256
+            "quantum": 1024
           }
         }
       ]
@@ -197,14 +197,12 @@
           "syscalls": 0
         },
         "memory": {
-          "afterInstantiateKb": 22120,
-          "afterActivateKb": 22120,
-          "atRestKb": 22120,
-          "notesHeldKb": 22144,
-          "secondInstanceKb": 4684,
-          "basis": "probe",
-          "firstInstanceKb": 22144,
-          "perInstanceKb": 4708
+          "afterInstantiateKb": 21032,
+          "afterActivateKb": 21032,
+          "atRestKb": 21032,
+          "secondInstanceKb": 4676,
+          "unmeasuredReason": "voices-unknown",
+          "unmeasuredDetail": "no probe count (OMX_PROBE_NOTES) of notes to hold"
         },
         "latency": {
           "unmeasuredReason": "silent-output",
@@ -242,7 +240,7 @@
         "rate": 48000,
         "quantum": 128,
         "code": "hosting.cost.unmeasured-at-rate-and-quantum",
-        "detail": "silent-output: the held notes never sounded"
+        "detail": "voices-unknown: an instrument with no probe count (OMX_PROBE_NOTES) to hold: no note was held down"
       }
     ]
   },
@@ -253,17 +251,15 @@
     }
   ],
   "tool": {
-    "runner": "plugin-hostd-probe 0.20.7",
+    "runner": "plugin-hostd-probe 0.20.0",
     "child": "lv2_measure",
     "interposer": "rt_interpose.so"
   },
-  "measuredAt": "2026-11-24T01:25:41+00:00",
-  "latencyLineMs": 5,
-  "rules": "plugin-qualify-rules/0.20",
+  "measuredAt": "2026-11-09T11:27:18+00:00",
   "probe": {
     "file": "http___spectmorph.org_plugins_spectmorph@6.1-29b396150587.default.probe.json",
-    "sha256": "142110ac3ffd8eee70d0e71a53c1a8021e53ca723fd598d12dba87286044d14a",
-    "bytes": 10555,
+    "sha256": "ce751cb68f5eb951148771a50342c441e42e10de0c80f396e404d5d0930dc613",
+    "bytes": 10801,
     "protocol": {
       "name": "plugin-hostd.probe-protocol",
       "version": 1
@@ -281,12 +277,12 @@
     },
     "meetsProtocol": false,
     "load": {
-      "loadavg1": 0.58,
+      "loadavg1": 1.58,
       "cores": 3
     }
   },
   "run": {
-    "id": "20261124T012541Z-1945b-b18b53e5",
+    "id": "20261109T112718Z-af2e-7dc00444",
     "steps": [
       {
         "step": "scan",
@@ -303,18 +299,6 @@
       {
         "step": "rt-safety",
         "result": "safe"
-      },
-      {
-        "step": "isolated",
-        "result": "refused",
-        "code": "isolated.silent-output",
-        "detail": "notes held on 1 MIDI input and a sine at its audio inputs",
-        "figures": {
-          "latencyFrames": 0,
-          "cpuPercent": 0.6666666666666666,
-          "xruns": 1,
-          "midiInputsLinked": 1
-        }
       }
     ]
   }

@@ -1,0 +1,202 @@
+{
+ "schema": "plugin-qualify.qualification-record/1",
+ "plugin": {
+  "format": "clap",
+  "id": "org.openmixer.rotary"
+ },
+ "binary": {
+  "path": "omx-rotary.clap",
+  "sha256": "6eae59d24c408bc0a000f13491940c2716de79df9b2f79bd307b2c8d68ad1314",
+  "files": [
+   {
+    "path": "omx-rotary.clap",
+    "sha256": "6eae59d24c408bc0a000f13491940c2716de79df9b2f79bd307b2c8d68ad1314"
+   }
+  ],
+  "layout": {
+   "scheme": "omx-layout/1",
+   "sha256": "397559187be5ea255fa73a4cab1107c5b229d3f1200e920637db4eed3c1c2b51"
+  }
+ },
+ "hostExtensions": [
+  "clap.log",
+  "clap.thread-check",
+  "clap.latency",
+  "clap.params",
+  "clap.audio-ports",
+  "clap.state",
+  "clap.note-ports",
+  "clap.note-name",
+  "clap.voice-info",
+  "clap.event-registry",
+  "clap.timer-support",
+  "clap.posix-fd-support",
+  "clap.thread-pool",
+  "clap.tail",
+  "clap.surround/4",
+  "clap.ambisonic/3",
+  "clap.audio-ports-config",
+  "clap.preset-load/2",
+  "clap.track-info/1",
+  "clap.remote-controls/2"
+ ],
+ "verdicts": [
+  {
+   "host": "omx-clap-host",
+   "measured": true,
+   "rating": "suitable",
+   "qualified": true,
+   "hosting": "isolated",
+   "arm": "declaration",
+   "reasons": [
+    {
+     "dimension": "rtSafety",
+     "rating": "suitable",
+     "code": "hosting.rt-safety.clean-under-sweep",
+     "params": {
+      "blocks": 512
+     }
+    }
+   ]
+  }
+ ],
+ "tiers": {
+  "isolated": {
+   "host": "omx-clap-host",
+   "measured": true,
+   "qualified": true,
+   "rating": "suitable"
+  },
+  "offeredOn": [
+   "isolated"
+  ]
+ },
+ "cost": [
+  {
+   "host": "omx-clap-host",
+   "rate": 48000,
+   "quantum": 128,
+   "reasons": [
+    {
+     "dimension": "cost",
+     "rating": "conditional",
+     "code": "hosting.cost.spiky-tail",
+     "params": {
+      "tailRatio": 50.53888,
+      "ceiling": 4
+     }
+    }
+   ]
+  }
+ ],
+ "measurements": {
+  "grid": [
+   {
+    "rate": 48000,
+    "quantum": 128,
+    "outcome": "probe.ok",
+    "latency": {
+     "declaredFrames": 0,
+     "measuredFrames": 18
+    },
+    "cost": {
+     "median": 1.40625,
+     "percentile": {
+      "p": 95,
+      "value": 71.0703
+     },
+     "blocks": 512,
+     "warmupBlocks": 64
+    },
+    "rtSafety": {
+     "interposer": true,
+     "swept": true,
+     "sweepApplicable": true,
+     "blocks": 512,
+     "allocations": 0,
+     "locks": 0,
+     "syscalls": 0,
+     "threadViolations": 0,
+     "processErrors": 0,
+     "events": []
+    },
+    "noteSweep": {
+     "applicable": false
+    },
+    "memory": {
+     "afterInstantiateKb": 288,
+     "afterActivateKb": 824,
+     "atRestKb": 824,
+     "secondInstanceKb": 4,
+     "firstInstanceKb": 824,
+     "perInstanceKb": 4
+    },
+    "latencyMs": 0.375
+   }
+  ]
+ },
+ "notMeasured": [
+  {
+   "dimension": "stability",
+   "code": "hosting.stability.unsoaked"
+  }
+ ],
+ "tool": {
+  "runner": "plugin-hostd-probe 0.20.7",
+  "child": "clap-qualify",
+  "interposer": "rt_interpose.so"
+ },
+ "measuredAt": "2026-11-23T22:06:09+00:00",
+ "latencyLineMs": 5,
+ "rules": "plugin-qualify-rules/0.20",
+ "probe": {
+  "file": "org.openmixer.rotary@unversioned-6eae59d24c40.custom.probe.json",
+  "sha256": "d741c340eaea9e6909138285c12bb8b0c3cf83dcd6d9b894433360f307ff84f2",
+  "bytes": 10283,
+  "protocol": {
+   "name": "plugin-hostd.probe-protocol",
+   "version": 1
+  },
+  "reason": "on-request",
+  "outcome": "probe.ok",
+  "complete": true,
+  "machineClass": {
+   "arch": "x86_64",
+   "family": "amd",
+   "coreBand": "9-16",
+   "clockBand": "4.5GHz+",
+   "preemptRt": false,
+   "cstatesLimited": false
+  },
+  "meetsProtocol": false,
+  "load": {
+   "loadavg1": 3.67,
+   "cores": 3
+  }
+ },
+ "run": {
+  "id": "20261123T220609Z-937-dc5c9506",
+  "steps": [
+   {
+    "step": "scan",
+    "result": "ok"
+   },
+   {
+    "step": "describe",
+    "result": "ok"
+   },
+   {
+    "step": "probe",
+    "result": "probe.ok"
+   },
+   {
+    "step": "rt-safety",
+    "result": "safe"
+   },
+   {
+    "step": "pool",
+    "result": "not-asked"
+   }
+  ]
+ }
+}

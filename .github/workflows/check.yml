@@ -58,12 +58,32 @@ jobs:
 
   # The reader (libplugin-qualification-db, its command and their tests): built with pkg-config's flags against the
   # channel's libomx-domain, as a consumer builds it. `make check` builds the fixture stores from schema/qualification.sql.
+  # The Fedora cells the reader builds in: check-matrix's answer, Fedora 45 on x86_64 (rule 11-10, Fedora 45 only).
+  cells:
+    name: the cells the reader builds in
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      rpm: ${{ steps.cells.outputs.rpm }}
+    steps:
+      - id: cells
+        uses: Open-Mixer/.github/.github/actions/check-matrix@openmixer-v1
+        with:
+          wave: ${{ vars.OMX_RELEASE_MATRIX }}
+          rpm-releases: '["45"]'
+          rpm-arches: '["x86_64"]'
+
   reader:
-    name: the reader builds and passes make check
+    name: the reader builds and passes make check (${{ matrix.cell.image }}, ${{ matrix.cell.arch }})
+    needs: cells
     runs-on: ${{ github.event.repository.private && 'arc-freemixer' || github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.OMX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: ${{ fromJSON(needs.cells.outputs.rpm) }}
     container:
-      image: fedora:45
+      image: ${{ matrix.cell.image }}
     steps:
       - name: Install the build tools
         run: dnf install -y --setopt=install_weak_deps=False git dnf5-plugins gcc gcc-c++ make python3 binutils pkgconf-pkg-config sqlite-devel diffutils gawk sed grep findutils

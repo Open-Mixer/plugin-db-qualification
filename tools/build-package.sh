@@ -22,9 +22,7 @@
 #       records/<class>/<set name>/ is replaced by what its package holds; the tool's .deb is then discarded. With
 #       --cell the set name is <set>-<rate>-<quantum> and its provenance's grid is that cell; without it the set name
 #       is <set>. The class must have an architecture in packaging/arch-classes. The version becomes the spec's
-#       Version and the top debian/changelog entry's, and the spec's per-architecture block is written again
-#       (tools/sets.py spec: the older names the package takes over follow records/). No other set, of this class or
-#       another, is touched. Write the changelog entry, review the diff, commit, tag v<version>.
+#       Version and the top debian/changelog entry's. No other set, of this class or another, is touched. Write the changelog entry, review the diff, commit, tag v<version>.
 #
 # plugin-qualify comes from the OpenMixer channel (apt) or, where that is not configured, from npm.
 set -euo pipefail
@@ -111,15 +109,13 @@ json.dump(p, open(sys.argv[3], "w", encoding="utf-8"), indent=2)' "$provenance" 
     echo "records/$class/$name $version: $(ls "$root/records/$class/$name" | wc -l) files; review git diff"
 }
 
-# the version where it lives (the spec and the top debian/changelog entry, which a tag equals), and the spec's
-# per-architecture block, whose folded names follow records/
+# the version where it lives (the spec and the top debian/changelog entry, which a tag equals)
 set_version() {
     sed -i "s/^Version: .*/Version: $version/" "$spec"
     if [ "$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' "$root/debian/changelog")" != "$version" ]; then
         sed -i "1s/^\\([a-z0-9.+-]*\\) (.*) unstable/\\1 ($version) unstable/" "$root/debian/changelog"
         echo "debian/changelog: the top entry now names $version; write what this version changes" >&2
     fi
-    python3 "$root/tools/sets.py" spec
 }
 
 if [ -n "$from" ]; then

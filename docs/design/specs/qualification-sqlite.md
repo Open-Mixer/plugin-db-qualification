@@ -653,7 +653,8 @@ hosting codes, and there is no `hosting` domain:
   `hosting-skip-ends` holds the end: it fails when omx-clap's main ships a `hosting` domain document, or a
   contract directory the tests read holds one, while the reader still skips the hosting words.
 
-Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
+Change 2 builds against the contract packages that ship these, named with no version (the build installs the
+published packages). Until they are released, change 2 stays red. The
 item names below are proposed; each owner's change names them.
 
 The writer reads each domain from the installed contract directory (as docs/runtime-data.md says for Python: the
@@ -1334,14 +1335,14 @@ probe judge over every record of `records/`.
 
 ## 7. Packaging
 
-| package | ships | built how | new dependencies (floors only) |
+| package | ships | built how | new dependencies (no OpenMixer version written by hand) |
 | --- | --- | --- | --- |
-| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-hostd-contract (>= <the release carrying the `qualification` domain and MACHINE_FAMILIES>~)`, `plugin-hostd-protocol-contract (>= <the release carrying the `probe` domain>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `omx-clap-contract (>= <the release publishing the `hosting` domain>~)`, `pkg-config` and the contract directory's path (the `contractdir` variable of `libomx-domain.pc`, which the reader's Build-Depends already carry); RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same four contract floors (no `plugin-qualify-contract`: its `qualification` domain moved to `plugin-hostd-contract`, and the two conflict on the domain's files). Run time: none |
-| `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
+| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-hostd-contract`, `plugin-hostd-protocol-contract`, `plugin-db-contract`, `omx-clap-contract`, `pkg-config` and the contract directory's path (the `contractdir` variable of `libomx-domain.pc`, which the reader's Build-Depends already carry); RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same four contract packages (no `plugin-qualify-contract`: its `qualification` domain moved to `plugin-hostd-contract`, and the two conflict on the domain's files). Run time: none |
+| `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` from `${shlibs:Depends}` (RPM: the generated soname dependency) |
 | `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` (its `schema` variable names the DDL of `plugin-qualification-db-schema`) | | `libplugin-qualification-db0 (= ${binary:Version})`, `plugin-qualification-db-schema (= ${source:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
 | `plugin-qualification-db-schema` (change 3, with the writer) | the DDL, at `<datadir>/plugin-qualification-db/qualification.sql`, one copy; architecture independent | | none; `libplugin-qualification-db-dev` and `plugin-qualification-db-write` depend on it, and the `.pc`'s `schema` variable names its file |
-| `plugin-qualification-db-write` (change 3, with the writer) | `tools/qualification_db.py` and the command `plugin-qualification-db-write` (`put`, `delete`, section 6.1), the module that builds the base | | `python3`, `python3-jsonschema`, `libsqlite3-0 (>= 3.37.0)`, the three contract floors, `plugin-qualification-db-schema (= ${source:Version})`; RPM: the same names |
+| `plugin-qualification-db-write` (change 3, with the writer) | `tools/qualification_db.py` and the command `plugin-qualification-db-write` (`put`, `delete`, section 6.1), the module that builds the base | | `python3`, `python3-jsonschema`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualification-db-schema (= ${source:Version})`; RPM: the same names |
 
 **Generated, not committed.** Today's records are text (JSON, 248 MB unpacked), reviewed as text and never rewritten.
 A committed database would be a second copy of them that a diff cannot show and that can drift from `records/`.
@@ -1351,7 +1352,8 @@ held by the round-trip test. `sets.py check` and `tools/check-records.py` stay t
 **SQLite floor.** 3.37.0 is the first SQLite with `STRICT` tables, which every table of section 3.3 is. It is stated
 as an explicit floor in both formats, at build and at run time: `libsqlite3-0 (>= 3.37.0)` and `sqlite-libs >= 3.37.0`.
 
-No version ceiling is added anywhere.
+The SQLite floor is third-party and stays. No OpenMixer package is named with a version written by hand (devel wave
+2026-11-24), and no version ceiling is added anywhere.
 
 ## 8. Red-first tests
 

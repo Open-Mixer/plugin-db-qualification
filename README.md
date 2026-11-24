@@ -96,8 +96,8 @@ spec: `path-absolute`, `binary-not-in-files`, `key-not-the-binary`, `files-unord
 
 ## Building
 
-The reader is built with `make` and tested with `make check`. It needs a C compiler, `sqlite3` 3.37.0 or later and
-`libomx-domain` from omx-contract 3.20.0 or later, found by `pkg-config`. `make install DESTDIR=... PREFIX=/usr`
+The reader is built with `make` and tested with `make check`. It needs a C compiler, `sqlite3` 3.37.0 or later (the first with
+`STRICT` tables) and `libomx-domain` from omx-contract, found by `pkg-config`. `make install DESTDIR=... PREFIX=/usr`
 installs the library, the command, the header, the `.pc`, the DDL and the writer.
 
 The base is built by `tools/records-db.py --records records --out qualification.sqlite --contract-dir <dir>`. The
@@ -118,7 +118,10 @@ the base holds no openmixer-console verdict. The record files keep them; the bas
 
 ## Packaging rules
 
-- A package states its dependencies as floors. No upper limit is set anywhere.
+- No OpenMixer package is named with a version written by hand: no floor and no ceiling. The build installs the lower
+  levels' published packages; the libraries' runtime dependencies are generated (soname, and on RPM the `.pc` file's),
+  and the only versioned relations to this source's own packages are `=` between them. A third-party floor stays where
+  it is an API fact of that project: sqlite 3.37.0, the first with `STRICT` tables.
 - No package of this source has Provides, Replaces, Breaks, Conflicts or Obsoletes. Not on another package of this
   source, and not on the older per-set package names. Those names are pruned from the channel. `tools/sets.py check` and
   `tools/test_no_relations.py` refuse a relation.
@@ -143,8 +146,8 @@ tools/sets.py import <class> <set> <out-dir> --provenance <file>
 ```
 
 The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. It refuses a set that already exists
-(`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then run
-`tools/sets.py spec`, and release the records package under a new date version.
+(`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then release
+the records package under a new date version.
 
 `tools/build-package.sh` builds such a set from a run's qualification directories:
 

@@ -8,13 +8,11 @@
 The packages of this source carry no Provides, Replaces, Breaks or Conflicts (Debian) and no Provides, Obsoletes or
 Conflicts (RPM): not on each other, not on the names the records were published under before, one package per set
 (plugin-db-qualification-<class>-<set>, omx-qualification-<class>-<set>). Those names are pruned from the channel, not
-taken over in code. A package states its dependencies, floors only; the Provides/Replaces/Breaks substvars of debian/rules
-and the folded names of the spec are gone. The check also reads what tools/sets.py writes into both.
+taken over in code. A package states its dependencies with no version written by hand (tools/test_sets.py,
+Dependencies); debian/rules writes no substvar and the spec has no generated block.
 """
 import os
 import re
-import subprocess
-import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -48,11 +46,8 @@ class NoRelations(unittest.TestCase):
         for path in (("debian", "control"), ("packaging", "plugin-qualification-records.spec")):
             self.assertIsNone(OLD_NAMES.search(read(*path)), "/".join(path))
 
-    def test_what_sets_py_writes_has_no_relation(self):
-        out = subprocess.run([sys.executable, "-B", os.path.join(HERE, "sets.py"), "substvars", "amd64"],
-                             capture_output=True, text=True, cwd=ROOT).stdout
-        self.assertEqual([l.split("=")[0] for l in out.splitlines()], ["qualify:Depends"])
-        self.assertIsNone(OLD_NAMES.search(out))
+    def test_debian_rules_writes_no_substvar(self):
+        self.assertNotIn("substvars", read("debian", "rules"))
 
 
 if __name__ == "__main__":

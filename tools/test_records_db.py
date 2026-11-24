@@ -828,7 +828,8 @@ class MinDomain(Base):
 
 
 class Packaging(unittest.TestCase):
-    """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
+    """The package builds the base database beside today's files (spec sections 5 and 7); no dependency carries a
+    hand-written version (devel wave 2026-11-24)."""
     # the contract packages the build reads its words from: each domain's owner (the repositories the fixture reads them
     # from, each shipping <repo>-contract) and omx-clap-contract for the hosting words
     CONTRACTS = tuple(sorted({repo + "-contract" for repo in DOMAIN_REPO.values()} | {"omx-clap-contract"}))
@@ -841,22 +842,22 @@ class Packaging(unittest.TestCase):
         self.assertEqual(self.read("BUILT_FROM"), "$Format:%H$\n")
         self.assertIn("BUILT_FROM export-subst", self.read(".gitattributes").splitlines())
 
-    def test_debian_build_depends_hold_floors_only(self):
+    def test_debian_build_depends_name_the_contract_packages_with_no_version(self):
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         deps = re.search(r"^Build-Depends: (.*)$", control, re.M).group(1)
         self.assertIn("python3-jsonschema:native", deps)
         for pkg in self.CONTRACTS:
-            self.assertRegex(deps, rf"{pkg} \(>= \d+(\.\d+)+~\)", pkg)
-        self.assertNotRegex(deps, r"\(<|<<|<=")
-        self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)", "", deps), r"\(=")
+            self.assertRegex(deps, rf"(?m)(^|, ){pkg}(,|$)", pkg)
+        # the one versioned entries: debhelper's compat level and the third-party sqlite floor (STRICT tables)
+        self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)|libsqlite3-dev \(>= 3\.37\.0\)", "", deps), r"\(")
 
-    def test_the_omx_clap_contract_floor_is_the_release_that_installs_the_package_omx_clap(self):
-        """omx-clap-core 0.34.0 installs the hosting words as the contract package omx-clap (<contractdir>/3/omx-clap/),
-        shipped as omx-clap-contract: the floor is that release, and the package's name before it is named nowhere."""
+    def test_the_hosting_words_come_from_omx_clap_contract_not_its_old_name(self):
+        """omx-clap-core installs the hosting words as the contract package omx-clap (<contractdir>/3/omx-clap/),
+        shipped as omx-clap-contract; the package's name before it is named nowhere."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         spec = self.read("packaging", "plugin-qualification-records.spec")
-        self.assertRegex(control, r"omx-clap-contract \(>= 0\.34\.0~\)")
-        self.assertRegex(spec, r"BuildRequires: omx-clap-contract >= 0\.34\.0\n")
+        self.assertRegex(control, r"(?m)omx-clap-contract(,|$)")
+        self.assertRegex(spec, r"(?m)^BuildRequires: omx-clap-contract$")
         self.assertNotIn("omx-clap-core-contract", control)
         self.assertNotIn("omx-clap-core-contract", spec)
 
@@ -865,20 +866,16 @@ class Packaging(unittest.TestCase):
         qualification files plugin-hostd-contract 0.21.0 took over, and the two cannot be installed together."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         deps = re.search(r"^Build-Depends: (.*)$", control, re.M).group(1)
-        self.assertEqual(sorted(set(re.findall(r"([a-z0-9-]+-contract) \(", deps))), list(self.CONTRACTS))
+        self.assertEqual(sorted(set(re.findall(r"(?m)([a-z0-9-]+-contract)(?:,|$)", deps))), list(self.CONTRACTS))
         spec = self.read("packaging", "plugin-qualification-records.spec")
-        self.assertEqual(sorted(set(re.findall(r"(?m)^BuildRequires: ([a-z0-9-]+-contract) ", spec))), list(self.CONTRACTS))
-        self.assertRegex(deps, r"plugin-hostd-contract \(>= 0\.21\.0~\)")
-        self.assertRegex(spec, r"(?m)^BuildRequires: plugin-hostd-contract >= 0\.21\.0$")
-        self.assertRegex(deps, r"plugin-hostd-protocol-contract \(>= 0\.8\.0~\)")
-        self.assertRegex(spec, r"(?m)^BuildRequires: plugin-hostd-protocol-contract >= 0\.8\.0$")
+        self.assertEqual(sorted(set(re.findall(r"(?m)^BuildRequires: ([a-z0-9-]+-contract)$", spec))), list(self.CONTRACTS))
 
-    def test_rpm_build_requires_hold_floors_only(self):
+    def test_rpm_build_requires_name_the_contract_packages_with_no_version(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")
         self.assertIn("BuildRequires: python3-jsonschema", spec)
         for pkg in self.CONTRACTS:
-            self.assertRegex(spec, rf"(?m)^BuildRequires: {pkg} >= \d+(\.\d+)+$", pkg)
-        self.assertNotRegex(spec, r"(?m)^BuildRequires:.* (<|<=) ")
+            self.assertRegex(spec, rf"(?m)^BuildRequires: {pkg}$", pkg)
+        self.assertNotRegex(spec, r"(?m)^BuildRequires: (?!sqlite-devel >= 3\.37\.0$).*[<>=]")
 
     def test_both_builds_generate_the_database_into_the_package(self):
         rules, spec = self.read("debian", "rules"), self.read("packaging", "plugin-qualification-records.spec")

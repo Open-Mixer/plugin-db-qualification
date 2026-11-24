@@ -444,7 +444,12 @@ class InstrumentFields(Base):
             rt.update(swept=False, sweepApplicable=True)
         d, f = self.made(put)
         self.assertEqual(self.same(d, f)["measurements"]["grid"][0]["rtSafety"],
-                         {"interposer": True, "swept": False, "sweepApplicable": True, "blocks": 512, "events": []})
+                         {"interposer": True, "swept": False, "sweepApplicable": True, "blocks": 512})
+        self.assertEqual(self.rows("SELECT rt_events, rt_allocations FROM cell WHERE ord = 0 AND rt_events IS NULL"), [(None, None)])
+
+    def test_26_counts_without_their_events_are_refused_by_the_schema(self):
+        d, f = self.made(lambda r: r["measurements"]["grid"][0]["rtSafety"].pop("events"))
+        self.refused("schema-refused", f)
 
     def test_26_one_audio_thread_count_alone_is_refused_by_the_schema(self):
         def put(r):

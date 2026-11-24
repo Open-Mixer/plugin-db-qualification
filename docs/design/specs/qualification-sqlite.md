@@ -409,7 +409,9 @@ CREATE TABLE cell (                        -- measurements.grid[]
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR WORD(note_sweep_dialect)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
   CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
+  rt_events INTEGER CHECK (rt_events IS NULL OR rt_events = 1),   -- 1: rtSafety.events is present (cell_event, possibly empty); NULL: absent
   CHECK ((rt_allocations IS NULL) = (rt_locks IS NULL) AND (rt_locks IS NULL) = (rt_syscalls IS NULL)),   -- the audio thread's counts: all three or none
+  CHECK ((rt_events IS NULL) = (rt_allocations IS NULL)),   -- the interposer's tally: its events and its counts together, or neither
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;
@@ -763,10 +765,10 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.grid[].cost.voiceCurve[].held`, `.median`, `.percentile.p`, `.percentile.value` | `cell_voice_point.held`, `.median`, `.percentile_p`, `.percentile_value`, in `ord` |
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |
 | `measurements.grid[].memoryLimit.bytes`, `.mechanism` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
-| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`); `allocations`, `locks` and `syscalls` all three or none: a cell whose interposer ran and whose sweep did not count carries none (the probe output's counts are optional) |
+| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`); `allocations`, `locks` and `syscalls` all three or none, and `events` with them: a cell whose interposer ran and whose sweep did not count carries neither (the probe output's counts and events are optional; one cell of the reference sets of #67) |
 | `measurements.grid[].rtSafety.otherThreads.allocations`, `.locks`, `.syscalls` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (the record's grid carries the probe point's names for these counts) |
 | `hostExtensions[]` (a CLAP record's; the probe output's `offer.clapExtensions`, section 6.2) | `record_extension.extension`; presence: `record.host_extensions` |
-| `measurements.grid[].rtSafety.events[]` | `cell_event.event` |
+| `measurements.grid[].rtSafety.events[]` | `cell_event.event`; presence: `cell.rt_events` (1 when the list is present, possibly empty; NULL when absent) |
 | `measurements.grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `cell.note_sweep_*` |
 | `measurements.unmeasured[].dimension`, `.code`, `.rate`, `.quantum` | `unmeasured.*` |
 | `measurements.behaviour.lifecycle.cycles`, `.failed`, `.instantiated` | `record.lifecycle_*` |
@@ -1431,7 +1433,7 @@ makes it fail.
     dropped.
 26. **The instrument fields and the adapter's content (#72).** A fixture record with `cost[].voices`
     `{"held": 16, "basis": "probe"}`, a cell whose `cost.voiceCurve` holds two points, a cell whose `rtSafety` carries no
-    counts, and `adapter.params` with `content`, `loaded`, `refused` and `problem` reads back exactly, `problem` absent
+    counts and no events, and `adapter.params` with `content`, `loaded`, `refused` and `problem` reads back exactly, `problem` absent
     (a sentence); a cell with one of the three audio-thread counts only is refused by the schema, and an adapter cell's
     `params.content` is refused as `word-unknown` (only the record's adapter pass carries content). Fails when a column
     or the table is dropped, or when the content is written as a word.
@@ -1610,7 +1612,7 @@ Decided by the owner (2026-11-19):
     (the cell's columns, one level up), `cost.voiceCurve[]` as `cell_voice_point` rows. A params map holds figures
     (numbers and the domain's words); the adapter pass's `content`, `loaded` and `refused` are names (parameter URIs),
     so they get columns of their own and no domain word, and `problem` is prose, a sentence (ruling 1). The audio
-    thread's counts are optional as the probe output has them, all three or none. `remove` beside `add` is the
+    thread's counts and its events are optional as the probe output has them, present together or not at all. `remove` beside `add` is the
     owner's word (plugin-hostd's `qualification` domain), not a store exception. The record files are not edited: the
     store's mapping and the domain change, so a record plugin-qualify wrote builds as it is.
 

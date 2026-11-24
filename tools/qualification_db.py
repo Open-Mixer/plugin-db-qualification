@@ -104,12 +104,15 @@ class Arr:
 
 
 class Map:
-    """An object of named values: rows of (name, number | word) or (name, value)."""
+    """An object of named values: rows of (name, number | word) or (name, value). `named` maps a name the map can hold
+    that is no value of its rows to a node of its own (a Leaf, a Sentence): the adapter pass's content, a name list,
+    and its problem, prose (section 9, ruling 12). Exported after the rows, in the order of `named`."""
 
     def __init__(self, table, by=(("record_id", "record_id"),), always=False, flag=None, kind="param", cols=("name", "version"),
-                 const=None):
+                 const=None, named=None):
         self.table, self.by, self.always, self.flag, self.kind, self.cols = table, tuple(by), always, flag, kind, cols
         self.const = const or {}
+        self.named = named or {}
         self.req = always
 
 
@@ -165,6 +168,12 @@ def _cell():
                 "capacity": O(c, "voices_capacity", "int"),
                 "held": O(c, "voices_held", "int"),
             }),
+            "voiceCurve": Arr("cell_voice_point", Obj({
+                "held": L("cell_voice_point", "held", "int"),
+                "median": L("cell_voice_point", "median", "real"),
+                "percentile": Obj({"p": L("cell_voice_point", "percentile_p", "int"),
+                                   "value": L("cell_voice_point", "percentile_value", "real")}, req=True),
+            }), by=(("record_id", "record_id"), ("cell_ord", "ord"))),
         }),
         "memory": Obj({
             "afterInstantiateKb": O(c, "mem_after_instantiate_kb", "int"),
@@ -187,9 +196,10 @@ def _cell():
             "swept": L(c, "rt_swept", "bool"),
             "sweepApplicable": L(c, "rt_sweep_applicable", "bool"),
             "blocks": L(c, "rt_blocks", "int"),
-            "allocations": L(c, "rt_allocations", "int"),
-            "locks": L(c, "rt_locks", "int"),
-            "syscalls": L(c, "rt_syscalls", "int"),
+            # all three or none (the DDL's CHECK): a cell whose sweep did not count carries none
+            "allocations": O(c, "rt_allocations", "int"),
+            "locks": O(c, "rt_locks", "int"),
+            "syscalls": O(c, "rt_syscalls", "int"),
             "threadViolations": O(c, "rt_thread_violations", "int"),
             "processErrors": O(c, "rt_process_errors", "int"),
             "ownThreads": O(c, "rt_own_threads", "int"),
@@ -199,7 +209,7 @@ def _cell():
                 "syscalls": O(c, "rt_other_syscalls", "int"),
             }),
             "events": Arr("cell_event", Leaf("cell_event", "event", "text", True),
-                          by=(("record_id", "record_id"), ("cell_ord", "ord")), always=True),
+                          by=(("record_id", "record_id"), ("cell_ord", "ord")), flag=(c, "rt_events")),
         }, anchor=("cell", "rt_interposer")),
         "noteSweep": Obj({
             "applicable": O(c, "note_sweep_applicable", "bool"),
@@ -315,6 +325,11 @@ def _record():
             "host": L("cost_entry", "host"),
             "rate": L("cost_entry", "rate", "int"),
             "quantum": L("cost_entry", "quantum", "int"),
+            "voices": Obj({
+                "basis": O("cost_entry", "voices_basis"),
+                "capacity": O("cost_entry", "voices_capacity", "int"),
+                "held": O("cost_entry", "voices_held", "int"),
+            }),
             "reasons": _reasons("cost_ord"),
         }), always=True),
         "tiers": Obj({
@@ -357,7 +372,9 @@ def _record():
             "code": O(r, "adapter_code"),
             "measuredAt": O(r, "adapter_measured_at"),
             "versions": Map("record_version", kind="text", cols=("name", "version"), const={"rejudged": 0}),
-            "params": Map("adapter_param", flag=(r, "adapter_params")),
+            "params": Map("adapter_param", flag=(r, "adapter_params"), named={
+                "content": O(r, "adapter_content"), "loaded": O(r, "adapter_loaded"), "refused": O(r, "adapter_refused"),
+                "problem": Sentence()}),
             "cells": Arr("adapter_cell", Obj({
                 "rate": L("adapter_cell", "rate", "int"),
                 "quantum": L("adapter_cell", "quantum", "int"),
@@ -482,6 +499,7 @@ WORDS = {
     ("cell", "latency_unmeasured_reason"): [_q("MEASUREMENT_UNMEASURED_REASONS")],
     ("cell", "mem_unmeasured_reason"): [_q("MEASUREMENT_UNMEASURED_REASONS")],
     ("cell", "voices_basis"): [_q("MEASUREMENT_VOICE_BASES")],
+    ("cost_entry", "voices_basis"): [_q("MEASUREMENT_VOICE_BASES")],
     ("cell", "mem_basis"): [_q("MEASUREMENT_VOICE_BASES")],
     ("cell", "mem_limit_mechanism"): [_q("MEMORY_LIMIT_MECHANISMS")],
     ("cell", "note_sweep_dialect"): [_q("NOTE_SWEEP_DIALECTS")],
@@ -718,6 +736,9 @@ class Emitter:
             scope.rows[node.flag[0]][node.flag[1]] = 1
         for name, val in v.items():
             p = f"{path}.{name}"
+            if name in node.named:
+                self.emit(node.named[name], val, scope, p)
+                continue
             cols = dict(node.const)
             if node.kind == "param":
                 cols["name"] = name
@@ -1083,5 +1104,9 @@ class Exporter:
                     out[r["name"]] = r["number"] if r["number"] is not None else r["word"]
                 else:
                     out[r[node.cols[0]]] = r[node.cols[1]]
+            for k, child in node.named.items():
+                v = self.build(child, scope, parent)
+                if v is not ABSENT:
+                    out[k] = v
             return out
         raise TypeError(node)

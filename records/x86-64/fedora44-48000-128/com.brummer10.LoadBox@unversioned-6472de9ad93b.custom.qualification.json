@@ -1,199 +1,180 @@
 {
- "schema": "plugin-qualify.qualification-record/1",
- "plugin": {
-  "format": "clap",
-  "id": "com.brummer10.LoadBox"
- },
- "binary": {
-  "path": "LoadBox.clap",
-  "sha256": "6472de9ad93b591a032a97d39f1117f41a4530706e4b24d551824051a440415c",
-  "files": [
-   {
-    "path": "LoadBox.clap",
-    "sha256": "6472de9ad93b591a032a97d39f1117f41a4530706e4b24d551824051a440415c"
-   }
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "com.brummer10.LoadBox"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/LoadBox.clap",
+    "sha256": "6472de9ad93b591a032a97d39f1117f41a4530706e4b24d551824051a440415c",
+    "files": [
+      {
+        "path": "LoadBox.clap",
+        "sha256": "6472de9ad93b591a032a97d39f1117f41a4530706e4b24d551824051a440415c"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "3067c44ce817a6bc914628babe8fcaadf27c141bb1ac72faf7a59d8d249bb92a"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    }
   ],
-  "layout": {
-   "scheme": "omx-layout/1",
-   "sha256": "3067c44ce817a6bc914628babe8fcaadf27c141bb1ac72faf7a59d8d249bb92a"
-  }
- },
- "hostExtensions": [
-  "clap.log",
-  "clap.thread-check",
-  "clap.latency",
-  "clap.params",
-  "clap.audio-ports",
-  "clap.state",
-  "clap.note-ports",
-  "clap.note-name",
-  "clap.voice-info",
-  "clap.event-registry",
-  "clap.timer-support",
-  "clap.posix-fd-support",
-  "clap.thread-pool",
-  "clap.tail",
-  "clap.surround/4",
-  "clap.ambisonic/3",
-  "clap.audio-ports-config",
-  "clap.preset-load/2",
-  "clap.track-info/1",
-  "clap.remote-controls/2"
- ],
- "verdicts": [
-  {
-   "host": "omx-clap-host",
-   "measured": true,
-   "rating": "suitable",
-   "qualified": true,
-   "hosting": "isolated",
-   "arm": "declaration",
-   "reasons": [
-    {
-     "dimension": "rtSafety",
-     "rating": "suitable",
-     "code": "hosting.rt-safety.clean-under-sweep",
-     "params": {
-      "blocks": 512
-     }
-    }
-   ]
-  }
- ],
- "tiers": {
-  "isolated": {
-   "host": "omx-clap-host",
-   "measured": true,
-   "qualified": true,
-   "rating": "suitable"
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
   },
-  "offeredOn": [
-   "isolated"
-  ]
- },
- "cost": [
-  {
-   "host": "omx-clap-host",
-   "rate": 48000,
-   "quantum": 128,
-   "reasons": [
+  "cost": [
     {
-     "dimension": "cost",
-     "rating": "suitable",
-     "code": "hosting.cost.within-ceiling",
-     "params": {
-      "coreFractionP95": 0.00029101872000000003,
-      "ceiling": 0.05
-     }
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "suitable",
+          "code": "hosting.cost.within-ceiling",
+          "params": {
+            "coreFractionP95": 0.0003045,
+            "ceiling": 0.05
+          }
+        }
+      ]
     }
-   ]
-  }
- ],
- "measurements": {
-  "grid": [
-   {
-    "rate": 48000,
-    "quantum": 128,
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 3.99219,
+          "percentile": {
+            "p": 95,
+            "value": 6.34375
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 8416,
+          "afterActivateKb": 8420,
+          "atRestKb": 8676,
+          "secondInstanceKb": 48,
+          "firstInstanceKb": 8676,
+          "perInstanceKb": 48
+        },
+        "latencyMs": 0
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-23T22:21:20+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "com.brummer10.LoadBox@unversioned-6472de9ad93b.custom.probe.json",
+    "sha256": "60d5d25385db2216284d0d6d316cf1c0115014d9eb30b45482178377883166fd",
+    "bytes": 10270,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
     "outcome": "probe.ok",
-    "latency": {
-     "declaredFrames": 0,
-     "measuredFrames": 0
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
     },
-    "cost": {
-     "median": 3.83594,
-     "percentile": {
-      "p": 95,
-      "value": 6.06289
-     },
-     "blocks": 512,
-     "warmupBlocks": 64
-    },
-    "rtSafety": {
-     "interposer": true,
-     "swept": true,
-     "sweepApplicable": true,
-     "blocks": 512,
-     "allocations": 0,
-     "locks": 0,
-     "syscalls": 0,
-     "threadViolations": 0,
-     "processErrors": 0,
-     "events": []
-    },
-    "noteSweep": {
-     "applicable": false
-    },
-    "memory": {
-     "afterInstantiateKb": 8012,
-     "afterActivateKb": 8088,
-     "atRestKb": 8400,
-     "secondInstanceKb": 32,
-     "firstInstanceKb": 8400,
-     "perInstanceKb": 32
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 6.17,
+      "cores": 3
     }
-   }
-  ]
- },
- "notMeasured": [
-  {
-   "dimension": "stability",
-   "code": "hosting.stability.unsoaked"
-  }
- ],
- "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
-  "child": "clap-qualify",
-  "interposer": "rt_interpose.so"
- },
- "measuredAt": "2026-11-09T10:48:22+00:00",
- "probe": {
-  "file": "com.brummer10.LoadBox@unversioned-6472de9ad93b.custom.probe.json",
-  "sha256": "24d1b44759f01ed18473babdb57ccf0544e06ac40e9f8462747105173eb36ef0",
-  "bytes": 10404,
-  "protocol": {
-   "name": "plugin-hostd.probe-protocol",
-   "version": 1
   },
-  "reason": "on-request",
-  "outcome": "probe.ok",
-  "complete": true,
-  "machineClass": {
-   "arch": "x86_64",
-   "family": "amd",
-   "coreBand": "9-16",
-   "clockBand": "4.5GHz+",
-   "preemptRt": false,
-   "cstatesLimited": false
-  },
-  "meetsProtocol": false,
-  "load": {
-   "loadavg1": 3.83,
-   "cores": 3
+  "run": {
+    "id": "20261123T222120Z-2125-533cd3f7",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
   }
- },
- "run": {
-  "id": "20261109T104822Z-1c8f-75327a22",
-  "steps": [
-   {
-    "step": "scan",
-    "result": "ok"
-   },
-   {
-    "step": "describe",
-    "result": "ok"
-   },
-   {
-    "step": "probe",
-    "result": "probe.ok"
-   },
-   {
-    "step": "rt-safety",
-    "result": "safe"
-   },
-   {
-    "step": "pool",
-    "result": "not-asked"
-   }
-  ]
- }
 }

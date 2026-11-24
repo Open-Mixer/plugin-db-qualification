@@ -1,208 +1,192 @@
 {
- "schema": "plugin-qualify.qualification-record/1",
- "plugin": {
-  "format": "clap",
-  "id": "in.lsp-plug.spectrum_analyzer_x16"
- },
- "binary": {
-  "path": "lsp-plugins.clap",
-  "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
-  "files": [
-   {
-    "path": "lsp-plugins.clap",
-    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
-   }
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "in.lsp-plug.spectrum_analyzer_x16"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+    "files": [
+      {
+        "path": "lsp-plugins.clap",
+        "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "304abf52884d95e2f8d29edfc3f0d95c37a7778b3aae3831d4f9bd9dbef19360"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
   ],
-  "layout": {
-   "scheme": "omx-layout/1",
-   "sha256": "304abf52884d95e2f8d29edfc3f0d95c37a7778b3aae3831d4f9bd9dbef19360"
-  }
- },
- "hostExtensions": [
-  "clap.log",
-  "clap.thread-check",
-  "clap.latency",
-  "clap.params",
-  "clap.audio-ports",
-  "clap.state",
-  "clap.note-ports",
-  "clap.note-name",
-  "clap.voice-info",
-  "clap.event-registry",
-  "clap.timer-support",
-  "clap.posix-fd-support",
-  "clap.thread-pool",
-  "clap.tail",
-  "clap.surround/4",
-  "clap.ambisonic/3",
-  "clap.audio-ports-config"
- ],
- "verdicts": [
-  {
-   "host": "openmixer-console",
-   "measured": true,
-   "rating": "unknown",
-   "qualified": false,
-   "hosting": "isolated",
-   "arm": "declaration",
-   "deciding": "hosting.memory.unmeasured",
-   "reasons": [
-    {
-     "dimension": "rtSafety",
-     "rating": "suitable",
-     "code": "hosting.rt-safety.clean-under-sweep",
-     "params": {
-      "blocks": 512
-     }
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
     },
-    {
-     "dimension": "memory",
-     "rating": "unknown",
-     "code": "hosting.memory.unmeasured",
-     "params": {
-      "rate": 96000,
-      "quantum": 1024
-     }
-    }
-   ]
-  }
- ],
- "tiers": {
-  "inProcess": {
-   "host": "openmixer-console",
-   "measured": true,
-   "qualified": false,
-   "rating": "unknown",
-   "deciding": "hosting.memory.unmeasured"
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
   },
-  "offeredOn": [],
-  "dimmed": "openmixer-console: hosting.memory.unmeasured"
- },
- "cost": [
-  {
-   "host": "openmixer-console",
-   "rate": 96000,
-   "quantum": 1024,
-   "reasons": [
+  "cost": [
     {
-     "dimension": "cost",
-     "rating": "unknown",
-     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
-     "params": {
+      "host": "openmixer-console",
       "rate": 96000,
-      "quantum": 1024
-     }
+      "quantum": 256,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
     }
-   ]
-  }
- ],
- "measurements": {
-  "grid": [
-   {
-    "rate": 48000,
-    "quantum": 128,
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 113.574,
+          "percentile": {
+            "p": 95,
+            "value": 695.683
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 28324,
+          "afterActivateKb": 29852,
+          "atRestKb": 30168,
+          "secondInstanceKb": 10256,
+          "firstInstanceKb": 30168,
+          "perInstanceKb": 10256
+        },
+        "latencyMs": 0
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-23T22:49:37+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "in.lsp-plug.spectrum_analyzer_x16@unversioned-823d2c8dab8c.default.probe.json",
+    "sha256": "26a4d9e70a3f05b85b59f4aeab41acabba82d0581576f2e2cc2089c6049d377a",
+    "bytes": 10276,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
     "outcome": "probe.ok",
-    "latency": {
-     "declaredFrames": 0,
-     "measuredFrames": 0
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
     },
-    "cost": {
-     "median": 115.336,
-     "percentile": {
-      "p": 95,
-      "value": 729.676
-     },
-     "blocks": 512,
-     "warmupBlocks": 64
-    },
-    "rtSafety": {
-     "interposer": true,
-     "swept": true,
-     "sweepApplicable": true,
-     "blocks": 512,
-     "allocations": 0,
-     "locks": 0,
-     "syscalls": 0,
-     "threadViolations": 0,
-     "processErrors": 0,
-     "events": []
-    },
-    "noteSweep": {
-     "applicable": false
-    },
-    "memory": {
-     "afterInstantiateKb": 28448,
-     "afterActivateKb": 29864,
-     "atRestKb": 30140,
-     "secondInstanceKb": 10256,
-     "firstInstanceKb": 30140,
-     "perInstanceKb": 10256
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 3.2,
+      "cores": 3
     }
-   }
-  ]
- },
- "notMeasured": [
-  {
-   "dimension": "stability",
-   "code": "hosting.stability.unsoaked"
-  }
- ],
- "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
-  "child": "clap-qualify",
-  "interposer": "rt_interpose.so"
- },
- "measuredAt": "2026-11-09T11:07:31+00:00",
- "probe": {
-  "file": "in.lsp-plug.spectrum_analyzer_x16@unversioned-823d2c8dab8c.default.probe.json",
-  "sha256": "001739014371362ec363bff22b210f85af93bfb3aee466d786a19ed428fba0eb",
-  "bytes": 10396,
-  "protocol": {
-   "name": "plugin-hostd.probe-protocol",
-   "version": 1
   },
-  "reason": "on-request",
-  "outcome": "probe.ok",
-  "complete": true,
-  "machineClass": {
-   "arch": "x86_64",
-   "family": "amd",
-   "coreBand": "9-16",
-   "clockBand": "4.5GHz+",
-   "preemptRt": false,
-   "cstatesLimited": false
-  },
-  "meetsProtocol": false,
-  "load": {
-   "loadavg1": 0.99,
-   "cores": 3
+  "run": {
+    "id": "20261123T224937Z-80d4-2f065b14",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
+      }
+    ]
   }
- },
- "run": {
-  "id": "20261109T110731Z-7c75-52b6e334",
-  "steps": [
-   {
-    "step": "scan",
-    "result": "ok"
-   },
-   {
-    "step": "describe",
-    "result": "ok"
-   },
-   {
-    "step": "probe",
-    "result": "probe.ok"
-   },
-   {
-    "step": "rt-safety",
-    "result": "safe"
-   },
-   {
-    "step": "isolated",
-    "result": "refused",
-    "code": "isolated.not-added",
-    "detail": "add answered -509"
-   }
-  ]
- }
 }

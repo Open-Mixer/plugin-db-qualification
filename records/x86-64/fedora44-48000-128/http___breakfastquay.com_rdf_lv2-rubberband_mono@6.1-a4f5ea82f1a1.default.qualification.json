@@ -1,0 +1,284 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://breakfastquay.com/rdf/lv2-rubberband#mono"
+  },
+  "testedVersion": "6.1",
+  "binary": {
+    "path": "lv2-rubberband.so",
+    "sha256": "a4f5ea82f1a1c8ef9dd1f4d527bba8f9b97dcc15c33a10c2bd197dc4d3d96a07",
+    "files": [
+      {
+        "path": "lv2-rubberband.so",
+        "sha256": "a4f5ea82f1a1c8ef9dd1f4d527bba8f9b97dcc15c33a10c2bd197dc4d3d96a07"
+      },
+      {
+        "path": "lv2-rubberband.ttl",
+        "sha256": "fa36b08ec0e930bd6a8c18c57368f1df862849e76846a1ceb0df06c50db45a64"
+      },
+      {
+        "path": "manifest.ttl",
+        "sha256": "c836ad83cda3d063f102472ab23d78397f942dda0901922c7b40361c8fae99cb"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "ea9840d00ba7636e9c886a8cc5222bca55ef8fde88f00e01ac8569ed05044718"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "conditional",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "run",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 20,
+            "syscalls": 0,
+            "locks": 0
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 20,
+            "syscalls": 0,
+            "locks": 0
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {
+    "host": "omx-clap-host",
+    "measured": true,
+    "admitted": true,
+    "params": {}
+  },
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": false,
+      "rating": "conditional",
+      "deciding": "hosting.rt-safety.violations-in-run",
+      "runsAlone": true
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unsuitable",
+          "code": "hosting.cost.above-ceiling",
+          "params": {
+            "coreFractionP95": 0.12261216,
+            "ceiling": 0.05
+          }
+        },
+        {
+          "dimension": "cost",
+          "rating": "conditional",
+          "code": "hosting.cost.spiky-tail",
+          "params": {
+            "tailRatio": 5.237150179395182,
+            "ceiling": 4
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 256,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 8192,
+          "measuredFrames": 8169
+        },
+        "cost": {
+          "median": 487.75,
+          "percentile": {
+            "p": 95,
+            "value": 2554.42
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 20,
+          "locks": 0,
+          "syscalls": 0,
+          "events": [
+            "malloc ? ?",
+            "free ? ?"
+          ]
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 8020,
+          "afterActivateKb": 8020,
+          "atRestKb": 8224,
+          "secondInstanceKb": 796,
+          "firstInstanceKb": 8224,
+          "perInstanceKb": 796
+        },
+        "latencyMs": 170.1875
+      }
+    ],
+    "behaviour": {
+      "lifecycle": {
+        "cycles": 30,
+        "instantiated": 30,
+        "failed": 0
+      },
+      "threads": {
+        "before": 1,
+        "afterFirstInstantiate": 1,
+        "afterAllFreed": 1
+      },
+      "features": {
+        "required": []
+      }
+    }
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "lv2_measure",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-24T01:18:25+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "http___breakfastquay.com_rdf_lv2-rubberband_mono@6.1-a4f5ea82f1a1.default.probe.json",
+    "sha256": "f771e2e45cfd998207b2e222b8a380cf1ad7101d3ff592b628f40cc986b2c678",
+    "bytes": 10330,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 0.94,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261124T011825Z-189f9-28e7b088",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "unsafe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 8192,
+          "cpuPercent": 1.6666666666666667,
+          "xruns": 0,
+          "midiInputsLinked": 0
+        }
+      }
+    ]
+  }
+}

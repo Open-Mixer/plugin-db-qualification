@@ -1,221 +1,192 @@
 {
- "schema": "plugin-qualify.qualification-record/1",
- "plugin": {
-  "format": "clap",
-  "id": "in.lsp-plug.mixer_x4_mono"
- },
- "binary": {
-  "path": "lsp-plugins.clap",
-  "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
-  "files": [
-   {
-    "path": "lsp-plugins.clap",
-    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
-   }
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "in.lsp-plug.mixer_x4_mono"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/lsp-plugins.clap",
+    "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9",
+    "files": [
+      {
+        "path": "lsp-plugins.clap",
+        "sha256": "823d2c8dab8ca2dcdeabd2451e6dca69172b1502d622d47532a423977a45fcc9"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "dd955a343896356962fc315b814c2b50bcdd806a13d09ebae2225ae1400a1c7e"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
   ],
-  "layout": {
-   "scheme": "omx-layout/1",
-   "sha256": "dd955a343896356962fc315b814c2b50bcdd806a13d09ebae2225ae1400a1c7e"
-  }
- },
- "hostExtensions": [
-  "clap.log",
-  "clap.thread-check",
-  "clap.latency",
-  "clap.params",
-  "clap.audio-ports",
-  "clap.state",
-  "clap.note-ports",
-  "clap.note-name",
-  "clap.voice-info",
-  "clap.event-registry",
-  "clap.timer-support",
-  "clap.posix-fd-support",
-  "clap.thread-pool",
-  "clap.tail",
-  "clap.surround/4",
-  "clap.ambisonic/3",
-  "clap.audio-ports-config"
- ],
- "verdicts": [
-  {
-   "host": "openmixer-console",
-   "measured": true,
-   "rating": "unknown",
-   "qualified": false,
-   "hosting": "isolated",
-   "arm": "declaration",
-   "deciding": "hosting.memory.unmeasured",
-   "reasons": [
-    {
-     "dimension": "rtSafety",
-     "rating": "conditional",
-     "code": "hosting.rt-safety.violations-in-run",
-     "params": {
-      "allocations": 14,
-      "syscalls": 0,
-      "locks": 2
-     }
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
     },
-    {
-     "dimension": "memory",
-     "rating": "unknown",
-     "code": "hosting.memory.unmeasured",
-     "params": {
-      "rate": 96000,
-      "quantum": 1024
-     }
-    }
-   ]
-  }
- ],
- "tiers": {
-  "inProcess": {
-   "host": "openmixer-console",
-   "measured": true,
-   "qualified": false,
-   "rating": "unknown",
-   "deciding": "hosting.memory.unmeasured"
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
   },
-  "offeredOn": [],
-  "dimmed": "openmixer-console: hosting.memory.unmeasured"
- },
- "cost": [
-  {
-   "host": "openmixer-console",
-   "rate": 96000,
-   "quantum": 1024,
-   "reasons": [
+  "cost": [
     {
-     "dimension": "cost",
-     "rating": "unknown",
-     "code": "hosting.cost.unmeasured-at-rate-and-quantum",
-     "params": {
+      "host": "openmixer-console",
       "rate": 96000,
-      "quantum": 1024
-     }
+      "quantum": 256,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
     }
-   ]
-  }
- ],
- "measurements": {
-  "grid": [
-   {
-    "rate": 48000,
-    "quantum": 128,
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 48000,
+        "quantum": 128,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 4.46094,
+          "percentile": {
+            "p": 95,
+            "value": 6.89062
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 18696,
+          "afterActivateKb": 18968,
+          "atRestKb": 19516,
+          "secondInstanceKb": 384,
+          "firstInstanceKb": 19516,
+          "perInstanceKb": 384
+        },
+        "latencyMs": 0
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-23T22:44:26+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "in.lsp-plug.mixer_x4_mono@unversioned-823d2c8dab8c.default.probe.json",
+    "sha256": "527df889e1f929b595b7e7ba27cb87eed70ead706c137908ec7a0c33943b3a1c",
+    "bytes": 10257,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
     "outcome": "probe.ok",
-    "latency": {
-     "declaredFrames": 0,
-     "measuredFrames": 0
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
     },
-    "cost": {
-     "median": 8.14062,
-     "percentile": {
-      "p": 95,
-      "value": 11.0391
-     },
-     "blocks": 512,
-     "warmupBlocks": 64
-    },
-    "rtSafety": {
-     "interposer": true,
-     "swept": true,
-     "sweepApplicable": true,
-     "blocks": 512,
-     "allocations": 14,
-     "locks": 2,
-     "syscalls": 0,
-     "threadViolations": 0,
-     "processErrors": 0,
-     "events": [
-      "free",
-      "free",
-      "pthread_mutex_lock",
-      "malloc",
-      "realloc",
-      "malloc",
-      "malloc",
-      "free",
-      "free",
-      "free",
-      "malloc",
-      "malloc",
-      "pthread_mutex_lock",
-      "malloc",
-      "malloc",
-      "malloc"
-     ]
-    },
-    "noteSweep": {
-     "applicable": false
-    },
-    "memory": {
-     "afterInstantiateKb": 18512,
-     "afterActivateKb": 18848,
-     "atRestKb": 19420,
-     "secondInstanceKb": 108,
-     "firstInstanceKb": 19420,
-     "perInstanceKb": 108
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 2.57,
+      "cores": 3
     }
-   }
-  ]
- },
- "notMeasured": [
-  {
-   "dimension": "stability",
-   "code": "hosting.stability.unsoaked"
-  }
- ],
- "tool": {
-  "runner": "plugin-hostd-probe 0.20.0",
-  "child": "clap-qualify",
-  "interposer": "rt_interpose.so"
- },
- "measuredAt": "2026-11-09T11:03:31+00:00",
- "probe": {
-  "file": "in.lsp-plug.mixer_x4_mono@unversioned-823d2c8dab8c.default.probe.json",
-  "sha256": "62d923ada8ef21f5212d7bc9ff7450ee19de0b4eb730e302346c6df9181d9ba9",
-  "bytes": 10572,
-  "protocol": {
-   "name": "plugin-hostd.probe-protocol",
-   "version": 1
   },
-  "reason": "on-request",
-  "outcome": "probe.ok",
-  "complete": true,
-  "machineClass": {
-   "arch": "x86_64",
-   "family": "amd",
-   "coreBand": "9-16",
-   "clockBand": "4.5GHz+",
-   "preemptRt": false,
-   "cstatesLimited": false
-  },
-  "meetsProtocol": false,
-  "load": {
-   "loadavg1": 1.07,
-   "cores": 3
+  "run": {
+    "id": "20261123T224426Z-6205-0e99e544",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
+      }
+    ]
   }
- },
- "run": {
-  "id": "20261109T110331Z-5c71-bfe43f47",
-  "steps": [
-   {
-    "step": "scan",
-    "result": "ok"
-   },
-   {
-    "step": "describe",
-    "result": "ok"
-   },
-   {
-    "step": "probe",
-    "result": "probe.ok"
-   },
-   {
-    "step": "rt-safety",
-    "result": "safe"
-   }
-  ]
- }
 }

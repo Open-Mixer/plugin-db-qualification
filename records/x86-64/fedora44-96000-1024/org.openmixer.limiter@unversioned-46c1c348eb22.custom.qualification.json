@@ -1,0 +1,180 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "org.openmixer.limiter"
+  },
+  "binary": {
+    "path": "/usr/lib/clap/omx-limiter.clap",
+    "sha256": "46c1c348eb22cc0c90d5f871a5eb6e1f6fbac9622e82dd7dccd7d0ff843233c3",
+    "files": [
+      {
+        "path": "omx-limiter.clap",
+        "sha256": "46c1c348eb22cc0c90d5f871a5eb6e1f6fbac9622e82dd7dccd7d0ff843233c3"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "7b895867b5069fdd3d11898522ed172d5cd87bdf00ba3b1e7d89eecd533626f0"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 1024,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 180,
+          "measuredFrames": 180
+        },
+        "cost": {
+          "median": 0.606445,
+          "percentile": {
+            "p": 95,
+            "value": 59.6235
+          },
+          "blocks": 512,
+          "warmupBlocks": 64
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": false
+        },
+        "memory": {
+          "afterInstantiateKb": 332,
+          "afterActivateKb": 392,
+          "atRestKb": 712,
+          "secondInstanceKb": 44,
+          "firstInstanceKb": 712,
+          "perInstanceKb": 44
+        },
+        "latencyMs": 1.875
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-23T22:06:59+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "org.openmixer.limiter@unversioned-46c1c348eb22.custom.probe.json",
+    "sha256": "9b0ee4b2e4463cd13021cbaabd6616b7bc2e80605f992b236dab4625dfe1008e",
+    "bytes": 10310,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 2.93,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261123T220659Z-86b-f1fea187",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "pool",
+        "result": "not-asked"
+      }
+    ]
+  }
+}

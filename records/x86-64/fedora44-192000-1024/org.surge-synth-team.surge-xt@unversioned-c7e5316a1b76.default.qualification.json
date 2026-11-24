@@ -1,0 +1,282 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "clap",
+    "id": "org.surge-synth-team.surge-xt"
+  },
+  "binary": {
+    "path": "/usr/lib64/clap/Surge_XT.clap",
+    "sha256": "c7e5316a1b76d6f3136267e475d85108d534ce25b948af8a728608e351e6f98a",
+    "files": [
+      {
+        "path": "Surge_XT.clap",
+        "sha256": "c7e5316a1b76d6f3136267e475d85108d534ce25b948af8a728608e351e6f98a"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "a7af581f6b4de24cff3eef99d50a5130c08abb7188d4f6b4b952b2bd7308424e"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-in-run",
+          "params": {
+            "allocations": 127996,
+            "syscalls": 0,
+            "locks": 51286
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "conditional",
+          "code": "hosting.rt-safety.violations-under-notes",
+          "params": {
+            "allocations": 4720,
+            "syscalls": 0,
+            "locks": 49154
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "offeredOn": [],
+    "dimmed": "openmixer-console: hosting.memory.unmeasured"
+  },
+  "cost": [
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 256,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 192000,
+        "quantum": 1024,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 103
+        },
+        "cost": {
+          "median": 2913.41,
+          "percentile": {
+            "p": 95,
+            "value": 57690.6
+          },
+          "blocks": 512,
+          "warmupBlocks": 64,
+          "voices": {
+            "held": 128,
+            "basis": "declared",
+            "capacity": 128
+          },
+          "voiceCurve": [
+            {
+              "held": 1,
+              "median": 111.997,
+              "percentile": {
+                "p": 95,
+                "value": 346.241
+              }
+            },
+            {
+              "held": 8,
+              "median": 112.76,
+              "percentile": {
+                "p": 95,
+                "value": 3797.35
+              }
+            },
+            {
+              "held": 16,
+              "median": 113.342,
+              "percentile": {
+                "p": 95,
+                "value": 8187.12
+              }
+            },
+            {
+              "held": 32,
+              "median": 110.857,
+              "percentile": {
+                "p": 95,
+                "value": 17051
+              }
+            },
+            {
+              "held": 48,
+              "median": 111.649,
+              "percentile": {
+                "p": 95,
+                "value": 25917.8
+              }
+            },
+            {
+              "held": 64,
+              "median": 115.974,
+              "percentile": {
+                "p": 95,
+                "value": 34650.5
+              }
+            }
+          ]
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 127996,
+          "locks": 51286,
+          "syscalls": 0,
+          "threadViolations": 0,
+          "processErrors": 0,
+          "events": [
+            "malloc",
+            "free",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "malloc",
+            "free",
+            "malloc",
+            "free"
+          ]
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "clap",
+          "allocations": 4720,
+          "locks": 49154,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 36396,
+          "afterActivateKb": 36432,
+          "atRestKb": 36632,
+          "notesHeldKb": 38320,
+          "secondInstanceKb": 15968,
+          "basis": "declared",
+          "firstInstanceKb": 38320,
+          "perInstanceKb": 17656
+        },
+        "latencyMs": 0.536458
+      }
+    ]
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "clap-qualify",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-23T22:05:17+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "org.surge-synth-team.surge-xt@unversioned-c7e5316a1b76.default.probe.json",
+    "sha256": "a360d518a8d8c1ef6a8f091859d2c7e4368d854a4a5aa49c5ff1092087e9d989",
+    "bytes": 11282,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 4.92,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261123T220517Z-54a-6db5f9ea",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "refused",
+        "code": "isolated.not-added",
+        "detail": "add answered -509: manifest.ttl is in no bundle of lv2_path naming the plugin"
+      }
+    ]
+  }
+}

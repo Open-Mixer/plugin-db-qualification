@@ -1,0 +1,342 @@
+{
+  "schema": "plugin-qualify.qualification-record/1",
+  "plugin": {
+    "format": "lv2",
+    "id": "http://www.openavproductions.com/sorcer"
+  },
+  "binary": {
+    "path": "sorcer.so",
+    "sha256": "225e6249baccbe803832dcaf278535c9b69b9c1da38d11666c82b527c63b150e",
+    "files": [
+      {
+        "path": "manifest.ttl",
+        "sha256": "a08d8adf2d1ea7e0738fc1d90cdfaced54bc3bc7aae6c705a2dad6692928388c"
+      },
+      {
+        "path": "sorcer.so",
+        "sha256": "225e6249baccbe803832dcaf278535c9b69b9c1da38d11666c82b527c63b150e"
+      },
+      {
+        "path": "sorcer.ttl",
+        "sha256": "0f40c5d81392f53be0f80314b91112e8e7816f1fcf18b4523ba0876f2614538c"
+      }
+    ],
+    "layout": {
+      "scheme": "omx-layout/1",
+      "sha256": "e135ddcaa7823796b19d833713e2b025acddea966a723d71ec52be8e4ef0f464"
+    }
+  },
+  "verdicts": [
+    {
+      "host": "omx-clap-host",
+      "measured": true,
+      "rating": "suitable",
+      "qualified": true,
+      "hosting": "isolated",
+      "arm": "run",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
+          "params": {
+            "blocks": 512,
+            "events": 0
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "measured": true,
+      "rating": "unknown",
+      "qualified": false,
+      "hosting": "isolated",
+      "arm": "declaration",
+      "deciding": "hosting.memory.unmeasured",
+      "reasons": [
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-sweep",
+          "params": {
+            "blocks": 512
+          }
+        },
+        {
+          "dimension": "rtSafety",
+          "rating": "suitable",
+          "code": "hosting.rt-safety.clean-under-notes",
+          "params": {
+            "blocks": 512,
+            "events": 0
+          }
+        },
+        {
+          "dimension": "memory",
+          "rating": "unknown",
+          "code": "hosting.memory.unmeasured",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "adapter": {
+    "host": "omx-clap-host",
+    "measured": true,
+    "admitted": true,
+    "params": {}
+  },
+  "tiers": {
+    "inProcess": {
+      "host": "openmixer-console",
+      "measured": true,
+      "qualified": false,
+      "rating": "unknown",
+      "deciding": "hosting.memory.unmeasured"
+    },
+    "isolated": {
+      "host": "omx-clap-host",
+      "measured": true,
+      "qualified": true,
+      "rating": "suitable"
+    },
+    "offeredOn": [
+      "isolated"
+    ]
+  },
+  "cost": [
+    {
+      "host": "omx-clap-host",
+      "rate": 48000,
+      "quantum": 128,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 48000,
+            "quantum": 128
+          }
+        }
+      ]
+    },
+    {
+      "host": "openmixer-console",
+      "rate": 96000,
+      "quantum": 256,
+      "reasons": [
+        {
+          "dimension": "cost",
+          "rating": "unknown",
+          "code": "hosting.cost.unmeasured-at-rate-and-quantum",
+          "params": {
+            "rate": 96000,
+            "quantum": 256
+          }
+        }
+      ]
+    }
+  ],
+  "measurements": {
+    "grid": [
+      {
+        "rate": 96000,
+        "quantum": 1024,
+        "outcome": "probe.ok",
+        "latency": {
+          "declaredFrames": 0,
+          "measuredFrames": 0
+        },
+        "cost": {
+          "median": 505.454,
+          "percentile": {
+            "p": 95,
+            "value": 882.061
+          },
+          "blocks": 512,
+          "warmupBlocks": 64,
+          "voices": {
+            "held": 16,
+            "basis": "probe"
+          },
+          "voiceCurve": [
+            {
+              "held": 1,
+              "median": 327.225,
+              "percentile": {
+                "p": 95,
+                "value": 361.289
+              }
+            },
+            {
+              "held": 8,
+              "median": 326.995,
+              "percentile": {
+                "p": 95,
+                "value": 357.956
+              }
+            },
+            {
+              "held": 16,
+              "median": 327.318,
+              "percentile": {
+                "p": 95,
+                "value": 343.576
+              }
+            },
+            {
+              "held": 32,
+              "median": 329.558,
+              "percentile": {
+                "p": 95,
+                "value": 344.986
+              }
+            },
+            {
+              "held": 48,
+              "median": 336.065,
+              "percentile": {
+                "p": 95,
+                "value": 359.564
+              }
+            },
+            {
+              "held": 64,
+              "median": 329.074,
+              "percentile": {
+                "p": 95,
+                "value": 346.493
+              }
+            }
+          ]
+        },
+        "rtSafety": {
+          "interposer": true,
+          "swept": true,
+          "sweepApplicable": true,
+          "blocks": 512,
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0,
+          "events": []
+        },
+        "noteSweep": {
+          "applicable": true,
+          "dialect": "midi",
+          "allocations": 0,
+          "locks": 0,
+          "syscalls": 0
+        },
+        "memory": {
+          "afterInstantiateKb": 8412,
+          "afterActivateKb": 8412,
+          "atRestKb": 8544,
+          "notesHeldKb": 8608,
+          "secondInstanceKb": 72,
+          "basis": "probe",
+          "firstInstanceKb": 8608,
+          "perInstanceKb": 136
+        },
+        "latencyMs": 0
+      }
+    ],
+    "behaviour": {
+      "lifecycle": {
+        "cycles": 30,
+        "instantiated": 30,
+        "failed": 0
+      },
+      "threads": {
+        "before": 1,
+        "afterFirstInstantiate": 1,
+        "afterAllFreed": 1
+      },
+      "features": {
+        "required": []
+      }
+    }
+  },
+  "notMeasured": [
+    {
+      "dimension": "stability",
+      "code": "hosting.stability.unsoaked"
+    }
+  ],
+  "tool": {
+    "runner": "plugin-hostd-probe 0.20.7",
+    "child": "lv2_measure",
+    "interposer": "rt_interpose.so"
+  },
+  "measuredAt": "2026-11-24T01:45:12+00:00",
+  "latencyLineMs": 5,
+  "rules": "plugin-qualify-rules/0.20",
+  "probe": {
+    "file": "http___www.openavproductions.com_sorcer@unversioned-225e6249bacc.default.probe.json",
+    "sha256": "6c4443f6bdb2003cabb0f47253ce9d8ab0a9cdba4b62d16d627b8f0d04d81a7c",
+    "bytes": 10945,
+    "protocol": {
+      "name": "plugin-hostd.probe-protocol",
+      "version": 1
+    },
+    "reason": "on-request",
+    "outcome": "probe.ok",
+    "complete": true,
+    "machineClass": {
+      "arch": "x86_64",
+      "family": "amd",
+      "coreBand": "9-16",
+      "clockBand": "4.5GHz+",
+      "preemptRt": false,
+      "cstatesLimited": false
+    },
+    "meetsProtocol": false,
+    "load": {
+      "loadavg1": 0.52,
+      "cores": 3
+    }
+  },
+  "run": {
+    "id": "20261124T014512Z-1a3fd-44a7f329",
+    "steps": [
+      {
+        "step": "scan",
+        "result": "ok"
+      },
+      {
+        "step": "describe",
+        "result": "ok"
+      },
+      {
+        "step": "probe",
+        "result": "probe.ok"
+      },
+      {
+        "step": "rt-safety",
+        "result": "safe"
+      },
+      {
+        "step": "isolated",
+        "result": "isolated",
+        "figures": {
+          "latencyFrames": 0,
+          "cpuPercent": 2.6666666666666665,
+          "xruns": 1,
+          "midiInputsLinked": 1
+        }
+      }
+    ]
+  }
+}

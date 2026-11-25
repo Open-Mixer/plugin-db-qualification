@@ -22,6 +22,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  trigger-gate:
+    name: only this workflow runs on a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Open-Mixer/.github/.github/actions/trigger-gate@openmixer-v1
+        with:
+          lint-workflow: check.yml
+
   records:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

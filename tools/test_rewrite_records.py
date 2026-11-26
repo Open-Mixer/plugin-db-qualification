@@ -211,16 +211,28 @@ class Format2(unittest.TestCase):
         self.sets = [self.copy("x86-64", "fedora44-48000-512", 3), self.copy("rpi5", "zynthian-vangelis", 3)]
 
     def copy(self, c, s, n):
+        """n records of a set with a timed cost, at probe format 1 as the device wrote them: records/ holds them re-cut
+        to format 2 (the commit after the tool), so the copy puts the two 1.x words back, and the record names the
+        bytes of the copy; a record still at format 1 is copied as it is"""
         src, dst = os.path.join(RECORDS, c, s), os.path.join(self.recs, c, s)
         os.makedirs(dst)
         taken = 0
         for f in record_names(c, s):
-            probe = load(os.path.join(src, f))["probe"]["file"]
-            with open(os.path.join(src, probe), encoding="utf-8") as fh:
-                if '"unit": "ns-per-sample"' not in fh.read():
-                    continue
-            shutil.copy(os.path.join(src, f), dst)
-            shutil.copy(os.path.join(src, probe), dst)
+            rec_text = open(os.path.join(src, f), encoding="utf-8").read()
+            probe = json.loads(rec_text)["probe"]
+            raw = open(os.path.join(src, probe["file"]), encoding="utf-8").read()
+            if '"unit": "nsPerSample"' in raw:
+                raw = raw.replace('"unit": "nsPerSample"', '"unit": "ns-per-sample"')
+                raw = raw.replace('"formatVersion": "2.0"', '"formatVersion": "1.4"', 1)
+            if '"unit": "ns-per-sample"' not in raw:
+                continue
+            data = raw.encode("utf-8")
+            rec_text = rec_text.replace(probe["sha256"], hashlib.sha256(data).hexdigest())
+            rec_text = rec_text.replace('"bytes": %d' % probe["bytes"], '"bytes": %d' % len(data))
+            with open(os.path.join(dst, f), "w", encoding="utf-8") as fh:
+                fh.write(rec_text)
+            with open(os.path.join(dst, probe["file"]), "wb") as fh:
+                fh.write(data)
             taken += 1
             if taken == n:
                 return dst

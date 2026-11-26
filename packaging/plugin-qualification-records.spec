@@ -4,8 +4,9 @@
 # The RPM side of the records: one package, plugin-qualification-records, per architecture, the same package the
 # Debian side builds from debian/. It carries every set of the machine classes packaging/arch-classes gives its
 # architecture, at /usr/share/omx/qualification/<class>/<set>/; plugin-qualify-sync chooses the set of the machine's
-# class and cell. A set is per machine class, per sample rate and per quantum (fedora44-48000-512). The version is the
-# dated one the tag and debian/changelog carry (vYYYYMMDDXX).
+# class and cell. A set is per machine class, per sample rate and per quantum (fedora44-48000-512). The version is
+# 0.MAJOR.MINOR, the one the tag (v<version>) and debian/changelog carry; the date stamp YYYYMMDDXX is the Release
+# (owner 2026-11-24, #81): it orders builds, the version says what is compatible.
 #
 # x86_64 carries the x86-64 class (the fedora44 sets). aarch64 carries the rpi5 class, the same sets the arm64 deb
 # carries: a package that depends on the records installs on Fedora aarch64 too, and a record applies only where the
@@ -20,8 +21,8 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026112401
-Release: 1%{?dist}
+Version: 0.1.0
+Release: 2026112601%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/Open-Mixer/plugin-db-qualification

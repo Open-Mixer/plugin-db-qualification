@@ -198,6 +198,11 @@ def spec_version(root):
     return m.group(1) if m else None
 
 
+def spec_release(root):
+    m = re.search(r"^Release: *(\S+)$", read(root, SPEC), re.M)
+    return m.group(1) if m else None
+
+
 class ImportRefused(Refused):
     def __init__(self, name, msg):
         super().__init__(f"import: {name}: {msg}")
@@ -346,6 +351,12 @@ def problems(root):
     deb, rpm = changelog_version(root), spec_version(root)
     if not deb or not rpm or deb != rpm:
         out.append(f"debian/changelog is {deb} but the spec is {rpm}; a tag must equal both")
+    # owner 2026-11-24 (#81): the version is 0.MAJOR.MINOR, the date stamp is the Release, never the version
+    if rpm and not re.fullmatch(r"0\.\d+\.\d+", rpm):
+        out.append(f"{SPEC}: Version {rpm} is not 0.MAJOR.MINOR; the date stamp YYYYMMDDXX goes in the Release")
+    rel = spec_release(root)
+    if not rel or not re.fullmatch(r"\d{10}%\{\?dist\}", rel):
+        out.append(f"{SPEC}: Release {rel} is not YYYYMMDDXX%{{?dist}}, the date and the day's serial")
     return out
 
 

@@ -9,9 +9,8 @@ and 8, change 2). The round trip runs over every record of records/; the refusal
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones:
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
 (plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
-PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them (<contractdir>/3/<package>/ and its MANIFEST.json, <package> the name that tree installs
-under: omx-clap since 0.34.0), the hosting exception of the spec; tools/sibling_contract.py assembles it. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
+PDQ_REF (default origin/main), the hosting domain from omx-clap-core's; tools/sibling_contract.py assembles it. Without
+PDQ_SIBLINGS the tests that need the words are skipped, saying so.
 """
 import contextlib
 import copy
@@ -35,7 +34,7 @@ TSV = os.path.join(HERE, "testdata", "field-columns.tsv")
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 SRC_SET = ("x86-64", "fedora44-48000-512")
 sys.path.insert(0, HERE)
-from sibling_contract import DOMAIN_REPO, contract_dir, hosting_dir, remove  # noqa: E402
+from sibling_contract import DOMAIN_REPO, contract_dir, remove  # noqa: E402
 
 SENTENCE_PATHS = ("binary.unpinnable", "run.steps[].detail", "measurements.grid[].memory.unmeasuredDetail",
                   "measurements.unmeasured[].detail", "tiers.dimmed")
@@ -852,8 +851,8 @@ class Packaging(unittest.TestCase):
         self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)|libsqlite3-dev \(>= 3\.37\.0\)", "", deps), r"\(")
 
     def test_the_hosting_words_come_from_omx_clap_contract_not_its_old_name(self):
-        """omx-clap-core installs the hosting words as the contract package omx-clap (<contractdir>/3/omx-clap/),
-        shipped as omx-clap-contract; the package's name before it is named nowhere."""
+        """omx-clap-core installs the hosting words as its domain hosting (<contractdir>/hosting/), shipped as
+        omx-clap-contract; the package's name before it is named nowhere."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         spec = self.read("packaging", "plugin-qualification-records.spec")
         self.assertRegex(control, r"(?m)omx-clap-contract(,|$)")
@@ -920,19 +919,15 @@ class SmallStore(Base):
         domains = dict(self.rows("SELECT domain, version FROM store_domain"))
         self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["hosting"]))
         for dom, version in domains.items():
-            if dom == "hosting":
-                self.assertEqual(version, load(os.path.join(hosting_dir(), "MANIFEST.json"))["version"])
-            else:
-                self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
+            self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
         checked = {(t, c) for t, c in self.rows("SELECT DISTINCT tbl, col FROM word_check")}
         missing = [tc for tc in schema_word_columns() if tc not in checked]
         self.assertEqual(missing, [], "word columns with no word_check row")
         for (d, i) in self.rows("SELECT DISTINCT domain, item FROM word_check"):
             self.assertIn(d, domains)
+            self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])
             if d == "hosting":
                 self.assertTrue(i.startswith("HOSTING_") and i.endswith("CODES"), i)
-            else:
-                self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])
 
 
 class RoundTrip(unittest.TestCase):

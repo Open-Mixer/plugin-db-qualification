@@ -10,7 +10,6 @@ builder (tools/records-db.py) imports.
 The module reads no environment variable and knows no list of words: the words come from the contract directory the
 caller passes.
 """
-import glob
 import json
 import os
 import pwd
@@ -27,14 +26,11 @@ if not os.path.exists(SCHEMA_SQL):
     SCHEMA_SQL = os.path.join(ROOT, "schema", "qualification.sql")
 RECORD_SCHEMA = "plugin-qualify.qualification-record/1"
 DOMAINS = ("qualification", "machine", "probe", "plugin-db", "hosting")
-# the first four are domain documents: <contractdir>/<domain>/<domain>.json. `hosting` is the one exception (the owner froze
-# vocabulary moves on 2026-11-19): its words are the codes of the contract package omx-clap (omx-clap-core's data/hosting.json
-# and data/hosting/*.json, items of kind codes), installed by its `make install-contract` as
-# <contractdir>/<schema major>/omx-clap/ since 0.34.0 (package omx-clap-contract); the name before 0.34.0 is not read.
-# store_domain holds hosting at the version of that package's MANIFEST.json.
-HOSTING = "hosting"
-HOSTING_PACKAGE = "omx-clap"
-DOCUMENT_DOMAINS = tuple(d for d in DOMAINS if d != HOSTING)
+# every one is a domain document: <contractdir>/<domain>/<domain>.json, at its info.version. `hosting` is omx-clap's domain
+# (omx-clap-core's contract.d/hosting, shipped by omx-clap-contract since 0.35.0): its items HOSTING_<group>_CODES hold the
+# hosting.* words as each one's const, as every other domain does. The contract package omx-clap (<contractdir>/omx-clap/,
+# its data/hosting.json of items of kind codes, which held them before) is no source of words, and nothing falls back to it.
+DOCUMENT_DOMAINS = DOMAINS
 
 
 class Refusal(Exception):
@@ -535,30 +531,6 @@ class Domains:
                 raise Refusal("contract.domain.invalid", f"{path}: {e}") from e
             for name, item in schemas.items():
                 self.items[(dom, name)] = [o["const"] for o in item.get("oneOf", []) if "const" in o]
-        self._hosting(contract_dir)
-
-    def _hosting(self, contract_dir):
-        """The package's own files: <contractdir>/<schema major>/omx-clap/{hosting.json, hosting/*.json, MANIFEST.json}.
-        An item of kind codes holds its words as the `code` of each of its `codes`; the version is the MANIFEST's."""
-        found = sorted(glob.glob(os.path.join(glob.escape(contract_dir), "[0-9]*", HOSTING_PACKAGE, "MANIFEST.json")))
-        if not found:
-            raise Refusal("contract.domain.absent", f"{contract_dir}: the package {HOSTING_PACKAGE} is not in the contract "
-                          f"directory (<schema major>/{HOSTING_PACKAGE}/MANIFEST.json): the hosting words are its codes")
-        if len(found) > 1:
-            raise Refusal("contract.domain.invalid", f"{found[0]} and {found[1]}: the package {HOSTING_PACKAGE} is installed twice")
-        pkg = os.path.dirname(found[0])
-        try:
-            with open(found[0], encoding="utf-8") as f:
-                self.version[HOSTING] = json.load(f)["version"]
-            files = [os.path.join(pkg, "hosting.json")] + sorted(glob.glob(os.path.join(glob.escape(pkg), "hosting", "*.json")))
-            for path in files:
-                with open(path, encoding="utf-8") as f:
-                    doc = json.load(f)
-                for name, item in doc.items():
-                    if isinstance(item, dict) and item.get("kind") == "codes":
-                        self.items[(HOSTING, name)] = [c["code"] for c in item["codes"].values()]
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-            raise Refusal("contract.domain.invalid", f"{pkg}: {e}") from e
 
     def resolve(self, column_items):
         """[(domain, item)] of a column, the hosting pattern expanded; refused when an item is not in its domain."""

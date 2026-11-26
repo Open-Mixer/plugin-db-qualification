@@ -73,11 +73,9 @@ column against the owner's installed domain. Nothing is copied into this reposit
 - `machine` and `probe`: plugin-hostd.
 - plugin-db's own domain: the plugin formats.
 
-The hosting words are the one exception, until omx-clap-core publishes a `hosting` domain.
-They are the codes of the installed contract package omx-clap, which omx-clap-contract ships
-(`hosting.json` and `hosting/*.json` under `<contractdir>/3/omx-clap/`). The writer reads them from there and refuses a hosting
-word that package does not hold. The store records them as the domain `hosting`, at that package's version. The reader
-passes over the hosting columns this pass.
+The hosting words are omx-clap's `hosting` domain (`<contractdir>/hosting/hosting.json`, which omx-clap-contract ships), read
+as every other domain: the writer refuses a hosting word the domain does not hold, and the store records the domain at its
+version. The reader still passes over the hosting columns (the spec's hosting exception, until `hosting-skip-ends` says so).
 
 The contract directory is the one omx-contract installs. The writer takes `--contract-dir`, then `OMX_CONTRACT_PATH`,
 then the `contractdir` of `libomx-domain.pc`.

@@ -637,11 +637,12 @@ only, while omx-clap's consumers need the hosting code strings, their sentences 
 `data/hosting*.json` renders today. So this pass omx-clap keeps `data/hosting*.json` as the one source of the
 hosting codes, and there is no `hosting` domain:
 
-- **The writer** reads the hosting words from the installed contract package `omx-clap` (each `kind: codes` item of
-  `<contractdir>/3/omx-clap/hosting.json` and `hosting/*.json` (the schema major 3), as omx-contract's installer lays
-  it out; omx-clap-core's tree installs its `data/` under the package name `omx-clap` since its 0.34.0, shipped as
-  `omx-clap-contract`, and the writer reads that name alone; its words are the `code` of each entry), refuses a hosting word none of them holds exactly as for any other
-  column, writes the `store_domain` row `hosting` at that package's version (its `MANIFEST.json` `version`), and fills `word_check` for the hosting columns as for the others.
+- **The writer** reads the hosting words from omx-clap's `hosting` domain document, `<contractdir>/hosting/hosting.json`
+  (omx-clap-core's `contract.d/hosting`, shipped by `omx-clap-contract` since 0.35.0, the devel wave of 2026-11-25: its
+  items `HOSTING_<group>_CODES`, each word a `const`), as it reads every other domain; it refuses a hosting word none of
+  them holds, writes the `store_domain` row `hosting` at the domain's `info.version`, and fills `word_check` for the
+  hosting columns as for the others. The contract package `omx-clap` (`data/hosting*.json`, items of kind `codes`),
+  which held them before, is read no more and is no fallback; the contract directory has no schema-major level.
 - **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents
   only. A column whose only items are `hosting` items is not checked; in a column that also has other owners' items
   (`verdict.deciding`, `tier.deciding`, `reason.code`), only a word beginning `hosting.` is passed over, and every

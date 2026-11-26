@@ -11,10 +11,10 @@
 # carries: a package that depends on the records installs on Fedora aarch64 too, and a record applies only where the
 # installed plugin's bytes are the measured ones.
 #
-# The block between BEGIN and END per-architecture is written by tools/sets.py spec: each architecture's
-# plugin-qualify floor (packaging/arch-classes) and the older package names it takes over (one package per set, the
-# names derived from records/), and tools/sets.py check holds it to them. The spec is read before %%prep unpacks the
-# tree, so that part is written here; %%install and %%files read the tree.
+# No OpenMixer package is named with a version written by hand: the build installs the lower levels' published
+# packages, the library's runtime dependencies are rpm's generated soname dependencies and the devel package's are the
+# ones rpm generates from plugin-qualification-db.pc; between subpackages of this spec, = %%{version}-%%{release}. The
+# one floor kept is third-party: sqlite 3.37.0, the first with STRICT tables.
 
 %global debug_package %{nil}
 %global qual_dir %{_datadir}/omx/qualification
@@ -33,23 +33,19 @@ BuildRequires: python3
 # the reader (the Makefile): sqlite 3.37.0 is the first with STRICT tables; libomx-domain is the contract loader
 BuildRequires: gcc make pkgconfig binutils
 BuildRequires: sqlite-devel >= 3.37.0
-BuildRequires: libomx-domain-devel >= 3.20.0
+BuildRequires: libomx-domain-devel
 # tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
 BuildRequires: python3-jsonschema
 # qualification and machine are plugin-hostd's domains, probe plugin-hostd-protocol's
-BuildRequires: plugin-hostd-contract >= 0.21.0
-BuildRequires: plugin-hostd-protocol-contract >= 0.8.0
-BuildRequires: plugin-db-contract >= 0.4.7
-BuildRequires: omx-clap-contract >= 0.34.0
+BuildRequires: plugin-hostd-contract
+BuildRequires: plugin-hostd-protocol-contract
+BuildRequires: plugin-db-contract
+BuildRequires: omx-clap-contract
 
-# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
-%ifarch x86_64
-Requires: plugin-qualify >= 0.20.7
-%endif
-%ifarch aarch64
-Requires: plugin-qualify >= 0.20.7
-%endif
-# END per-architecture
+# the sync that reads the records, a weak dependency: the records are inert data without it, and plugin-qualify builds
+# on plugin-hostd, which builds on this source's reader, so a hard one would make the records uninstallable until a
+# later layer of the wave is published (the staged install check of a merge to devel)
+Recommends: plugin-qualify
 
 %description
 The qualification layer of the plugin database: the plugin-qualify records of
@@ -71,7 +67,6 @@ and finds the CLAP plugins of /usr/lib64/clap once it says
 %package -n libplugin-qualification-db
 Summary: Reader of the OpenMixer qualification store
 Requires: sqlite-libs >= 3.37.0
-Requires: libomx-domain >= 3.20.0
 
 %description -n libplugin-qualification-db
 The C library that reads the qualification store: the base database of
@@ -84,7 +79,6 @@ Summary: Reader of the OpenMixer qualification store, development files
 Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
 Requires: plugin-qualification-db-schema = %{version}-%{release}
 Requires: sqlite-devel >= 3.37.0
-Requires: libomx-domain-devel >= 3.20.0
 
 %description -n libplugin-qualification-db-devel
 The header, the shared library link and plugin-qualification-db.pc, whose

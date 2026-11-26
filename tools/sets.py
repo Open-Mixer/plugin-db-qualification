@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 """The records package, plugin-qualification-records, per architecture (beside the reader's three packages): which sets each architecture carries,
-what it depends on, and which architectures a tag releases. The workflows,
+and which architectures a tag releases. The workflows,
 debian/rules and the spec read all of it from here.
 
     tools/sets.py check                         packaging/arch-classes, packaging/release-arches, debian/control,
@@ -10,10 +10,8 @@ debian/rules and the spec read all of it from here.
     tools/sets.py names deb|rpm                 the binary package names, space-separated (binary-names of the builds)
     tools/sets.py list deb|rpm <arch>           one line per set the package of <arch> carries: <class> <set> <cell or ->
     tools/sets.py github-output                 what release.yml's plan job needs, appended to $GITHUB_OUTPUT
-    tools/sets.py substvars <deb arch>          the substvar of the Debian package of <deb arch>: its plugin-qualify floor (debian/rules)
     tools/sets.py install deb|rpm <arch> <dir>  copies records/<class>/ of every class of <arch> into <dir>/<class>/
                                                 (debian/rules and the spec's %install)
-    tools/sets.py spec                          rewrites the spec's per-architecture block from arch-classes and records/
     tools/sets.py import <class> <set> <out-dir> [--provenance <file>]
                                                 copies the *.qualification.json and *.probe.json files of a
                                                 `plugin-qualify --out` directory (and the provenance) into
@@ -23,10 +21,9 @@ debian/rules and the spec read all of it from here.
                                                 proves every set it carries of this machine's host class
                                                 (tools/prove-set.sh), one after the other; the others are named, not proven
 
-packaging/arch-classes maps a Debian architecture and an RPM architecture to a machine class and the plugin-qualify
-floor of that architecture's package. Every set under records/<class>/ goes into the package of its class's
-architecture, at /usr/share/omx/qualification/<class>/<set>/; the sync chooses the set. A set is per machine class,
-per sample rate and per quantum: a set named <set>-<rate>-<quantum> holds that one cell.
+packaging/arch-classes maps a Debian architecture and an RPM architecture to a machine class. Every set under
+records/<class>/ goes into the package of its class's architecture, at /usr/share/omx/qualification/<class>/<set>/; the
+sync chooses the set. A set is per machine class, per sample rate and per quantum: a set named <set>-<rate>-<quantum> holds that one cell.
 
 The package carries no relation to the names the sets were published under before, one package per set, and none to
 another package of this source: no Provides, Replaces, Breaks, Conflicts or Obsoletes. Those names are pruned from the
@@ -59,8 +56,6 @@ BASE_DB = "qualification.sqlite"
 RECORD = ".qualification.json"
 PROBE = ".probe.json"
 CELL = re.compile(r"-([1-9][0-9]*)-([1-9][0-9]*)$")
-BLOCK_BEGIN = "# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/"
-BLOCK_END = "# END per-architecture"
 FORMATS = ("deb", "rpm")
 # tools/prove-set.sh set: the sync never took the set (named, not failed)
 UNPROVEN_RC = 3
@@ -80,12 +75,12 @@ def rows(text):
 
 
 def arch_classes(root):
-    """[{deb, rpm, class, from}] of packaging/arch-classes, in file order."""
+    """[{deb, rpm, class}] of packaging/arch-classes, in file order."""
     out = []
     for r in rows(read(root, ARCH_CLASSES)):
-        if len(r) != 4:
-            raise Refused(f"{ARCH_CLASSES}: {' '.join(r)!r} is not <deb arch> <rpm arch> <class> <from>")
-        out.append(dict(zip(("deb", "rpm", "class", "from"), r)))
+        if len(r) != 3:
+            raise Refused(f"{ARCH_CLASSES}: {' '.join(r)!r} is not <deb arch> <rpm arch> <class>")
+        out.append(dict(zip(("deb", "rpm", "class"), r)))
     return out
 
 
@@ -193,14 +188,6 @@ def carried(root, kind, arch):
     return out
 
 
-def qualify_floor(root, kind, arch):
-    """The plugin-qualify floor of <arch>; refused when its classes give two."""
-    floors = {line["from"] for line in lines_of(root, kind, arch)}
-    if len(floors) != 1:
-        raise Refused(f"{kind} architecture {arch} has {len(floors)} plugin-qualify floors in {ARCH_CLASSES}, not one")
-    return floors.pop()
-
-
 def changelog_version(root):
     m = re.match(r"^\S+ \(([^)]*)\)", read(root, "debian", "changelog"))
     return m.group(1) if m else None
@@ -209,12 +196,6 @@ def changelog_version(root):
 def spec_version(root):
     m = re.search(r"^Version: *(\S+)$", read(root, SPEC), re.M)
     return m.group(1) if m else None
-
-
-def substvars(root, arch):
-    """The one substvar: the plugin-qualify floor. A package of this source carries no Provides, Replaces or Breaks."""
-    carried(root, "deb", arch)
-    return f"qualify:Depends=plugin-qualify (>= {qualify_floor(root, 'deb', arch)}~)\n"
 
 
 class ImportRefused(Refused):
@@ -291,32 +272,6 @@ def exclusive_arch(root):
     return m.group(1).split() if m else []
 
 
-def spec_block(root):
-    """The spec's per-architecture block: for each architecture it builds, the Requires."""
-    out = [BLOCK_BEGIN]
-    for arch in exclusive_arch(root):
-        low = qualify_floor(root, "rpm", arch)
-        out += [f"%ifarch {arch}", f"Requires: plugin-qualify >= {low}", "%endif"]
-    out.append(BLOCK_END)
-    return "\n".join(out)
-
-
-def spec_block_in_tree(root):
-    text = read(root, SPEC)
-    m = re.search(rf"^{re.escape(BLOCK_BEGIN)}$.*?^{re.escape(BLOCK_END)}$", text, re.M | re.S)
-    return (m.group(0), text) if m else (None, text)
-
-
-def write_spec(root):
-    block, text = spec_block_in_tree(root)
-    if block is None:
-        raise Refused(f"{SPEC} has no per-architecture block ({BLOCK_BEGIN!r} to {BLOCK_END!r})")
-    # the new block reads the spec (its ExclusiveArch): written before the file is opened for writing
-    text = text.replace(block, spec_block(root))
-    with open(os.path.join(root, SPEC), "w", encoding="utf-8") as f:
-        f.write(text)
-
-
 def control_stanzas(root):
     return [dict(re.findall(r"^([A-Za-z-]+): *(.*)$", s, re.M)) for s in read(root, "debian", "control").strip().split("\n\n")]
 
@@ -334,12 +289,6 @@ def problems(root):
     for c in sorted({c for c, _ in tree_sets(root)} - set(mapped)):
         out.append(f"records/{c}/: class {c} has no architecture in {ARCH_CLASSES}")
     deb_arches = sorted({line["deb"] for line in lines})
-    for kind in FORMATS:
-        for arch in sorted({line[kind] for line in lines}):
-            try:
-                qualify_floor(root, kind, arch)
-            except Refused as e:
-                out.append(str(e))
 
     for s in control_stanzas(root):
         for field in ("Provides", "Replaces", "Breaks", "Conflicts"):
@@ -356,8 +305,6 @@ def problems(root):
         if sorted(b.get("Architecture", "").split()) != deb_arches:
             out.append(f"debian/control: Architecture is {b.get('Architecture')!r}, not the Debian architectures of "
                        f"{ARCH_CLASSES}: {' '.join(deb_arches)}")
-        if "${qualify:Depends}" not in b.get("Depends", ""):
-            out.append("debian/control: Depends does not carry ${qualify:Depends}")
     for name in sorted(os.listdir(os.path.join(root, "debian"))):
         stem, ext = os.path.splitext(name)
         if name == "install" or (ext in PACKAGE_FILES and stem not in DEB_PACKAGES):
@@ -382,15 +329,6 @@ def problems(root):
     for arch in built:
         if arch not in rpm_arches:
             out.append(f"{SPEC}: ExclusiveArch {arch} has no class in {ARCH_CLASSES}")
-    block, _ = spec_block_in_tree(root)
-    if block is None:
-        out.append(f"{SPEC}: no per-architecture block")
-    else:
-        try:
-            if block != spec_block(root):
-                out.append(f"{SPEC}: the per-architecture block is not what tools/sets.py spec writes; run it")
-        except Refused as e:
-            out.append(str(e))
 
     for arch in rel["deb"]:
         if arch not in deb_arches:
@@ -537,8 +475,7 @@ def main(argv, root=os.path.dirname(HERE)):
             if not p:
                 for line in arch_classes(root):
                     n = len(tree_sets(root, line['class']))
-                    print(f"{line['deb']}/{line['rpm']}: {line['class']}, {n} set{'' if n == 1 else 's'}, "
-                          f"plugin-qualify {line['from']} or later")
+                    print(f"{line['deb']}/{line['rpm']}: {line['class']}, {n} set{'' if n == 1 else 's'}")
                 rel = release_arches(root)
                 print(f"this version releases: deb {' '.join(rel['deb']) or 'none'}, rpm {' '.join(rel['rpm']) or 'none'}")
             return 1 if p else 0
@@ -561,9 +498,6 @@ def main(argv, root=os.path.dirname(HERE)):
                 f.write("\n".join(lines) + "\n")
             print("\n".join(lines))
             return 0
-        if cmd == "substvars" and len(argv) == 2:
-            sys.stdout.write(substvars(root, argv[1]))
-            return 0
         if cmd == "install" and len(argv) == 4 and argv[1] in FORMATS:
             for c in install(root, argv[1], argv[2], argv[3]):
                 print(f"records/{c}/ -> {os.path.join(argv[3], c)}/")
@@ -571,9 +505,6 @@ def main(argv, root=os.path.dirname(HERE)):
         if cmd == "import" and len(argv) in (4, 6) and (len(argv) == 4 or argv[4] == "--provenance"):
             n = import_set(root, argv[1], argv[2], argv[3], argv[5] if len(argv) == 6 else None)
             print(f"records/{argv[1]}/{argv[2]}/: {n} record{'' if n == 1 else 's'} imported and checked")
-            return 0
-        if cmd == "spec" and len(argv) == 1:
-            write_spec(root)
             return 0
         if cmd == "prove" and len(argv) == 3 and argv[1] in FORMATS:
             return prove(root, argv[1], argv[2])

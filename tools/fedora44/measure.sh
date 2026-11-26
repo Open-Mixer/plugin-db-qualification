@@ -64,6 +64,14 @@ export GIT_SSH_COMMAND="ssh -i /keys/id_ed25519 -o IdentitiesOnly=yes -o UserKno
 git ls-remote --heads "$REPO" >/dev/null
 set +e
 
+# How many threads of pid $1 are at SCHED_FIFO (PROC is /proc; tools/test_fedora44_rt.py points it at a fake tree), and
+# whether a base is refused: no jackd pid, or none of its threads at SCHED_FIFO.
+fifo_threads() {
+  local t
+  for t in ${PROC:-/proc}/${1:-0}/task/*; do chrt -p "${t##*/}" 2>/dev/null; done | grep -c 'SCHED_FIFO'
+}
+fifo_refused() { [ -z "$1" ] || [ "$(fifo_threads "$1")" -eq 0 ]; }
+
 host_facts() {
   dnf repoquery --installed --qf '%{name} %{evr} %{from_repo}\n' | sort > $out/installed.txt
   # the packages that own a plugin directory's entries: the set's package list for provenance.json
@@ -140,12 +148,12 @@ C
   jpid=$(pgrep -x jackd | head -1)
   # jack2 keeps its main thread at SCHED_OTHER and runs its audio and driver threads at SCHED_FIFO: every thread is
   # read; memory is locked through IPC_LOCK, which lifts the memlock limit for mlock whatever ulimit -l says
-  fifo=$(for t in /proc/${jpid:-0}/task/*; do chrt -p "${t##*/}" 2>/dev/null; done | grep -c 'SCHED_FIFO')
+  fifo=$(fifo_threads "$jpid")
   { echo "base $cell: jackd pid ${jpid:-none}, $fifo thread(s) at SCHED_FIFO"
     for t in /proc/${jpid:-0}/task/*; do echo "  tid ${t##*/} $(cat $t/comm 2>/dev/null): $(chrt -p "${t##*/}" 2>/dev/null | tr '\n' ' ')"; done
     echo "ulimit -r $(ulimit -r) -l $(ulimit -l); CapEff $(grep CapEff /proc/self/status | awk '{print $2}')"; } >> $out/rt.txt 2>&1
   cp $out/rt.txt $dir/rt.txt 2>/dev/null || true
-  if [ -z "$jpid" ] || [ "$fifo" -eq 0 ]; then
+  if fifo_refused "$jpid"; then
     echo "stage $stage $cell: jackd is not SCHED_FIFO (no thread of pid ${jpid:-none} is); not measured: the reference tier needs real-time priority"
     kill $sup; pkill -x jackd; return 1
   fi

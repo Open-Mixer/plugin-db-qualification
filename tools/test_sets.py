@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
 """tools/sets.py: the one package, plugin-qualification-records, per architecture, held to packaging/arch-classes,
-packaging/release-arches, debian/, the spec and records/; debian/rules' install and substvars steps per architecture;
+packaging/release-arches, debian/, the spec and records/; debian/rules' install step per architecture;
 the workflows' outputs; and the install-and-sync proof (tools/prove-set.sh), installed once and run once per set.
 
     python3 -m unittest tools/test_sets.py
 
 The tree is a copy of packaging/, debian/ and tools/sets.py with records/ made of small sets, starting from the rpi5
 set alone and no x86-64 set, whatever sets this branch carries. debian/rules runs under make with a stand-in
-dh_gencontrol; the proof runs against a PROVE_ROOT with stand-ins for apt-get, dpkg-query, dnf, rpm and
+dh_install; the proof runs against a PROVE_ROOT with stand-ins for apt-get, dpkg-query, dnf, rpm and
 plugin-qualify-sync on PATH that log what they were asked.
 """
 import contextlib
@@ -29,6 +29,24 @@ ROOT = os.path.dirname(HERE)
 spec = importlib.util.spec_from_file_location("sets", os.path.join(HERE, "sets.py"))
 sets = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sets)
+
+
+_gspec = importlib.util.spec_from_file_location("golden_domain", os.path.join(HERE, "golden_domain.py"))
+golden = importlib.util.module_from_spec(_gspec)
+_gspec.loader.exec_module(golden)
+_DOMAIN = []
+
+
+def setUpModule():
+    """the golden domain, where the record check reads it (OMX_CONTRACT_PATH): the tests read no installed one"""
+    tmp = tempfile.TemporaryDirectory()
+    _DOMAIN.append(tmp)
+    os.environ["OMX_CONTRACT_PATH"] = golden.write_domain(tmp.name)
+
+
+def tearDownModule():
+    os.environ.pop("OMX_CONTRACT_PATH", None)
+    _DOMAIN.pop().cleanup()
 
 PKG = "plugin-qualification-records"
 # the reader's packages beside the records package (this repository's qualification store spec, section 7)
@@ -100,7 +118,6 @@ class Tree(unittest.TestCase):
         with open(self.path("packaging", "release-arches"), "w") as f:
             f.write("".join(head) + "deb arm64\nrpm\n")
         self.add_set("rpi5", "zynthian-vangelis")
-        self.respec()
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -122,10 +139,6 @@ class Tree(unittest.TestCase):
     def with_two_cells(self):
         for s in CELLS:
             self.add_set("x86-64", s)
-        self.respec()
-
-    def respec(self):
-        self.assertEqual(sets.main(["spec"], root=self.root), 0)
 
     def edit(self, rel, old, new):
         p = self.path(*rel.split("/"))
@@ -143,6 +156,10 @@ class Tree(unittest.TestCase):
 
     def problems(self):
         return "\n".join(sets.problems(self.root))
+
+    def read_file(self, rel):
+        with open(self.path(*rel.split("/")), encoding="utf-8") as f:
+            return f.read()
 
 
 class Check(Tree):
@@ -170,20 +187,15 @@ class Check(Tree):
 
     def test_a_class_on_two_architectures_is_refused(self):
         with open(self.path("packaging", "arch-classes"), "a") as f:
-            f.write("riscv64 riscv64 rpi5 0.20.0\n")
+            f.write("riscv64 riscv64 rpi5\n")
         self.assertIn("class rpi5 is on two lines", self.problems())
 
-    def test_the_packaging_states_floors_only(self):
-        self.with_two_cells()
-        for text in (sets.spec_block(self.root), sets.substvars(self.root, "amd64"), sets.substvars(self.root, "arm64"),
-                     self.read_file(SPEC), self.read_file("debian/control"), self.read_file("packaging/arch-classes")):
-            self.assertNotRegex(text, r"plugin-qualify \(?(<|<<) ?\d|with plugin-qualify <")
-        for line in sets.arch_classes(self.root):
-            self.assertEqual(sorted(line), ["class", "deb", "from", "rpm"])
-
-    def read_file(self, rel):
-        with open(self.path(*rel.split("/")), encoding="utf-8") as f:
-            return f.read()
+    def test_an_arch_classes_line_with_a_fourth_column_is_refused(self):
+        """packaging/arch-classes names the architectures and the class, nothing else: the plugin-qualify floor it
+        once carried is gone (devel wave 2026-11-24, no OpenMixer version written by hand)."""
+        self.assertEqual(sorted(sets.arch_classes(self.root)[0]), ["class", "deb", "rpm"])
+        self.edit("packaging/arch-classes", "arm64       aarch64   rpi5\n", "arm64       aarch64   rpi5    0.21.0\n")
+        self.assertIn("is not <deb arch> <rpm arch> <class>", self.problems())
 
     def test_one_version_for_both_formats(self):
         self.edit(SPEC, "\nVersion: ", "\nVersion: 1")
@@ -192,26 +204,6 @@ class Check(Tree):
         self.assertEqual(sets.problems(self.root), [])
         self.edit("debian/changelog", f"({VERSION})", "(2026010101)")
         self.assertIn(f"debian/changelog is 2026010101 but the spec is {VERSION}", self.problems())
-
-    def test_this_repository_floors_plugin_qualify_at_0_20_7_once(self):
-        # the records need plugin-qualify 0.20.7: qualification domain 1.4.0, hostd_conf, the moved keys. One floor in
-        # packaging/arch-classes; the spec block and the deb substvar are generated from it, so they cannot disagree
-        real = os.path.dirname(HERE)
-        floors = {l["from"] for l in sets.arch_classes(real)}
-        self.assertEqual(floors, {"0.20.7"})
-        with open(os.path.join(real, SPEC), encoding="utf-8") as f:
-            spec = f.read()
-        self.assertEqual(re.findall(r"^Requires: plugin-qualify (.*)$", spec, re.M), [">= 0.20.7", ">= 0.20.7"])
-        for arch in ("amd64", "arm64"):
-            self.assertEqual(sets.substvars(real, arch), "qualify:Depends=plugin-qualify (>= 0.20.7~)\n")
-
-    def test_the_spec_block_follows_records_and_arch_classes(self):
-        for s in CELLS:
-            self.add_set("x86-64", s)
-        # the block holds the floors only: a set added to records/ moves nothing in it
-        self.assertEqual(sets.problems(self.root), [])
-        self.edit("packaging/arch-classes", "0.20.7\n", "0.20.8\n")
-        self.assertIn("the per-architecture block is not what tools/sets.py spec writes", self.problems())
 
     def test_debian_control_is_one_package_for_the_mapped_architectures(self):
         self.edit("debian/control", "Architecture: amd64 arm64", "Architecture: all")
@@ -446,46 +438,55 @@ class ReleaseArches(unittest.TestCase):
         self.assertIn("rpm-prove=true", written)
 
 
-class Substvars(Tree):
-    def vars(self, arch):
-        rc, out = self.run_main("substvars", arch)
-        self.assertEqual(rc, 0)
-        return dict(line.split("=", 1) for line in out.splitlines())
+class Dependencies(Tree):
+    """The records package recommends plugin-qualify, the sync that reads it, by its bare name (devel wave 2026-11-24:
+    the box installs the published plugin-qualify; no OpenMixer version is written by hand). A weak dependency: the
+    records are inert data without the sync, and plugin-qualify builds on plugin-hostd, which builds on this source's
+    reader, so a hard one left the records uninstallable in the staged install check until a later layer published."""
 
-    def names(self, field):
-        return [re.match(r"(\S+) \(", n).group(1) for n in field.split(", ")]
-
-    def test_arm64_takes_plugin_qualify_0_20_7_and_folds_the_rpi5_names(self):
-        self.with_two_cells()
-        v = self.vars("arm64")
-        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.7~)"})
-
-    def test_amd64_takes_plugin_qualify_0_20_7_and_folds_every_cell(self):
-        self.with_two_cells()
-        v = self.vars("amd64")
-        self.assertEqual(v, {"qualify:Depends": "plugin-qualify (>= 0.20.7~)"})
-
-    def test_the_rpm_folds_its_classes_names(self):
-        self.with_two_cells()
-        block = sets.spec_block(self.root)
-        self.assertIn("%ifarch x86_64\nRequires: plugin-qualify >= 0.20.7\n", block)
-        self.assertNotRegex(block, r"(?m)^(Provides|Obsoletes|Conflicts):")
-        # each architecture's block names its own classes only
-        self.assertNotIn("rpi5", block.split("%endif")[0])
-        self.assertIn("%ifarch aarch64\nRequires: plugin-qualify >= 0.20.7\n", block)
-        self.assertNotIn("x86-64", block.split("%ifarch aarch64")[1])
+    def test_both_formats_recommend_plugin_qualify_by_its_bare_name(self):
+        control = self.read_file("debian/control")
+        stanza = next(t for t in control.split("\n\n") if t.startswith(f"Package: {PKG}\n"))
+        self.assertRegex(stanza, r"(?m)^Recommends: plugin-qualify$")
+        self.assertNotRegex(stanza, r"(?m)^Depends: .*\bplugin-qualify\b")
+        self.assertNotIn("${qualify:Depends}", control)
+        spec = self.read_file(SPEC)
+        self.assertEqual(re.findall(r"(?m)^Recommends: plugin-qualify\b.*$", spec), ["Recommends: plugin-qualify"])
+        self.assertEqual(re.findall(r"(?m)^Requires: plugin-qualify\b.*$", spec), [])
         if shutil.which("rpmspec"):
             def q(*what):
                 return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
                                       capture_output=True, text=True, check=True).stdout
-            self.assertIn("plugin-qualify >= 0.20.7", q("--requires"))
+            self.assertIn("plugin-qualify\n", q("--recommends"))
+            self.assertNotRegex(q("--recommends"), r"plugin-qualify [<>=]")
+            self.assertNotIn("plugin-qualify", q("--requires"))
             self.assertEqual(q("--obsoletes").split(), [])
             self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
-    def test_an_architecture_with_no_class_or_no_set_is_refused(self):
-        self.assertEqual(self.run_main("substvars", "i386")[0], 1)
-        # amd64's class has no set until the x86-64 sets are in the tree
-        self.assertEqual(self.run_main("substvars", "amd64")[0], 1)
+    def test_no_openmixer_relation_carries_a_hand_written_version(self):
+        """The only versioned relations are = between this source's own packages, debhelper's compat level and the
+        third-party sqlite floor. Sabotage: an OpenMixer floor put back is named."""
+        for rel in ("debian/control", SPEC):
+            self.assertEqual(hand_written_versions(self.read_file(rel)), [], rel)
+        self.edit(SPEC, "Recommends: plugin-qualify\n", "Recommends: plugin-qualify >= 0.21.0\n")
+        self.assertEqual(hand_written_versions(self.read_file(SPEC)), ["plugin-qualify >= 0.21.0"])
+        # Build-Depends and the -dev package's Depends both name libomx-domain-dev: both floors are named
+        self.edit("debian/control", "libomx-domain-dev,", "libomx-domain-dev (>= 3.20.0),")
+        self.assertEqual(hand_written_versions(self.read_file("debian/control")), ["libomx-domain-dev (>= 3.20.0)"] * 2)
+
+
+# kept: third-party. sqlite 3.37.0 is the first with STRICT tables, an API fact of sqlite, not an OpenMixer release
+THIRD_PARTY_FLOORS = re.compile(r"^(libsqlite3-dev|libsqlite3-0) \(>= 3\.37\.0\)$|^sqlite-(devel|libs) >= 3\.37\.0$")
+
+
+def hand_written_versions(text):
+    """The relations of a spec or control text that carry a version, other than = between this source's own packages
+    (= %{version}-%{release}, = ${binary:Version}, = ${source:Version}), debhelper-compat (= 13) and the third-party
+    floors."""
+    deb = re.findall(r"[A-Za-z0-9.+_:-]+ *\([<>=]+ *[^)]*\)", text)
+    rpm = [v.strip() for v in re.findall(r"(?m)^(?:(?:Build)?Requires|Recommends|Suggests): *(.*)$", text) if re.search(r"[<>=]", v)]
+    own = re.compile(r"\(= \$\{(binary|source):Version\}\)$|^debhelper-compat \(= 13\)$|= %\{version\}-%\{release\}$")
+    return [f for f in deb + rpm if not own.search(f) and not THIRD_PARTY_FLOORS.match(f)]
 
 
 @unittest.skipUnless(shutil.which("make"), "make is not installed")
@@ -495,9 +496,6 @@ class Rules(Tree):
     def make(self, target, arch):
         bin_ = os.path.join(self.tmp.name, "bin")
         os.makedirs(bin_, exist_ok=True)
-        with open(os.path.join(bin_, "dh_gencontrol"), "w") as f:
-            f.write(f"#!/bin/sh\ncp debian/{PKG}.substvars \"$GENCONTROL_SAW\"\n")
-        os.chmod(os.path.join(bin_, "dh_gencontrol"), 0o755)
         # the reader's files are split by dh_install from the .install lists: not this test's concern
         with open(os.path.join(bin_, "dh_install"), "w") as f:
             f.write("#!/bin/sh\n")
@@ -509,11 +507,10 @@ class Rules(Tree):
         with open(self.path("tools", "records-db.py"), "w") as f:
             f.write("import sys\nopen('records-db.args', 'w').write(' '.join(sys.argv[1:]))\n"
                     "open(sys.argv[sys.argv.index('--out') + 1], 'w').write('database')\n")
-        saw = os.path.join(self.tmp.name, "substvars")
-        env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"], GENCONTROL_SAW=saw)
+        env = dict(os.environ, PATH=bin_ + os.pathsep + os.environ["PATH"])
         r = subprocess.run(["make", "-f", "debian/rules", target, f"DEB_HOST_ARCH={arch}"], cwd=self.root,
                            capture_output=True, text=True, env=env)
-        return r, saw
+        return r
 
     def read_args(self):
         with open(self.path("records-db.args")) as f:
@@ -525,7 +522,7 @@ class Rules(Tree):
 
     def test_arm64_installs_only_the_rpi5_sets(self):
         self.with_two_cells()
-        r, _ = self.make("override_dh_install", "arm64")
+        r = self.make("override_dh_install", "arm64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.installed(), ["qualification.sqlite", "rpi5/zynthian-vangelis/a.qualification.json",
                                             "rpi5/zynthian-vangelis/provenance.json"])
@@ -538,30 +535,18 @@ class Rules(Tree):
 
     def test_amd64_installs_only_the_x86_64_sets(self):
         self.with_two_cells()
-        r, _ = self.make("override_dh_install", "amd64")
+        r = self.make("override_dh_install", "amd64")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.installed(), ["qualification.sqlite"] + [f"x86-64/{s}/{f}" for s in CELLS
                                                                        for f in ("a.qualification.json", "provenance.json")])
         self.assertIn("--class x86-64 ", " ".join(self.read_args()) + " ")
         self.assertNotIn("rpi5", self.read_args())
 
-    def test_gencontrol_gets_the_architectures_substvars(self):
-        self.with_two_cells()
-        for arch, low in (("arm64", "0.20.7"), ("amd64", "0.20.7")):
-            if os.path.exists(self.path("debian", f"{PKG}.substvars")):
-                os.remove(self.path("debian", f"{PKG}.substvars"))
-            r, saw = self.make("override_dh_gencontrol", arch)
-            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-            with open(saw) as f:
-                text = f.read()
-            self.assertIn(f"qualify:Depends=plugin-qualify (>= {low}~)\n", text)
-            self.assertNotIn("fedora44", text)
-
     def test_an_architecture_with_no_class_or_no_set_fails_the_build(self):
-        r, _ = self.make("override_dh_install", "i386")
+        r = self.make("override_dh_install", "i386")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("deb architecture i386 has no class", r.stderr)
-        r, _ = self.make("override_dh_install", "amd64")
+        r = self.make("override_dh_install", "amd64")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("class x86-64 of deb architecture amd64 has no set under records/x86-64/", r.stderr)
 
@@ -662,7 +647,6 @@ class Prove(Tree):
         """x86-64 as the release carries it: the provisional set and the reference set of one cell."""
         self.add_set("x86-64", "fedora44-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])
         self.add_set("x86-64", "fedora44-rt-48000-64", tier="reference", measured="2026-11-09", cells=[(48000, 64)])
-        self.respec()
 
     def notes(self):
         with open(os.path.join(self.tmp.name, "notes.md")) as f:
@@ -698,7 +682,6 @@ class Prove(Tree):
                                       ("zynthian-vangelis-48000-256", "2026-11-08", [(48000, 256)]),
                                       ("zynthian-vangelis-96000-256", "2026-11-08", [(96000, 256)])):
             self.add_set("rpi5", name, tier="hardware", measured=measured, cells=cells)
-        self.respec()
         rc, out, log = self.prove("deb", "arm64", STUB_AT_48000_256="zynthian-vangelis", STUB_AT_96000_256="zynthian-vangelis",
                                   STUB_HOST="zynthian-vangelis", PROVE_NOTES=os.path.join(self.tmp.name, "notes.md"))
         self.assertEqual(rc, 0, out + log)
@@ -718,7 +701,6 @@ class Prove(Tree):
     def test_two_sets_of_one_tier_and_date_at_a_cell_fail_the_proof_by_the_rules_name(self):
         self.add_set("x86-64", "fedora44-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])
         self.add_set("x86-64", "fedora44-b-48000-64", tier="provisional", measured="2026-11-09", cells=[(48000, 64)])
-        self.respec()
         rc, out, log = self.prove("rpm", "x86_64")
         self.assertEqual(rc, 1)
         self.assertIn("claim-duplicate", out)

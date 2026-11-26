@@ -3,15 +3,16 @@ Section: sound
 Priority: optional
 Maintainer: Pau Aliagas <linuxnow@gmail.com>
 Build-Depends: debhelper-compat (= 13), python3:native, python3-jsonschema:native, pkgconf, libsqlite3-dev (>= 3.37.0),
- libomx-domain-dev (>= 3.20.0), plugin-hostd-contract (>= 0.21.0~), plugin-hostd-protocol-contract (>= 0.8.0~),
- plugin-db-contract (>= 0.4.7~), omx-clap-contract (>= 0.34.0~)
+ libomx-domain-dev, plugin-hostd-contract, plugin-hostd-protocol-contract,
+ plugin-db-contract, omx-clap-contract
 Standards-Version: 4.6.2
 Homepage: https://github.com/Open-Mixer/plugin-db-qualification
 Rules-Requires-Root: no
 
 Package: plugin-qualification-records
 Architecture: amd64 arm64
-Depends: ${misc:Depends}, ${qualify:Depends}
+Depends: ${misc:Depends}
+Recommends: plugin-qualify
 Description: plugin-db qualification layer: records of OpenMixer plugin sets
  The qualification layer of the plugin database: the plugin-qualify records
  of the plugin sets measured on a reference machine of a host class.
@@ -36,7 +37,7 @@ Package: libplugin-qualification-db0
 Section: libs
 Architecture: any
 Multi-Arch: same
-Depends: ${shlibs:Depends}, ${misc:Depends}, libsqlite3-0 (>= 3.37.0), libomx-domain0 (>= 3.20.0)
+Depends: ${shlibs:Depends}, ${misc:Depends}, libsqlite3-0 (>= 3.37.0)
 Description: reader of the OpenMixer qualification store
  The C library that reads the qualification store: the base database of
  plugin-qualification-records and a user layer, merged by whole record, with
@@ -48,7 +49,7 @@ Section: libdevel
 Architecture: any
 Multi-Arch: same
 Depends: libplugin-qualification-db0 (= ${binary:Version}), plugin-qualification-db-schema (= ${source:Version}),
- libsqlite3-dev (>= 3.37.0), libomx-domain-dev (>= 3.20.0), ${misc:Depends}
+ libsqlite3-dev (>= 3.37.0), libomx-domain-dev, ${misc:Depends}
 Description: reader of the OpenMixer qualification store, development files
  The header, the shared library link and plugin-qualification-db.pc, whose
  variable schema names the DDL of plugin-qualification-db-schema.

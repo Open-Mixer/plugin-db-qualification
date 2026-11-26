@@ -9,9 +9,8 @@ and 8, change 2). The round trip runs over every record of records/; the refusal
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones:
 TEST ONLY, the tool reads no environment variable. PDQ_SIBLINGS names the directory that holds the clones
 (plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at
-PDQ_REF (default origin/main); the hosting words are the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them (<contractdir>/3/<package>/ and its MANIFEST.json, <package> the name that tree installs
-under: omx-clap since 0.34.0), the hosting exception of the spec; tools/sibling_contract.py assembles it. Without PDQ_SIBLINGS the tests that need the words are skipped, saying so.
+PDQ_REF (default origin/main), the hosting domain from omx-clap-core's; tools/sibling_contract.py assembles it. Without
+PDQ_SIBLINGS the tests that need the words are skipped, saying so.
 """
 import contextlib
 import copy
@@ -35,7 +34,7 @@ TSV = os.path.join(HERE, "testdata", "field-columns.tsv")
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 SRC_SET = ("x86-64", "fedora44-48000-512")
 sys.path.insert(0, HERE)
-from sibling_contract import DOMAIN_REPO, contract_dir, hosting_dir, remove  # noqa: E402
+from sibling_contract import DOMAIN_REPO, contract_dir, remove  # noqa: E402
 
 SENTENCE_PATHS = ("binary.unpinnable", "run.steps[].detail", "measurements.grid[].memory.unmeasuredDetail",
                   "measurements.unmeasured[].detail", "tiers.dimmed")
@@ -48,7 +47,7 @@ MAP_PATHS = ("verdicts[].reasons[].params.*", "cost[].reasons[].params.*", "adap
 ARRAY_TABLES = {
     "binary.files[]": "record_file", "run.steps[]": "run_step", "probe.ends[]": "probe_end", "verdicts[]": "verdict",
     "cost[]": "cost_entry", "tiers.offeredOn[]": "tier_offered", "measurements.grid[]": "cell",
-    "measurements.grid[].rtSafety.events[]": "cell_event", "measurements.unmeasured[]": "unmeasured",
+    "measurements.grid[].rtSafety.events[]": "cell_event", "measurements.grid[].cost.voiceCurve[]": "cell_voice_point", "measurements.unmeasured[]": "unmeasured",
     "measurements.behaviour.features.required[]": "feature_required", "notMeasured[]": "not_measured",
     "adapter.cells[]": "adapter_cell", "memoryRun.cells[]": "memory_run_cell", "rejudged.owes[]": "rejudged_owe",
 }
@@ -339,6 +338,83 @@ class DdlColumns(Base):
             r["measurements"]["grid"][0]["rtSafety"]["otherThreads"] = {"locks": 1}
         d, f = self.made(put)
         self.refused("schema-refused", f)
+
+
+class InstrumentFields(Base):
+    """Case 26 (#72, ruling 12): the fields plugin-qualify 0.20.6 writes for an instrument and for the adapter's content,
+    which the three reference sets of #67 carry and no column held: cost[].voices, a cell's cost.voiceCurve[], a cell
+    whose rtSafety carries no counts, and adapter.params content, loaded, refused (names) and problem (a sentence)."""
+    made, exported, same = DdlColumns.made, DdlColumns.exported, DdlColumns.same
+    CURVE = [{"held": 1, "median": 11.5752, "percentile": {"p": 95, "value": 11.7705}},
+             {"held": 16, "median": 11.8682, "percentile": {"p": 95, "value": 12.3027}}]
+    CONTENT = ("http://drumkv1.sourceforge.net/lv2#P101_SAMPLE_FILE http://drumkv1.sourceforge.net/lv2#P204_TUNING_SCALE_FILE")
+    REFUSED = "http://drumkv1.sourceforge.net/lv2#P204_TUNING_SCALE_FILE (resp -3)"
+
+    def test_26_cost_voices_round_trip(self):
+        d, f = self.made(lambda r: r["cost"][0].update(voices={"held": 16, "basis": "probe"}))
+        self.assertEqual(self.same(d, f)["cost"][0]["voices"], {"held": 16, "basis": "probe"})
+        self.assertEqual(self.rows("SELECT voices_held, voices_basis, voices_capacity FROM cost_entry WHERE voices_held IS NOT NULL"),
+                         [(16, "probe", None)])
+
+    def test_26_a_voices_basis_outside_its_domain_is_refused(self):
+        d, f = self.made(lambda r: r["cost"][0].update(voices={"held": 16, "basis": "guessed"}))
+        self.refused("word-unknown", f, "cost[0].voices.basis")
+
+    def test_26_a_voice_curve_round_trips_in_order(self):
+        def put(r):
+            r["measurements"]["grid"][0]["cost"] = {"median": 24.8711, "percentile": {"p": 95, "value": 30.2271}, "blocks": 512,
+                                                    "warmupBlocks": 64, "voices": {"held": 16, "basis": "probe"},
+                                                    "voiceCurve": copy.deepcopy(self.CURVE)}
+        d, f = self.made(put)
+        self.assertEqual(self.same(d, f)["measurements"]["grid"][0]["cost"]["voiceCurve"], self.CURVE)
+        self.assertEqual(self.rows("SELECT cell_ord, ord, held, median, percentile_p, percentile_value FROM cell_voice_point "
+                                   "ORDER BY cell_ord, ord"),
+                         [(0, 0, 1, 11.5752, 95, 11.7705), (0, 1, 16, 11.8682, 95, 12.3027)])
+
+    def test_26_a_cell_with_no_audio_thread_counts_round_trips(self):
+        def put(r):
+            rt = r["measurements"]["grid"][0]["rtSafety"]
+            for k in list(rt):
+                if k not in ("interposer", "swept", "sweepApplicable", "blocks"):
+                    del rt[k]
+            rt.update(swept=False, sweepApplicable=True)
+        d, f = self.made(put)
+        self.assertEqual(self.same(d, f)["measurements"]["grid"][0]["rtSafety"],
+                         {"interposer": True, "swept": False, "sweepApplicable": True, "blocks": 512})
+        self.assertEqual(self.rows("SELECT rt_events, rt_allocations FROM cell WHERE ord = 0 AND rt_events IS NULL"), [(None, None)])
+
+    def test_26_counts_without_their_events_are_refused_by_the_schema(self):
+        d, f = self.made(lambda r: r["measurements"]["grid"][0]["rtSafety"].pop("events"))
+        self.refused("schema-refused", f)
+
+    def test_26_one_audio_thread_count_alone_is_refused_by_the_schema(self):
+        def put(r):
+            rt = r["measurements"]["grid"][0]["rtSafety"]
+            del rt["locks"], rt["syscalls"]
+        d, f = self.made(put)
+        self.refused("schema-refused", f)
+
+    def test_26_the_adapter_content_round_trips_and_the_problem_is_not_stored(self):
+        def put(r):
+            r["adapter"] = {"host": "omx-clap-host", "measured": True, "admitted": True,
+                            "params": {"peak": 0.167938381, "notes": 30, "content": self.CONTENT, "loaded": self.CONTENT,
+                                       "refused": self.REFUSED, "problem": "jack_peak: usage: jack_peak <client:port> ..."}}
+        d, f = self.made(put)
+        got = self.same(d, f)["adapter"]["params"]
+        self.assertEqual(list(got), ["peak", "notes", "content", "loaded", "refused"])
+        self.assertEqual(self.rows("SELECT adapter_content, adapter_loaded, adapter_refused FROM record WHERE adapter_content IS NOT NULL"),
+                         [(self.CONTENT, self.CONTENT, self.REFUSED)])
+        self.assertEqual(self.rows("SELECT name FROM adapter_param ORDER BY rowid"), [("peak",), ("notes",)])
+        with open(self.db, "rb") as fh:
+            self.assertNotIn(b"jack_peak: usage", fh.read())
+
+    def test_26_content_in_an_adapter_cell_is_refused(self):
+        def put(r):
+            r["adapter"] = {"host": "omx-clap-host", "measured": True, "admitted": True,
+                            "cells": [{"rate": 48000, "quantum": 512, "admitted": True, "measured": True,
+                                       "params": {"content": self.CONTENT}}]}
+        d, f = self.made(put)
+        self.refused("word-unknown", f, "adapter.cells[0].params.content")
 
 
 class Refusals(Base):
@@ -751,7 +827,8 @@ class MinDomain(Base):
 
 
 class Packaging(unittest.TestCase):
-    """The package builds the base database beside today's files, with floors only (spec sections 5 and 7)."""
+    """The package builds the base database beside today's files (spec sections 5 and 7); no dependency carries a
+    hand-written version (devel wave 2026-11-24)."""
     # the contract packages the build reads its words from: each domain's owner (the repositories the fixture reads them
     # from, each shipping <repo>-contract) and omx-clap-contract for the hosting words
     CONTRACTS = tuple(sorted({repo + "-contract" for repo in DOMAIN_REPO.values()} | {"omx-clap-contract"}))
@@ -764,22 +841,22 @@ class Packaging(unittest.TestCase):
         self.assertEqual(self.read("BUILT_FROM"), "$Format:%H$\n")
         self.assertIn("BUILT_FROM export-subst", self.read(".gitattributes").splitlines())
 
-    def test_debian_build_depends_hold_floors_only(self):
+    def test_debian_build_depends_name_the_contract_packages_with_no_version(self):
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         deps = re.search(r"^Build-Depends: (.*)$", control, re.M).group(1)
         self.assertIn("python3-jsonschema:native", deps)
         for pkg in self.CONTRACTS:
-            self.assertRegex(deps, rf"{pkg} \(>= \d+(\.\d+)+~\)", pkg)
-        self.assertNotRegex(deps, r"\(<|<<|<=")
-        self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)", "", deps), r"\(=")
+            self.assertRegex(deps, rf"(?m)(^|, ){pkg}(,|$)", pkg)
+        # the one versioned entries: debhelper's compat level and the third-party sqlite floor (STRICT tables)
+        self.assertNotRegex(re.sub(r"debhelper-compat \(= 13\)|libsqlite3-dev \(>= 3\.37\.0\)", "", deps), r"\(")
 
-    def test_the_omx_clap_contract_floor_is_the_release_that_installs_the_package_omx_clap(self):
-        """omx-clap-core 0.34.0 installs the hosting words as the contract package omx-clap (<contractdir>/3/omx-clap/),
-        shipped as omx-clap-contract: the floor is that release, and the package's name before it is named nowhere."""
+    def test_the_hosting_words_come_from_omx_clap_contract_not_its_old_name(self):
+        """omx-clap-core installs the hosting words as its domain hosting (<contractdir>/hosting/), shipped as
+        omx-clap-contract; the package's name before it is named nowhere."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         spec = self.read("packaging", "plugin-qualification-records.spec")
-        self.assertRegex(control, r"omx-clap-contract \(>= 0\.34\.0~\)")
-        self.assertRegex(spec, r"BuildRequires: omx-clap-contract >= 0\.34\.0\n")
+        self.assertRegex(control, r"(?m)omx-clap-contract(,|$)")
+        self.assertRegex(spec, r"(?m)^BuildRequires: omx-clap-contract$")
         self.assertNotIn("omx-clap-core-contract", control)
         self.assertNotIn("omx-clap-core-contract", spec)
 
@@ -788,20 +865,16 @@ class Packaging(unittest.TestCase):
         qualification files plugin-hostd-contract 0.21.0 took over, and the two cannot be installed together."""
         control = self.read("debian", "control").split("\n\n")[0].replace("\n ", " ")
         deps = re.search(r"^Build-Depends: (.*)$", control, re.M).group(1)
-        self.assertEqual(sorted(set(re.findall(r"([a-z0-9-]+-contract) \(", deps))), list(self.CONTRACTS))
+        self.assertEqual(sorted(set(re.findall(r"(?m)([a-z0-9-]+-contract)(?:,|$)", deps))), list(self.CONTRACTS))
         spec = self.read("packaging", "plugin-qualification-records.spec")
-        self.assertEqual(sorted(set(re.findall(r"(?m)^BuildRequires: ([a-z0-9-]+-contract) ", spec))), list(self.CONTRACTS))
-        self.assertRegex(deps, r"plugin-hostd-contract \(>= 0\.21\.0~\)")
-        self.assertRegex(spec, r"(?m)^BuildRequires: plugin-hostd-contract >= 0\.21\.0$")
-        self.assertRegex(deps, r"plugin-hostd-protocol-contract \(>= 0\.8\.0~\)")
-        self.assertRegex(spec, r"(?m)^BuildRequires: plugin-hostd-protocol-contract >= 0\.8\.0$")
+        self.assertEqual(sorted(set(re.findall(r"(?m)^BuildRequires: ([a-z0-9-]+-contract)$", spec))), list(self.CONTRACTS))
 
-    def test_rpm_build_requires_hold_floors_only(self):
+    def test_rpm_build_requires_name_the_contract_packages_with_no_version(self):
         spec = self.read("packaging", "plugin-qualification-records.spec")
         self.assertIn("BuildRequires: python3-jsonschema", spec)
         for pkg in self.CONTRACTS:
-            self.assertRegex(spec, rf"(?m)^BuildRequires: {pkg} >= \d+(\.\d+)+$", pkg)
-        self.assertNotRegex(spec, r"(?m)^BuildRequires:.* (<|<=) ")
+            self.assertRegex(spec, rf"(?m)^BuildRequires: {pkg}$", pkg)
+        self.assertNotRegex(spec, r"(?m)^BuildRequires: (?!sqlite-devel >= 3\.37\.0$).*[<>=]")
 
     def test_both_builds_generate_the_database_into_the_package(self):
         rules, spec = self.read("debian", "rules"), self.read("packaging", "plugin-qualification-records.spec")
@@ -846,19 +919,15 @@ class SmallStore(Base):
         domains = dict(self.rows("SELECT domain, version FROM store_domain"))
         self.assertEqual(sorted(domains), sorted(list(DOMAIN_REPO) + ["hosting"]))
         for dom, version in domains.items():
-            if dom == "hosting":
-                self.assertEqual(version, load(os.path.join(hosting_dir(), "MANIFEST.json"))["version"])
-            else:
-                self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
+            self.assertEqual(version, load(os.path.join(contract_dir(), dom, dom + ".json"))["info"]["version"])
         checked = {(t, c) for t, c in self.rows("SELECT DISTINCT tbl, col FROM word_check")}
         missing = [tc for tc in schema_word_columns() if tc not in checked]
         self.assertEqual(missing, [], "word columns with no word_check row")
         for (d, i) in self.rows("SELECT DISTINCT domain, item FROM word_check"):
             self.assertIn(d, domains)
+            self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])
             if d == "hosting":
                 self.assertTrue(i.startswith("HOSTING_") and i.endswith("CODES"), i)
-            else:
-                self.assertIn(i, load(os.path.join(contract_dir(), d, d + ".json"))["components"]["schemas"])
 
 
 class RoundTrip(unittest.TestCase):
@@ -900,6 +969,8 @@ class RoundTrip(unittest.TestCase):
             c.get("memory", {}).pop("unmeasuredDetail", None)
         for u in rec["measurements"].get("unmeasured", []):
             u.pop("detail", None)
+        if isinstance(rec.get("adapter"), dict) and isinstance(rec["adapter"].get("params"), dict):
+            rec["adapter"]["params"].pop("problem", None)
         return rec
 
     @staticmethod
@@ -1068,8 +1139,8 @@ class RoundTrip(unittest.TestCase):
             elif table == "reason":
                 parent = "verdict_ord" if path.startswith("verdicts") else "cost_ord"
                 sql = f"SELECT record_id, {parent}, ord, {col} FROM reason WHERE {parent} IS NOT NULL"
-            elif table == "cell_event":
-                sql = f"SELECT record_id, cell_ord, ord, {col} FROM cell_event"
+            elif table in ("cell_event", "cell_voice_point"):
+                sql = f"SELECT record_id, cell_ord, ord, {col} FROM {table}"
             else:
                 sql = f"SELECT record_id, ord, {col} FROM {table}"
             queries.append((path, table, col, mode, {tuple(r[:-1]): r[-1] for r in self.db.execute(sql)}, [0]))
@@ -1083,7 +1154,8 @@ class RoundTrip(unittest.TestCase):
                     self.assertTrue(want == got, f"{c}/{s}/{f}: {path}{list(idx)} is {want!r} in the file, "
                                                  f"{table}.{col} holds {got!r}")
         for path, table, col, mode, sqlvals, seen in queries:
-            self.assertGreater(seen[0], 0, f"{path}: no record holds it")
+            if mode != "fixture":   # a fixture line: no record of records/ holds it yet, a case of its own proves it
+                self.assertGreater(seen[0], 0, f"{path}: no record holds it")
             self.assertGreaterEqual(seen[0], len([v for v in sqlvals.values() if v is not None]), f"{path}: rows without a field")
 
     def check_provenance_line(self, jpath, table, col):

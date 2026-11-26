@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import qualification_db as q  # noqa: E402
-from sibling_contract import contract_dir, hosting_dir, hosting_package, remove  # noqa: E402
+from sibling_contract import contract_dir, remove  # noqa: E402
 
 RECORDS = os.path.join(REPO, "records")
 HEADER = os.path.join(REPO, "include", "plugin-qualification-db", "pqdb.h")
@@ -465,26 +465,24 @@ class Put(Layer):
 
 
 class HostingWords(Layer):
-    """The hosting.* words are the codes of the contract package omx-clap (omx-clap-core's data/hosting.json and data/hosting/*.json,
-    items of kind codes), read from the contract directory the package installs into; no hosting domain document."""
+    """The hosting.* words are the items HOSTING_<group>_CODES of omx-clap's domain hosting (<contractdir>/hosting/
+    hosting.json, omx-clap-core's contract.d/hosting), read as every other domain is; the contract package omx-clap,
+    which held them as codes before, is no source of words."""
 
-    def test_the_package_is_recorded_with_its_version(self):
+    def hosting(self, c=None):
+        return load(os.path.join(c or contract_dir(), "hosting", "hosting.json"))
+
+    def test_the_domain_is_recorded_with_its_version(self):
         self.put()
-        manifest = load(os.path.join(hosting_dir(), "MANIFEST.json"))
-        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(manifest["version"],)])
-        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = ?", hosting_package()), [(0,)])
+        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(self.hosting()["info"]["version"],)])
+        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = 'omx-clap'"), [(0,)])
         self.assertGreater(self.rows("SELECT count(*) FROM word_check WHERE domain = 'hosting'")[0][0], 3)
 
-    def test_a_hosting_code_of_the_package_is_a_word(self):
-        words = set()
-        for n in ("hosting.json",) + tuple("hosting/" + f for f in sorted(os.listdir(os.path.join(hosting_dir(), "hosting")))):
-            for item in load(os.path.join(hosting_dir(), n)).values():
-                if isinstance(item, dict) and item.get("kind") == "codes":
-                    words.update(c["code"] for c in item["codes"].values())
-        self.assertIn("hosting.clap.extensions-not-covered", words)
+    def test_a_hosting_word_of_the_domain_is_a_word(self):
+        clap = [o["const"] for o in self.hosting()["components"]["schemas"]["HOSTING_CLAP_CODES"]["oneOf"]]
+        self.assertIn("hosting.clap.extensions-not-covered", clap)
         dom = q.Domains(contract_dir())
-        self.assertEqual(set(dom.items[("hosting", "HOSTING_CLAP_CODES")]),
-                         {c["code"] for c in load(os.path.join(hosting_dir(), "hosting", "clap.json"))["HOSTING_CLAP_CODES"]["codes"].values()})
+        self.assertEqual(dom.items[("hosting", "HOSTING_CLAP_CODES")], clap)
 
     def test_a_hosting_code_that_is_none_is_refused(self):
         rec = self.edited(lambda r: r["verdicts"][0]["reasons"].append(
@@ -495,38 +493,33 @@ class HostingWords(Layer):
         self.assertEqual(cm.exception.name, "word-unknown")
         self.assertIn("hosting.clap.not-a-code", str(cm.exception))
 
-    def test_a_contract_directory_without_the_package_is_refused_by_name(self):
+    def test_a_contract_directory_without_the_domain_is_refused_by_name(self):
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)
-        shutil.rmtree(os.path.join(c, "3"))
+        shutil.rmtree(os.path.join(c, "hosting"))
         with self.assertRaises(q.Refusal) as cm:
             q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
         self.assertEqual(cm.exception.name, "contract.domain.absent")
-        self.assertIn(f"(<schema major>/{hosting_package()}/MANIFEST.json)", str(cm.exception))
+        self.assertIn("hosting/hosting.json", str(cm.exception))
         self.assertFalse(os.path.exists(self.db))
 
-    def test_the_package_under_its_name_before_0_34_0_is_not_read(self):
-        """omx-clap-core before 0.34.0 installed the words as <schema major>/omx-clap-core/: that name is no source, the
-        installed package is read by the one name the tree installs under now, and nothing falls back to the old one."""
-        self.assertNotEqual(hosting_package(), "omx-clap-core")
+    def test_the_package_omx_clap_is_no_source_of_words(self):
+        """The codes laid out as the package omx-clap held them (<contractdir>/omx-clap/hosting.json, items of kind
+        codes) do not stand in for the domain: without hosting/hosting.json the directory is refused."""
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)
-        os.rename(os.path.join(c, "3", hosting_package()), os.path.join(c, "3", "omx-clap-core"))
+        items = self.hosting(c)["components"]["schemas"]
+        shutil.rmtree(os.path.join(c, "hosting"))
+        os.makedirs(os.path.join(c, "omx-clap"))
+        with open(os.path.join(c, "omx-clap", "hosting.json"), "w") as f:
+            json.dump({n: {"kind": "codes", "codes": {o["title"]: {"code": o["const"]} for o in it["oneOf"]}}
+                       for n, it in items.items()}, f)
+        with open(os.path.join(c, "omx-clap", "MANIFEST.json"), "w") as f:
+            json.dump({"package": "omx-clap", "version": "0.35.0", "files": {}}, f)
         with self.assertRaises(q.Refusal) as cm:
             q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
         self.assertEqual(cm.exception.name, "contract.domain.absent")
-        self.assertIn(f"(<schema major>/{hosting_package()}/MANIFEST.json)", str(cm.exception))
         self.assertFalse(os.path.exists(self.db))
-
-    def test_a_hosting_domain_document_is_no_source_of_words(self):
-        """A hosting/hosting.json beside the package is not read: the package's items are the words."""
-        c = os.path.join(self.tmp, "contract")
-        shutil.copytree(contract_dir(), c)
-        os.makedirs(os.path.join(c, "hosting"))
-        with open(os.path.join(c, "hosting", "hosting.json"), "w") as f:
-            json.dump({"info": {"version": "9.9.9"}, "components": {"schemas": {}}}, f)
-        q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
-        self.assertNotEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [("9.9.9",)])
 
 
 class Refusals(Layer):

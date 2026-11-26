@@ -3,15 +3,12 @@
 """TEST ONLY: the contract directory the writer and the base build are tested against, assembled from sibling clones.
 
 PDQ_SIBLINGS names the directory that holds the clones (plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each
-domain is read from `contract.d/<domain>/` at PDQ_REF (default origin/main). The hosting words are the data/ of
-omx-clap-core at the same ref, laid out as its `make install-contract` lays them: <contractdir>/3/<package>/ and a
-MANIFEST.json, where <package> is the name that tree installs under (its Makefile's `CORE =`, omx-clap since 0.34.0),
-read from the tree and never written here. Without PDQ_SIBLINGS a test that needs the words is skipped, saying so.
+domain is read from `contract.d/<domain>/` at PDQ_REF (default origin/main), the hosting domain from omx-clap-core's.
+Without PDQ_SIBLINGS a test that needs the words is skipped, saying so.
 The writer and the base build read no variable of this module.
 """
 import json
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -19,8 +16,7 @@ import unittest
 
 DOMAIN_REPO = {"qualification": "plugin-hostd", "machine": "plugin-hostd", "probe": "plugin-hostd-protocol",
                "plugin-db": "plugin-db"}
-HOSTING_REPO = "omx-clap-core"
-SCHEMA_MAJOR = "3"
+HOSTING, HOSTING_REPO = "hosting", "omx-clap-core"
 SIBLINGS = os.environ.get("PDQ_SIBLINGS")
 REF = os.environ.get("PDQ_REF", "origin/main")
 _contract = {}
@@ -43,19 +39,6 @@ def _clone(repo):
     return clone
 
 
-def hosting_package():
-    """The contract package name omx-clap-core's tree installs its data/ under: its Makefile's `CORE =` at PDQ_REF."""
-    m = re.search(r"(?m)^CORE\s*=\s*(\S+)\s*$", git_show(_clone(HOSTING_REPO), REF, "Makefile").decode())
-    if not m:
-        raise AssertionError(f"{HOSTING_REPO} {REF}: its Makefile names no CORE, the package install-contract lays out")
-    return m.group(1)
-
-
-def hosting_dir():
-    """<contractdir>/3/<package>/ of the assembled contract directory."""
-    return os.path.join(contract_dir(), SCHEMA_MAJOR, hosting_package())
-
-
 def _qualification_items(doc):
     # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
     # in its line 3, and the words of the pin verdicts and the history (QUALIFICATION_PIN_VERDICTS, _HISTORY_MOVES, _HISTORY_REASONS,
@@ -72,13 +55,11 @@ def _qualification_items(doc):
 
 
 def contract_dir():
-    """The contract directory assembled from the sibling clones, once; skips the test when they are not given. The
-    domains are documents (<domain>/<domain>.json); the hosting words are omx-clap-core's data/, installed as its
-    `make install-contract` does: <schema major>/<package>/ with the files as they are and a MANIFEST.json."""
+    """The contract directory assembled from the sibling clones, once; skips the test when they are not given. Every
+    domain is a document (<domain>/<domain>.json), the hosting domain omx-clap-core's contract.d/hosting."""
     if "dir" in _contract:
         return _contract["dir"]
     clones = {repo: _clone(repo) for repo in sorted(set(DOMAIN_REPO.values()) | {HOSTING_REPO})}
-    package = hosting_package()
     root = tempfile.mkdtemp(prefix="pdq-contract-")
     for dom, repo in DOMAIN_REPO.items():
         os.makedirs(os.path.join(root, dom))
@@ -87,18 +68,9 @@ def contract_dir():
             _qualification_items(doc)
         with open(os.path.join(root, dom, dom + ".json"), "w") as f:
             json.dump(doc, f)
-    core = clones[HOSTING_REPO]
-    names = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", REF, "data"], capture_output=True, text=True,
-                           check=True).stdout.split("\n")
-    dest = os.path.join(root, SCHEMA_MAJOR, package)
-    for n in sorted(x for x in names if x.endswith(".json")):
-        rel = n[len("data/"):]
-        os.makedirs(os.path.join(dest, os.path.dirname(rel)), exist_ok=True)
-        with open(os.path.join(dest, rel), "wb") as f:
-            f.write(git_show(core, REF, n))
-    with open(os.path.join(dest, "MANIFEST.json"), "w") as f:
-        json.dump({"package": package, "version": git_show(core, REF, "VERSION").decode().strip(),
-                   "schemaMajor": int(SCHEMA_MAJOR), "files": {}}, f)
+    os.makedirs(os.path.join(root, HOSTING))
+    with open(os.path.join(root, HOSTING, HOSTING + ".json"), "wb") as f:
+        f.write(git_show(clones[HOSTING_REPO], REF, f"contract.d/{HOSTING}/{HOSTING}.json"))
     _contract["dir"] = root
     return root
 

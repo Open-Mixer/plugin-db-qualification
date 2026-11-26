@@ -12,11 +12,31 @@ import json
 import os
 import tempfile
 import unittest
+import unittest.mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("check_records", os.path.join(HERE, "check-records.py"))
 check = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(check)
+
+_gspec = importlib.util.spec_from_file_location("golden_domain", os.path.join(HERE, "golden_domain.py"))
+golden = importlib.util.module_from_spec(_gspec)
+_gspec.loader.exec_module(golden)
+HOST_PROFILES, HOST_CLASSES, write_domain = golden.HOST_PROFILES, golden.HOST_CLASSES, golden.write_domain
+DOMAIN_ROOT = []
+
+
+def setUpModule():
+    """the golden domain, where the checker reads it (OMX_CONTRACT_PATH): the tests read no installed one"""
+    tmp = tempfile.TemporaryDirectory()
+    DOMAIN_ROOT.append(tmp)
+    os.environ["OMX_CONTRACT_PATH"] = write_domain(tmp.name)
+
+
+def tearDownModule():
+    os.environ.pop("OMX_CONTRACT_PATH", None)
+    DOMAIN_ROOT.pop().cleanup()
+
 
 COND = {"rate": 48000, "quantum": 256, "cycles": 5, "soakS": 10, "windowMs": 2000, "timeoutMs": 10000, "jack": "jackd 1.9.22", "realtime": "rtprio 70"}
 PASS = {k: {"result": "pass"} for k in ("loads", "instantiates", "output", "cycles", "soak", "rtSafe")}
@@ -210,6 +230,61 @@ class LeftOut(unittest.TestCase):
             with self.subTest(binary=binary):
                 self.make("t", binary=binary)
                 self.assert_refused("a dry run")
+
+
+class ProvenanceWords(unittest.TestCase):
+    """The words a provenance holds are the `qualification` domain's (QUALIFICATION_HOST_PROFILES, _HOST_CLASSES; owner
+    plugin-hostd), read from the first directory of OMX_CONTRACT_PATH that holds it, else the installed contract directory.
+    Golden: the two templates' words, accepted. Sabotage: a scratch domain without one of them rejects it."""
+
+    HERE = os.path.dirname(os.path.abspath(__file__))
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.saved = os.environ.get("OMX_CONTRACT_PATH")
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        if self.saved is None:
+            os.environ.pop("OMX_CONTRACT_PATH", None)
+        else:
+            os.environ["OMX_CONTRACT_PATH"] = self.saved
+
+    def make_set(self, template, host_class):
+        with open(os.path.join(self.HERE, template, "provenance-template.json"), encoding="utf-8") as f:
+            prov = json.load(f)
+        path = os.path.join(self.tmp.name, "records", host_class, "t")
+        os.makedirs(path)
+        prov.update({"schema": check.PROVENANCE_SCHEMA, "set": "t", "hostClass": host_class,
+                     "package": {"name": f"plugin-db-qualification-{host_class}-t"}})
+        with open(os.path.join(path, "provenance.json"), "w", encoding="utf-8") as f:
+            json.dump(prov, f)
+        return path
+
+    def word_problems(self, path):
+        return [p for p in check.check_set(path)[0] if "hostProfile" in p or "host class" in p or "host_class" in p]
+
+    def test_the_templates_words_are_accepted(self):
+        self.assertEqual(self.word_problems(self.make_set("fedora44", "x86-64")), [])
+        self.assertEqual(self.word_problems(self.make_set("rpi5", "rpi5")), [])
+
+    def test_sabotage_a_domain_without_the_profile_rejects_it(self):
+        os.environ["OMX_CONTRACT_PATH"] = write_domain(os.path.join(self.tmp.name, "d"), profiles=("openmixer-console",))
+        got = self.word_problems(self.make_set("fedora44", "x86-64"))
+        self.assertTrue(any("omx-clap-host" in p and "hostProfile" in p for p in got), got)
+
+    def test_sabotage_a_domain_without_the_class_rejects_it(self):
+        os.environ["OMX_CONTRACT_PATH"] = write_domain(os.path.join(self.tmp.name, "d"), classes=("rpi5",))
+        got = self.word_problems(self.make_set("fedora44", "x86-64"))
+        self.assertTrue(any("x86-64" in p for p in got), got)
+
+    def test_a_directory_without_the_domain_is_refused_by_name(self):
+        os.environ["OMX_CONTRACT_PATH"] = os.path.join(self.tmp.name, "nowhere")
+        with unittest.mock.patch.object(check, "INSTALLED_CONTRACT_DIR", os.path.join(self.tmp.name, "nowhere")):
+            with self.assertRaises(SystemExit) as raised:
+                check.check_set(self.make_set("fedora44", "x86-64"))
+        self.assertIn("qualification", str(raised.exception))
 
 
 class OneCellSets(unittest.TestCase):

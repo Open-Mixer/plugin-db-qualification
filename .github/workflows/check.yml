@@ -35,21 +35,16 @@ jobs:
   records:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # the words of a provenance are the qualification domain's, plugin-hostd's: read from its main (the records job
+    # installs no package), where check-records.py looks first, OMX_CONTRACT_PATH
+    env:
+      OMX_CONTRACT_PATH: ${{ github.workspace }}/siblings/plugin-hostd/contract.d
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with: {repository: Open-Mixer/plugin-hostd, path: siblings/plugin-hostd}
       - run: python3 tools/check-records.py
-      - run: python3 -m unittest tools/test_check_records.py
-      - run: python3 -m unittest tools/test_rewrite_records.py
-      - run: python3 -m unittest tools/test_fedora44_channel_check.py
-      - run: python3 -m unittest tools/test_fedora44_deliver.py
-      - run: python3 -m unittest tools/test_fedora44_provenance.py
-      - run: python3 -m unittest tools/test_build_package.py
-      - run: python3 -m unittest tools/test_dev_requires.py
-      - run: python3 -m unittest tools/test_symbols.py
-      - run: python3 -m unittest tools/test_sets.py
-      - run: python3 -m unittest tools/test_no_relations.py
-      - run: python3 -m unittest tools/test_fedora44_rt.py
-      - run: python3 -m unittest tools/test_reference_sets.py
+      - run: python3 -m unittest discover -s tools -p 'test_*.py'
       - run: bash -n tools/build-package.sh tools/prove-set.sh tools/fedora44/measure.sh tools/fedora44/channel-check.sh
       # Fedora 45 only: a workflow that builds or runs Fedora 44 is refused; fedora44, the name of the sets measured
       # there, is data and stays
@@ -77,7 +72,7 @@ jobs:
       - name: Add the OpenMixer repository
         uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
       - name: Install the contract loader
-        run: dnf install -y --setopt=install_weak_deps=False 'libomx-domain-devel >= 3.20.0' 'omx-contract-devel >= 3.20.0'
+        run: dnf install -y --setopt=install_weak_deps=False libomx-domain-devel omx-contract-devel
       - uses: actions/checkout@v4
       # an ordinary run builds against the channel: refuse an omx package from the staging channel
       - name: Every omx package comes from the channel
@@ -90,13 +85,13 @@ jobs:
           # what it tests, so only every other run refuses one
           if [ "$DEVEL_PR" != true ] && grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
       - run: make check
-      # the hosting exception of the store spec (section 3.4) ends when omx-clap-core ships a `hosting` domain: fail while
+      # the hosting exception of the store spec (section 3.4) ends when omx-clap ships a `hosting` domain: fail while
       # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone)
-      - name: The hosting exception ends with omx-clap-core's hosting domain
+      - name: The hosting exception ends with omx-clap's hosting domain
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap-core
-          sh tools/hosting-skip-ends.sh /tmp/omx-clap-core src/pqdb.c
+          git clone --depth 1 https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap
+          sh tools/hosting-skip-ends.sh /tmp/omx-clap src/pqdb.c
 
   # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the
   # owners' own, read from their main (tools/sibling_contract.py assembles the contract directory from these clones:
@@ -117,7 +112,7 @@ jobs:
       - uses: actions/checkout@v4
         with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
       - uses: actions/checkout@v4
-        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap, fetch-depth: 0}
       - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
       - run: python3 -m unittest tools/test_qualification_db_write.py
 
@@ -139,7 +134,7 @@ jobs:
       - uses: actions/checkout@v4
         with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
       - uses: actions/checkout@v4
-        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap, fetch-depth: 0}
       - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
       - run: python3 -m unittest tools/test_records_db.py
 

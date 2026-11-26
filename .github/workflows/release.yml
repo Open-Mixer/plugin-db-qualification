@@ -82,6 +82,8 @@ jobs:
       # pass its install check; ZynthianOS Vangelis is trixie
       suite-matrix: '["trixie"]'
       arch-matrix: ${{ needs.plan.outputs.deb-arches }}
+      # the cycle with plugin-hostd, as the rpm job below says
+      bootstrap: ${{ github.ref == 'refs/heads/devel' && 'Open-Mixer/plugin-hostd@05fbbb58abafd89964099dd86b13ff621ab7c2dd:plugin-hostd-contract' || '' }}
     secrets: inherit
 
   # The arm64 package installed where it is used: arm64 Debian trixie with plugin-qualify from the channel and
@@ -89,10 +91,14 @@ jobs:
   # SHA-256s; the image's other Debian plugins have since been rebuilt, so their records rightly do not apply). The
   # sync takes it from the records and measures nothing. If Debian rebuilds lv2vocoder this step fails with
   # `binary differs`: pick another plugin whose installed files still hash as a record's.
+  # It runs only when the build ran: a merge to devel whose version is served builds nothing (the build's skipped
+  # output), and there is no artifact to install. On a merge to devel it does not run at all: the sync it proves is
+  # plugin-qualify, a later line of the devel wave (it builds on plugin-hostd, which builds on this reader), so the
+  # staging channel has none yet; the tag that promotes the staged build proves it against the channel.
   installed:
     name: Install and sync (trixie, arm64)
     needs: [plan, deb]
-    if: ${{ !cancelled() && needs.deb.result == 'success' && needs.plan.outputs.deb-prove == 'true' }}
+    if: ${{ !cancelled() && needs.deb.result == 'success' && needs.deb.outputs.skipped != 'true' && github.ref != 'refs/heads/devel' && needs.plan.outputs.deb-prove == 'true' }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     permissions:
@@ -157,6 +163,12 @@ jobs:
       needs-mod-host: false
       # the reader's BuildRequires libomx-domain-devel comes from the channel
       channel-deps: true
+      # the real build cycle with plugin-hostd: plugin-hostd builds on this reader,
+      # and the base database's words are checked against plugin-hostd's domains (BuildRequires plugin-hostd-contract).
+      # On a merge to devel the staging channel has no plugin-hostd of the wave yet, so the data package alone is built
+      # from the wave's plugin-hostd head (Open-Mixer/.github#230) and never released; plugin-hostd's own release
+      # replaces it. A tag builds on the channel's plugin-hostd-contract.
+      bootstrap: ${{ github.ref == 'refs/heads/devel' && 'Open-Mixer/plugin-hostd@05fbbb58abafd89964099dd86b13ff621ab7c2dd:plugin-hostd-contract' || '' }}
     secrets: inherit
 
   # The x86_64 RPM installed where it is used, each set in turn: Fedora 45 x86_64 with plugin-qualify and the
@@ -164,10 +176,12 @@ jobs:
   # beside the one installed). A container has no device tree, and an x86_64 machine never has one, so the host class
   # is the settings file's. A record of bytes the channel no longer serves (`binary differs`, another omx-plugins
   # version than the measured one) is UNPROVEN: it stays as measured and the release notes name it (proof-notes).
+  # Only when the build ran, and not on a merge to devel, as the deb proof above (the staging channel has no
+  # plugin-qualify of the wave yet).
   rpm-installed:
     name: Install and sync (Fedora 45, x86_64)
     needs: [plan, rpm]
-    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.plan.outputs.rpm-prove == 'true' }}
+    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.rpm.outputs.skipped != 'true' && github.ref != 'refs/heads/devel' && needs.plan.outputs.rpm-prove == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -220,6 +234,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -237,5 +252,12 @@ jobs:
           [ "${#files[@]}" -gt 0 ] || { echo "the proofs found nothing to note"; exit 0; }
           body=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body) || { echo "::notice::no release $TAG to carry the proofs' findings; they are in the job summaries"; exit 0; }
           body=${body%%$'\n## Install and sync proof'*}
-          { printf '%s\n' "$body"; for f in "${files[@]}"; do printf '\n'; cat "$f"; done; } > notes.md
+          printf '%s\n' "$body" > body.md
+          # the UNPROVEN records lists go to release assets proof-notes-<kind>-records.md; notes still over the 125000
+          # characters a release body may hold fail by name
+          python3 tools/release-notes.py body.md notes notes.md assets
+          for a in assets/proof-notes-*-records.md; do
+            [ -e "$a" ] || continue
+            gh release upload "$TAG" "$a" --repo "$GITHUB_REPOSITORY" --clobber
+          done
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md

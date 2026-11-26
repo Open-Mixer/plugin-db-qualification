@@ -11,8 +11,10 @@ offer.clapExtensions), and changes nothing else. The corpus tests read records/ 
 that rewrites it.
 """
 import copy
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -195,6 +197,146 @@ class Rewrite(unittest.TestCase):
         rec["binary"]["path"] = "/usr/lib/lv2/" + rec["binary"]["path"]
         dump(p, rec)
         self.refused("path-absolute", self.lv2, f)
+
+
+class Format2(unittest.TestCase):
+    """--probe-format-2, the re-cut to probe output format 2 (Open-Mixer/plugin-hostd#269): the cost unit is nsPerSample,
+    formatVersion 2.0, and the record names the new bytes; nothing else in either file changes."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="pdq-format2-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.recs = os.path.join(self.tmp, "records")
+        # both text forms of a record: x86-64 writes indent 1, rpi5 indent 2 with JavaScript's numbers
+        self.sets = [self.copy("x86-64", "fedora44-48000-512", 3), self.copy("rpi5", "zynthian-vangelis", 3)]
+
+    def copy(self, c, s, n):
+        """n records of a set with a timed cost, at probe format 1 as the device wrote them: records/ holds them re-cut
+        to format 2 (the commit after the tool), so the copy puts the two 1.x words back, and the record names the
+        bytes of the copy; a record still at format 1 is copied as it is"""
+        src, dst = os.path.join(RECORDS, c, s), os.path.join(self.recs, c, s)
+        os.makedirs(dst)
+        taken = 0
+        for f in record_names(c, s):
+            rec_text = open(os.path.join(src, f), encoding="utf-8").read()
+            probe = json.loads(rec_text)["probe"]
+            raw = open(os.path.join(src, probe["file"]), encoding="utf-8").read()
+            if '"unit": "nsPerSample"' in raw:
+                raw = raw.replace('"unit": "nsPerSample"', '"unit": "ns-per-sample"')
+                raw = raw.replace('"formatVersion": "2.0"', '"formatVersion": "1.4"', 1)
+            if '"unit": "ns-per-sample"' not in raw:
+                continue
+            data = raw.encode("utf-8")
+            rec_text = rec_text.replace(probe["sha256"], hashlib.sha256(data).hexdigest())
+            rec_text = rec_text.replace('"bytes": %d' % probe["bytes"], '"bytes": %d' % len(data))
+            with open(os.path.join(dst, f), "w", encoding="utf-8") as fh:
+                fh.write(rec_text)
+            with open(os.path.join(dst, probe["file"]), "wb") as fh:
+                fh.write(data)
+            taken += 1
+            if taken == n:
+                return dst
+        raise AssertionError(f"{c}/{s} has no {n} records with a timed cost")
+
+    def snapshot(self):
+        return {os.path.join(d, f): open(os.path.join(d, f), "rb").read() for d in self.sets for f in os.listdir(d)}
+
+    def test_the_probe_and_the_record_change_in_those_values_only(self):
+        before = self.snapshot()
+        r = run_tool(self.recs, "--probe-format-2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        for d in self.sets:
+            for f in record_names_in(d):
+                rec_path = os.path.join(d, f)
+                old_rec, rec = json.loads(before[rec_path]), load(rec_path)
+                probe_path = os.path.join(d, rec["probe"]["file"])
+                old_raw, raw = before[probe_path].decode(), open(probe_path, "rb").read()
+                self.assertEqual(rec["probe"]["sha256"], hashlib.sha256(raw).hexdigest(), f)
+                self.assertEqual(rec["probe"]["bytes"], len(raw), f)
+                doc, old = json.loads(raw), json.loads(old_raw)
+                self.assertEqual(doc["formatVersion"], "2.0")
+                self.assertNotIn(b"ns-per-sample", raw)
+                units = [p["cost"]["unit"] for p in doc.get("grid", []) if "cost" in p]
+                self.assertTrue(units and set(units) == {"nsPerSample"}, units)
+                # the bytes: put the two 1.x words back and the device's text is there again, byte for byte
+                back = raw.decode().replace('"unit": "nsPerSample"', '"unit": "ns-per-sample"')
+                back = back.replace('"formatVersion": "2.0"', '"formatVersion": "%s"' % old["formatVersion"])
+                self.assertEqual(back, old_raw, rec["probe"]["file"])
+                back = open(rec_path, encoding="utf-8").read().replace(rec["probe"]["sha256"], old_rec["probe"]["sha256"])
+                back = back.replace('"bytes": %d' % len(raw), '"bytes": %d' % old_rec["probe"]["bytes"])
+                self.assertEqual(back, before[rec_path].decode(), f)
+
+    def test_the_counts_are_printed_and_a_dry_run_writes_nothing(self):
+        before = self.snapshot()
+        r = run_tool(self.recs, "--probe-format-2", "--dry-run")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.snapshot(), before)
+        self.assertIn("dry run, nothing written: records read: 6", r.stdout)
+        self.assertIn("records re-cut to probe format 2: 6", r.stdout)
+        self.assertIn("probe outputs re-cut: 6", r.stdout)
+
+    def test_a_second_run_changes_nothing(self):
+        self.assertEqual(run_tool(self.recs, "--probe-format-2").returncode, 0)
+        once = self.snapshot()
+        r = run_tool(self.recs, "--probe-format-2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.snapshot(), once)
+        self.assertIn("records whose probe output is format 2 already: 6", r.stdout)
+
+    def refused(self, name, what):
+        before = self.snapshot()
+        r = run_tool(self.recs, "--probe-format-2")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn(f"refused: {name}:", r.stderr)
+        self.assertIn(what, r.stderr)
+        self.assertEqual(self.snapshot(), before, "a refusal changed a file")
+
+    def first(self):
+        d = self.sets[0]
+        f = record_names_in(d)[0]
+        return d, f, os.path.join(d, load(os.path.join(d, f))["probe"]["file"])
+
+    def test_a_probe_that_is_not_the_records_bytes_is_refused(self):
+        d, f, probe = self.first()
+        with open(probe, "ab") as fh:
+            fh.write(b" ")
+        self.refused("probe-not-the-records", f)
+
+    def test_a_probe_of_another_major_is_refused(self):
+        d, f, probe = self.first()
+        raw = open(probe, encoding="utf-8").read()
+        new = re.sub(r'"formatVersion": "1\.[0-9]+"', '"formatVersion": "3.0"', raw)
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write(new)
+        rec = load(os.path.join(d, f))
+        text = open(os.path.join(d, f), encoding="utf-8").read().replace(rec["probe"]["sha256"], hashlib.sha256(new.encode()).hexdigest())
+        with open(os.path.join(d, f), "w", encoding="utf-8") as fh:
+            fh.write(text)
+        self.refused("probe-not-the-format", os.path.basename(probe))
+
+    def test_a_cost_unit_written_outside_the_cost_is_refused(self):
+        """the word is replaced in the text, so the parse must show it changed only where a cost names its unit"""
+        d, f, probe = self.first()
+        raw = open(probe, encoding="utf-8").read()
+        new = raw.replace('"format": "plugin-hostd.probe-output",', '"format": "plugin-hostd.probe-output", "note": {"unit": "ns-per-sample"},', 1)
+        self.assertNotEqual(new, raw)
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write(new)
+        rec = load(os.path.join(d, f))
+        text = open(os.path.join(d, f), encoding="utf-8").read().replace(rec["probe"]["sha256"], hashlib.sha256(new.encode()).hexdigest())
+        text = text.replace('"bytes": %d' % rec["probe"]["bytes"], '"bytes": %d' % len(new.encode()))
+        with open(os.path.join(d, f), "w", encoding="utf-8") as fh:
+            fh.write(text)
+        self.refused("probe-not-as-expected", os.path.basename(probe))
+
+    def test_a_missing_probe_is_refused(self):
+        d, f, probe = self.first()
+        os.remove(probe)
+        self.refused("probe-missing", f)
+
+
+def record_names_in(d):
+    return sorted(f for f in os.listdir(d) if f.endswith(".qualification.json"))
 
 
 class Corpus(unittest.TestCase):

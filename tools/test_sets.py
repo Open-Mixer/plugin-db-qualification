@@ -439,22 +439,27 @@ class ReleaseArches(unittest.TestCase):
 
 
 class Dependencies(Tree):
-    """The records package depends on plugin-qualify, the sync that reads it, by its bare name (devel wave 2026-11-24:
-    the box installs the published plugin-qualify; no OpenMixer version is written by hand)."""
+    """The records package recommends plugin-qualify, the sync that reads it, by its bare name (devel wave 2026-11-24:
+    the box installs the published plugin-qualify; no OpenMixer version is written by hand). A weak dependency: the
+    records are inert data without the sync, and plugin-qualify builds on plugin-hostd, which builds on this source's
+    reader, so a hard one left the records uninstallable in the staged install check until a later layer published."""
 
-    def test_both_formats_depend_on_plugin_qualify_by_its_bare_name(self):
+    def test_both_formats_recommend_plugin_qualify_by_its_bare_name(self):
         control = self.read_file("debian/control")
         stanza = next(t for t in control.split("\n\n") if t.startswith(f"Package: {PKG}\n"))
-        self.assertRegex(stanza, r"(?m)^Depends: .*\bplugin-qualify(,|$)")
+        self.assertRegex(stanza, r"(?m)^Recommends: plugin-qualify$")
+        self.assertNotRegex(stanza, r"(?m)^Depends: .*\bplugin-qualify\b")
         self.assertNotIn("${qualify:Depends}", control)
         spec = self.read_file(SPEC)
-        self.assertEqual(re.findall(r"(?m)^Requires: plugin-qualify\b.*$", spec), ["Requires: plugin-qualify"])
+        self.assertEqual(re.findall(r"(?m)^Recommends: plugin-qualify\b.*$", spec), ["Recommends: plugin-qualify"])
+        self.assertEqual(re.findall(r"(?m)^Requires: plugin-qualify\b.*$", spec), [])
         if shutil.which("rpmspec"):
             def q(*what):
                 return subprocess.run(["rpmspec", "-q", "--target", "x86_64", *what, self.path(SPEC)],
                                       capture_output=True, text=True, check=True).stdout
-            self.assertIn("plugin-qualify\n", q("--requires"))
-            self.assertNotRegex(q("--requires"), r"plugin-qualify [<>=]")
+            self.assertIn("plugin-qualify\n", q("--recommends"))
+            self.assertNotRegex(q("--recommends"), r"plugin-qualify [<>=]")
+            self.assertNotIn("plugin-qualify", q("--requires"))
             self.assertEqual(q("--obsoletes").split(), [])
             self.assertEqual(q("--qf", "%{name}\n").split(), RPM_NAMES)
 
@@ -463,7 +468,7 @@ class Dependencies(Tree):
         third-party sqlite floor. Sabotage: an OpenMixer floor put back is named."""
         for rel in ("debian/control", SPEC):
             self.assertEqual(hand_written_versions(self.read_file(rel)), [], rel)
-        self.edit(SPEC, "Requires: plugin-qualify\n", "Requires: plugin-qualify >= 0.21.0\n")
+        self.edit(SPEC, "Recommends: plugin-qualify\n", "Recommends: plugin-qualify >= 0.21.0\n")
         self.assertEqual(hand_written_versions(self.read_file(SPEC)), ["plugin-qualify >= 0.21.0"])
         # Build-Depends and the -dev package's Depends both name libomx-domain-dev: both floors are named
         self.edit("debian/control", "libomx-domain-dev,", "libomx-domain-dev (>= 3.20.0),")
@@ -479,7 +484,7 @@ def hand_written_versions(text):
     (= %{version}-%{release}, = ${binary:Version}, = ${source:Version}), debhelper-compat (= 13) and the third-party
     floors."""
     deb = re.findall(r"[A-Za-z0-9.+_:-]+ *\([<>=]+ *[^)]*\)", text)
-    rpm = [v.strip() for v in re.findall(r"(?m)^(?:Build)?Requires: *(.*)$", text) if re.search(r"[<>=]", v)]
+    rpm = [v.strip() for v in re.findall(r"(?m)^(?:(?:Build)?Requires|Recommends|Suggests): *(.*)$", text) if re.search(r"[<>=]", v)]
     own = re.compile(r"\(= \$\{(binary|source):Version\}\)$|^debhelper-compat \(= 13\)$|= %\{version\}-%\{release\}$")
     return [f for f in deb + rpm if not own.search(f) and not THIRD_PARTY_FLOORS.match(f)]
 

@@ -42,8 +42,10 @@ BuildRequires: plugin-hostd-protocol-contract
 BuildRequires: plugin-db-contract
 BuildRequires: omx-clap-contract
 
-# the sync that reads the records
-Requires: plugin-qualify
+# the sync that reads the records, a weak dependency: the records are inert data without it, and plugin-qualify builds
+# on plugin-hostd, which builds on this source's reader, so a hard one would make the records uninstallable until a
+# later layer of the wave is published (the staged install check of a merge to devel)
+Recommends: plugin-qualify
 
 %description
 The qualification layer of the plugin database: the plugin-qualify records of

@@ -128,9 +128,12 @@ the base holds no openmixer-console verdict. The record files keep them; the bas
 ## Release
 
 A tag `v<version>` runs `.github/workflows/release.yml`. It builds the packages for the architectures
-`packaging/release-arches` names and publishes them into the OpenMixer channel. The version is the date and the day's
-serial, `YYYYMMDDXX`, for example `2026103001`. A number is never used twice. The tag, the spec's `Version` and the top
-`debian/changelog` entry are the same number, and `tools/sets.py check` holds them together.
+`packaging/release-arches` names and publishes them into the OpenMixer channel. The version is `0.MAJOR.MINOR`, as
+every OpenMixer package's until 1.0: MAJOR moves on a change a consumer must follow, MINOR on a compatible one (new
+records are one). The date and the day's serial, `YYYYMMDDXX`, is the RPM `Release`, so a build is `0.1.0-2026112601`.
+The tag (`v0.1.0`), the spec's `Version` and the top `debian/changelog` entry are the same version, and
+`tools/sets.py check` holds them together and refuses a dated `Version` or a `Release` that is not the stamp. A Debian
+native source carries no revision, so the deb is the bare version.
 
 A manual run with `publish=false` builds everything and publishes nothing.
 
@@ -145,13 +148,13 @@ tools/sets.py import <class> <set> <out-dir> --provenance <file>
 
 The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. It refuses a set that already exists
 (`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then release
-the records package under a new date version.
+the records package under a new MINOR version with that day's stamp.
 
 `tools/build-package.sh` builds such a set from a run's qualification directories:
 
 ```
 tools/build-package.sh --from-run <run> --provenance provenance.json \
-    --version <YYYYMMDDXX> --host-class <class> --set <set>
+    --version <0.MAJOR.MINOR> --release <YYYYMMDDXX> --host-class <class> --set <set>
 ```
 
 Every `b<rate>-<quantum>/qualification` of the run becomes the set `<set>-<rate>-<quantum>`. `provenance.json` holds what

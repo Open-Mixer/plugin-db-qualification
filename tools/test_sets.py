@@ -205,6 +205,18 @@ class Check(Tree):
         self.edit("debian/changelog", f"({VERSION})", "(2026010101)")
         self.assertIn(f"debian/changelog is 2026010101 but the spec is {VERSION}", self.problems())
 
+    def test_the_version_is_semver_and_the_date_is_the_release(self):
+        """#81: a dated Version, or a Release that is not the date stamp, is refused by name."""
+        self.edit(SPEC, f"\nVersion: {VERSION}\n", "\nVersion: 2026112401\n")
+        self.edit("debian/changelog", f"({VERSION})", "(2026112401)")
+        self.assertIn(f"{sets.SPEC}: Version 2026112401 is not 0.MAJOR.MINOR", self.problems())
+        self.edit(SPEC, "\nVersion: 2026112401\n", f"\nVersion: {VERSION}\n")
+        self.edit("debian/changelog", "(2026112401)", f"({VERSION})")
+        self.assertEqual(sets.problems(self.root), [])
+        rel = sets.spec_release(self.root)
+        self.edit(SPEC, f"\nRelease: {rel}\n", "\nRelease: 1%{?dist}\n")
+        self.assertIn(f"{sets.SPEC}: Release 1%{{?dist}} is not YYYYMMDDXX", self.problems())
+
     def test_debian_control_is_one_package_for_the_mapped_architectures(self):
         self.edit("debian/control", "Architecture: amd64 arm64", "Architecture: all")
         self.assertIn("Architecture is 'all', not the Debian architectures of packaging/arch-classes: amd64 arm64", self.problems())

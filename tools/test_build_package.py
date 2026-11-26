@@ -81,10 +81,11 @@ class BuildPackage(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def build(self, *args, version=VERSION, rc=0):
+    def build(self, *args, version=VERSION, release="2026112601", rc=0):
         env = dict(os.environ, PATH=DATA + os.pathsep + os.environ["PATH"])
         r = subprocess.run(["bash", os.path.join(self.tree, "tools", "build-package.sh"), *args,
-                            "--provenance", os.path.join(DATA, "provenance.json"), "--version", version],
+                            "--provenance", os.path.join(DATA, "provenance.json"), "--version", version,
+                            "--release", release],
                            capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, rc, r.stdout + r.stderr)
         return r
@@ -167,11 +168,21 @@ class BuildPackage(unittest.TestCase):
         self.assertEqual(sets.problems(self.tree), [])
 
     def test_the_version_goes_where_it_lives(self):
-        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101")
-        self.assertIn("\nVersion: 2026120101\n", self.spec_text())
-        self.assertTrue(self.read("debian", "changelog").startswith("plugin-db-qualification (2026120101) unstable"))
-        self.assertIn("debian/changelog: the top entry now names 2026120101", r.stderr)
+        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="0.2.0",
+                       release="2026120101")
+        self.assertIn("\nVersion: 0.2.0\nRelease: 2026120101%{?dist}\n", self.spec_text())
+        self.assertTrue(self.read("debian", "changelog").startswith("plugin-db-qualification (0.2.0) unstable"))
+        self.assertIn("debian/changelog: the top entry now names 0.2.0", r.stderr)
         self.assertEqual(sets.problems(self.tree), [])
+
+    def test_a_dated_version_or_an_undated_release_is_refused(self):
+        """#81: the date stamp is --release, never --version; nothing is written on a refusal."""
+        spec_before = self.spec_text()
+        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101", rc=2)
+        self.assertIn("--version 2026120101 is not 0.MAJOR.MINOR", r.stderr)
+        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", release="1", rc=2)
+        self.assertIn("--release 1 is not YYYYMMDDXX", r.stderr)
+        self.assertEqual(self.spec_text(), spec_before)
 
     def test_a_class_with_no_architecture_is_refused(self):
         r = self.build("--from-run", RUN, "--set", "bullseye", "--host-class", "pi4", rc=2)

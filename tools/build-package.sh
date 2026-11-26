@@ -11,18 +11,21 @@
 #       builds the tool's own .deb of every set under records/<class>/<set>/, for a comparison of its judgement with
 #       the records the package ships (same files, same bytes). The version is the debian/changelog one.
 #
-#   tools/build-package.sh --from-run <run root> --set <set> --provenance <json> --version <version> --host-class <class>
+#   tools/build-package.sh --from-run <run root> --set <set> --provenance <json> --version <version> --release <stamp> \
+#           --host-class <class>
 #       takes every <run root>/b<rate>-<quantum>/qualification of a run (the layout of tools/fedora44/measure.sh) as
 #       the set <set>-<rate>-<quantum>, as --from with --cell does for each.
 #
 #   tools/build-package.sh --from <qualification dir> [--cell <rate>/<quantum>] --set <set> --provenance <json> \
-#           --version <version> --host-class <class>
+#           --version <version> --release <stamp> --host-class <class>
 #       takes a device's qualification directory (plugin-qualify-sync's qualification_dir): the tool judges which
 #       records go in (a record with its probe copy intact; never an unmeasured one) and stamps the provenance, and
 #       records/<class>/<set name>/ is replaced by what its package holds; the tool's .deb is then discarded. With
 #       --cell the set name is <set>-<rate>-<quantum> and its provenance's grid is that cell; without it the set name
-#       is <set>. The class must have an architecture in packaging/arch-classes. The version becomes the spec's
-#       Version and the top debian/changelog entry's. No other set, of this class or another, is touched. Write the changelog entry, review the diff, commit, tag v<version>.
+#       is <set>. The class must have an architecture in packaging/arch-classes. The version (0.MAJOR.MINOR) becomes the
+#       spec's Version and the top debian/changelog entry's, the stamp (YYYYMMDDXX, the date and the day's serial) the
+#       spec's Release (#81). No other set, of this class or another, is touched. Write the changelog entry, review the
+#       diff, commit, tag v<version>.
 #
 # plugin-qualify comes from the OpenMixer channel (apt) or, where that is not configured, from npm.
 set -euo pipefail
@@ -34,6 +37,7 @@ from_run=
 cell=
 provenance=
 version=
+release=
 class=
 set_=
 while [ $# -gt 0 ]; do
@@ -44,6 +48,7 @@ while [ $# -gt 0 ]; do
         --cell) cell=$2; shift 2 ;;
         --provenance) provenance=$2; shift 2 ;;
         --version) version=$2; shift 2 ;;
+        --release) release=$2; shift 2 ;;
         --host-class) class=$2; shift 2 ;;
         --set) set_=$2; shift 2 ;;
         *) echo "unknown argument $1" >&2; exit 2 ;;
@@ -71,7 +76,9 @@ if [ -z "$from" ] && [ -z "$from_run" ]; then
     exit 0
 fi
 
-: "${provenance:?--provenance is needed}" "${version:?--version is needed}" "${class:?--host-class is needed}" "${set_:?--set is needed}"
+: "${provenance:?--provenance is needed}" "${version:?--version is needed}" "${release:?--release is needed}" "${class:?--host-class is needed}" "${set_:?--set is needed}"
+[[ $version =~ ^0\.[0-9]+\.[0-9]+$ ]] || { echo "--version $version is not 0.MAJOR.MINOR; the date stamp is --release (#81)" >&2; exit 2; }
+[[ $release =~ ^[0-9]{10}$ ]] || { echo "--release $release is not YYYYMMDDXX, the date and the day's serial" >&2; exit 2; }
 spec=$root/packaging/plugin-qualification-records.spec
 # a class the package carries: every set goes into the package of its class's architecture
 if ! awk -v c="$class" '$1 !~ /^#/ && $3 == c {found = 1} END {exit !found}' "$root/packaging/arch-classes"; then
@@ -109,9 +116,9 @@ json.dump(p, open(sys.argv[3], "w", encoding="utf-8"), indent=2)' "$provenance" 
     echo "records/$class/$name $version: $(ls "$root/records/$class/$name" | wc -l) files; review git diff"
 }
 
-# the version where it lives (the spec and the top debian/changelog entry, which a tag equals)
+# the version where it lives (the spec and the top debian/changelog entry, which a tag equals), the stamp in the Release
 set_version() {
-    sed -i "s/^Version: .*/Version: $version/" "$spec"
+    sed -i "s/^Version: .*/Version: $version/; s/^Release: .*/Release: $release%{?dist}/" "$spec"
     if [ "$(sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' "$root/debian/changelog")" != "$version" ]; then
         sed -i "1s/^\\([a-z0-9.+-]*\\) (.*) unstable/\\1 ($version) unstable/" "$root/debian/changelog"
         echo "debian/changelog: the top entry now names $version; write what this version changes" >&2

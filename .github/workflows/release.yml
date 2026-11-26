@@ -17,6 +17,8 @@ name: release
 on:
   push:
     tags: ['v*']
+    # a merge to devel builds the real package and publishes it to staging (Open-Mixer/.github#289)
+    branches: [devel]
   workflow_dispatch:
     inputs:
       publish:
@@ -68,7 +70,7 @@ jobs:
       # the source package is named for the repository, which keeps the .changes file name short for lintian
       package-name: plugin-db-qualification
       binary-names: ${{ needs.plan.outputs.deb-names }}
-      publish: ${{ github.event_name == 'push' || inputs.publish == true }}
+      publish: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish == true }}
       # the arm64 records are for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
       # bookworm images before it); the reader builds with sqlite, pkgconf and the channel's libomx-domain-dev, the records with python3 (tools/sets.py)
       dependencies: ''
@@ -149,7 +151,7 @@ jobs:
     with:
       package-name: plugin-qualification-records
       binary-names: ${{ needs.plan.outputs.rpm-names }}
-      publish: ${{ github.event_name == 'push' || inputs.publish == true }}
+      publish: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish == true }}
       # the records are data, built per architecture; no mod-host
       arch-matrix: ${{ needs.plan.outputs.rpm-arches }}
       needs-mod-host: false

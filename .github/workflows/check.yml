@@ -22,6 +22,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  trigger-gate:
+    name: only this workflow runs on a pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Open-Mixer/.github/.github/actions/trigger-gate@openmixer-v1
+        with:
+          lint-workflow: check.yml
+
   records:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -66,10 +76,14 @@ jobs:
       - uses: actions/checkout@v4
       # an ordinary run builds against the channel: refuse an omx package from the staging channel
       - name: Every omx package comes from the channel
+        env:
+          DEVEL_PR: ${{ startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel' }}
         run: |
           set -euo pipefail
           dnf repoquery --installed --qf '%{name} %{version} %{from_repo}\n' 'omx-*' 'libomx-*' | tee /tmp/from-repo
-          if grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
+          # a pull request into devel builds against the staging channel (Open-Mixer/.github#271): a staged package is
+          # what it tests, so only every other run refuses one
+          if [ "$DEVEL_PR" != true ] && grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
       - run: make check
       # the hosting exception of the store spec (section 3.4) ends when omx-clap ships a `hosting` domain: fail while
       # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone)

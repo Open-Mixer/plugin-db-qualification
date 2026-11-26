@@ -86,11 +86,12 @@ jobs:
           if [ "$DEVEL_PR" != true ] && grep staging /tmp/from-repo; then echo "a package above came from the staging channel: an ordinary run builds against the channel"; exit 1; fi
       - run: make check
       # the hosting exception of the store spec (section 3.4) ends when omx-clap ships a `hosting` domain: fail while
-      # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone)
+      # its main holds contract.d/hosting/hosting.json and the reader still skips that domain (a read-only clone). main
+      # by name: the default branch is devel, where a domain lands before it ships
       - name: The hosting exception ends with omx-clap's hosting domain
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap
+          git clone --depth 1 --branch main https://github.com/Open-Mixer/omx-clap-core.git /tmp/omx-clap
           sh tools/hosting-skip-ends.sh /tmp/omx-clap src/pqdb.c
 
   # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the

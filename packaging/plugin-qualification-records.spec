@@ -21,8 +21,8 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 0.1.1
-Release: 2026112701%{?dist}
+Version: 0.1.2
+Release: 2026112702%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/Open-Mixer/plugin-db-qualification
@@ -184,6 +184,11 @@ done
 %{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog
+* Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.2-2026112702
+- The writer takes a reason param's word from QUALIFICATION_MEASUREMENT_
+  UNMEASURED_REASONS too: plugin-qualify 0.21.3 writes the memory reason it
+  could not measure with unmeasuredReason, which the writer refused.
+
 * Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.1-2026112701
 - The amd64 Debian package joins packaging/release-arches: the full matrix
   serves every package in every cell (owner ruling 2026-11-26), and plugin-

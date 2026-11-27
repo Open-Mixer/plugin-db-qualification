@@ -436,6 +436,8 @@ _PROBE_OUT = [("probe", "PROBE_OUTCOMES"), _q("MEMORY_BOUND_OUTCOMES")]
 _RATING = [_q("MEASUREMENT_VERDICT_RATINGS")]
 _DIM = [_q("MEASUREMENT_DIMENSIONS")]
 _PROFILE = [_q("HOST_PROFILES")]
+# a param word is a figure word, or the unmeasured reason of a figure that was not measured (unmeasuredReason)
+_PARAM_WORDS = [_q("REASON_PARAM_WORDS"), _q("MEASUREMENT_UNMEASURED_REASONS")]
 
 WORDS = {
     ("plugin", "format"): [("plugin-db", "PLUGIN_DB_ADDRESS_FORMATS")],
@@ -489,9 +491,9 @@ WORDS = {
     ("reason_param", "name"): [_q("REASON_PARAMS")],
     ("adapter_param", "name"): [_q("REASON_PARAMS")],
     ("adapter_cell_param", "name"): [_q("REASON_PARAMS")],
-    ("reason_param", "word"): [_q("REASON_PARAM_WORDS")],
-    ("adapter_param", "word"): [_q("REASON_PARAM_WORDS")],
-    ("adapter_cell_param", "word"): [_q("REASON_PARAM_WORDS")],
+    ("reason_param", "word"): _PARAM_WORDS,
+    ("adapter_param", "word"): _PARAM_WORDS,
+    ("adapter_cell_param", "word"): _PARAM_WORDS,
     ("tier", "tier"): [_q("RECORD_TIERS")],
     ("cell", "latency_unmeasured_reason"): [_q("MEASUREMENT_UNMEASURED_REASONS")],
     ("cell", "mem_unmeasured_reason"): [_q("MEASUREMENT_UNMEASURED_REASONS")],

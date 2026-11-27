@@ -493,6 +493,26 @@ class HostingWords(Layer):
         self.assertEqual(cm.exception.name, "word-unknown")
         self.assertIn("hosting.clap.not-a-code", str(cm.exception))
 
+    def test_a_memory_reason_of_plugin_qualify_0_21_3_carries_its_unmeasured_reason(self):
+        # plugin-qualify 0.21.3 (hosting-suitability.ts) writes the memory reason it could not measure as
+        # hosting.memory.unmeasured with params {rate, quantum, unmeasuredReason: <a measurement unmeasured reason>}; the
+        # name is a QUALIFICATION_REASON_PARAMS word and the value a QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS word, both of
+        # the installed qualification domain
+        def unmeasured(v):
+            return [x for x in v["reasons"] if x["code"] == "hosting.memory.unmeasured"]
+
+        rec, offer, cls = first_record(LV2, lambda r: any(unmeasured(v) for v in r["verdicts"]))
+        reason = next(x for v in rec["verdicts"] for x in unmeasured(v))
+        reason["params"]["unmeasuredReason"] = "voices-unknown"
+        self.put(rec, offer=offer, cls=cls)
+        self.assertIn(("unmeasuredReason", None, "voices-unknown"),
+                      self.rows("SELECT name, number, word FROM reason_param WHERE name = 'unmeasuredReason'"))
+        reason["params"]["unmeasuredReason"] = "not-a-reason"
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(cm.exception.name, "word-unknown")
+        self.assertIn("not-a-reason", str(cm.exception))
+
     def test_a_contract_directory_without_the_domain_is_refused_by_name(self):
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)

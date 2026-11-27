@@ -842,23 +842,37 @@ lists (section 9, ruling 1).
 
 ### 3.6 `user_version`
 
-`PRAGMA user_version = 1` for this schema, set by the writer as the last statement of a build. The rule:
+`PRAGMA user_version = 2` for this schema, set by the writer as the last statement of a build. The rule:
 
-- There is ONE version, `PQDB_SCHEMA_VERSION` (1). It is written in two places, the header line of
-  `schema/qualification.sql` (`user_version 1`), which the writer reads, and `pqdb.h`, which the reader compiles; a
-  test holds the two equal. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
-  and 3 release with the consumer switch, section 9, ruling 8), so the DDL of section 3.7's amendment is version 1, and
-  no store of an earlier shape exists to refuse. This holds only if no release of this repository ships a store before
-  the code of this amendment lands (section 9, ruling 10; section 10): that code must land before this pass's
-  release of this repository, or the DDL is version 2. A reader reads exactly its version; there is no range
-  and no reader of an older version.
-- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` (`schema-other`, naming the
-  file, its version and the reader's); a base and a user layer at different versions (`schema-mismatch`, naming both
-  files and both versions, checked first); 0, a file that is no store (`not-a-store`).
-- The base database is never upgraded: each build writes it new, at the writer's version. A package whose base is at a
-  new version depends on the reader at the floor that reads it.
-- The user layer is not upgraded in place in this pass: there is one version. A later version states its own rule,
-  with the owner (section 10).
+- There is ONE version, `PQDB_SCHEMA_VERSION` (2). It is written in two places, the header line of
+  `schema/qualification.sql` (`user_version 2`), which the writer reads, and `pqdb.h`, which the reader compiles; a
+  test holds the two equal. Any change of the DDL after a release is +1.
+- Version 1 is the DDL of the release 2026112401, the dated packages: a device's user layer is at 1. The DDL then
+  gained `cell_voice_point`, `record.adapter_content`, `.adapter_loaded`, `.adapter_refused`, `cost_entry.voices_basis`,
+  `.voices_capacity`, `.voices_held`, `cell.rt_events` and two table CHECKs of `cell` at the same number, so the
+  release of 0.1.x is version 2 (section 9, ruling 10 foresaw it).
+- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` and that no migration takes
+  to it (`schema-other`, naming the file, its version and the reader's); a base and a user layer at different versions
+  (`schema-mismatch`, naming both files and both versions, checked after a user layer's migration); 0, a file that is
+  no store (`not-a-store`).
+- The base database is never upgraded: each build writes it new, at the writer's version, from `records/`. A package
+  whose base is at a new version depends on the reader at the floor that reads it.
+- **The user layer is migrated in place** (owner, 2026-11-27: migrate, do not measure again). A migration is one step,
+  `schema/migrations/<from>-to-<to>.sql`, installed beside the DDL (`migrations/`) and compiled into the reader. The
+  writer, on a put or a delete, and the reader, on open, find the user layer at `<to> - 1`, copy it to
+  `<layer>.user_version-<from>` (SQLite's backup), and run the step in ONE transaction with foreign keys off: the part
+  before its line `-- @schema` moves the old tables aside, the current DDL runs, the part after it copies every row and
+  maps every renamed word, then drops the old tables. Before COMMIT the foreign keys are checked and every stored word
+  is checked against the installed domains; a word none of its column's items holds, which the step does not rename,
+  is refused by name (`migration-word-unknown` from the writer, `word-unknown` from the reader) and the layer is left
+  as it was. A store already at `<to>` is not touched, so a second open changes nothing.
+- **1 to 2 renames no word.** The words every word column's items held at version 1 (the domains of plugin-hostd,
+  plugin-hostd-protocol, plugin-db and omx-clap-core at 2026-11-24, `qualification` 1.4.0, `machine` 1.1.0, `probe`
+  1.0.0, `plugin-db` 1.0.0, the omx-clap package's codes 0.34.1) are all words of the same items at 2; 2 only adds
+  words. The step names every domain at 0.1.0 in `store_domain` (every domain started again at 0.1.0, owner
+  2026-11-25, and the words of 1 are words of each at 0.1.0), adds the four `word_check` items 2 reads that 1 did
+  not, and sets `cell.rt_events` to 1 where the audio thread's counts are (version 1 wrote `rtSafety.events` with
+  them, always).
 
 ### 3.7 Binary identity, the key's SHA-256 and the pin
 

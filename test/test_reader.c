@@ -983,25 +983,26 @@ static void spec24_read_only(void)
         CHECK(strcmp(a[i].name, b[i].name) == 0 && a[i].size == b[i].size && a[i].mtime == b[i].mtime, "%s changed", a[i].name);
 }
 
-/* ---- the hosting exception (section 3.4): hosting words are passed over, every other word is checked ---- */
+/* ---- the hosting columns (section 3.4, the exception ended): a hosting word is checked as any other word ---- */
 static void hosting_columns(void)
 {
     pqdb *db;
     pqdb_error e;
     const struct { const char *kind, *column; } cols[] = { { "verdict", "verdict.deciding" }, { "not-measured", "not_measured.code" },
                                                             { "tier", "tier.deciding" }, { "reason", "reason.code" } };
-    /* the store names `hosting` in store_domain and the contract directory holds no such domain: it opens */
+    /* the store names `hosting` in store_domain and the contract directory holds that domain: it opens */
     CHECK(open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db) == 0, "a store with a hosting row is refused");
     if (db) pqdb_close(db);
     for (size_t i = 0; i < sizeof cols / sizeof *cols; i++) {
         char f[80];
-        /* a hosting word: passed over, whether or not any package holds it (the writer checked it) */
+        /* a hosting word the hosting domain holds opens */
         snprintf(f, sizeof f, "base-ok-%s.sqlite", cols[i].kind);
         CHECK(open_ok(fx(f), NULL, GOOD, &db) == 0, "a hosting word was refused in %s", cols[i].column);
         if (db) pqdb_close(db);
+        /* a hosting word no item of the domain holds is refused, naming the column and the word: never passed over */
         snprintf(f, sizeof f, "base-unknown-%s.sqlite", cols[i].kind);
-        CHECK(open_ok(fx(f), NULL, GOOD, &db) == 0, "a hosting word no package holds was refused in %s", cols[i].column);
-        if (db) pqdb_close(db);
+        expect_refusal(fx(f), NULL, GOOD, "qualification-db.word-unknown", &e);
+        CHECK(strstr(e.message, cols[i].column) && strstr(e.message, "hosting.held-by-no-package"), "%s", e.message);
         /* any other word that no non-hosting item holds is refused, naming the column and the word */
         snprintf(f, sizeof f, "base-bad-%s.sqlite", cols[i].kind);
         expect_refusal(fx(f), NULL, GOOD, "qualification-db.word-unknown", &e);
@@ -1010,15 +1011,15 @@ static void hosting_columns(void)
     expect_refusal(fx("base-bad-rating.sqlite"), NULL, GOOD, "qualification-db.word-unknown", &e);
     CHECK(strstr(e.message, "verdict.rating") && strstr(e.message, "excellent"), "%s", e.message);
 }
-/* hosting-skip-ends: while the reader skips the hosting columns, no contract directory the tests read may hold a hosting
- * domain document: once one exists the skip is to be removed (section 3.4). */
-static void hosting_skip_ends(void)
+/* the hosting exception has ended (section 3.4): every contract directory the tests read holds omx-clap's hosting
+ * domain, so the hosting columns above are checked against a domain document, as the installed reader checks them */
+static void hosting_domain_read(void)
 {
     const char *dirs[] = { "contract-good", "contract-no-conditional", "contract-old" };
     for (size_t i = 0; i < sizeof dirs / sizeof *dirs; i++) {
         char path[1100];
         snprintf(path, sizeof path, "%s/hosting/hosting.json", contract(dirs[i]));
-        CHECK(access(path, F_OK) != 0, "%s exists: a hosting domain is there while the reader still skips the hosting columns; remove the skip", path);
+        CHECK(access(path, F_OK) == 0, "%s is absent: the hosting columns would not be checked against the hosting domain", path);
     }
 }
 
@@ -1301,7 +1302,7 @@ static const test TESTS[] = {
     { "spec 24 read only still", spec24_read_only, 0 },
     { "the reference tier answers where two tiers hold a cell", tier_pick, 0 },
     { "the newer set answers where two sets of one tier hold a cell", newer_pick, 0 },
-    { "hosting words passed over, nothing else narrowed", hosting_columns, 0 }, { "hosting-skip-ends", hosting_skip_ends, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
+    { "hosting words checked as any", hosting_columns, 0 }, { "the hosting domain is read", hosting_domain_read, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
     { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 },
     { "pqdb_each refuses a non-finite figure", each_non_finite, 0 }, { "pqdb_number", number_writer, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
     { "25 a user layer at 1 is migrated on open", t25_migrate_user_layer, 0 },

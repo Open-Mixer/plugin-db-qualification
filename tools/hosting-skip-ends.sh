@@ -1,9 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
-# The end of the hosting exception of this repository's qualification store spec (section 3.4): while omx-clap keeps
-# data/hosting*.json and has no `hosting` domain, the reader (src/pqdb.c, hosting_exception) does not open that domain.
-# Once omx-clap ships it, the exception must go. This fails when both are true.
+# The end of the hosting exception of this repository's qualification store spec (section 3.4): while omx-clap kept
+# data/hosting*.json and had no `hosting` domain, the reader (src/pqdb.c, hosting_exception) did not open that domain.
+# omx-clap ships it now and the exception is gone; this fails if both are true again, so the exception cannot return.
 #   hosting-skip-ends.sh <omx-clap tree, or an installed contract directory> <pqdb.c>
 #   hosting-skip-ends.sh --self-test
 # Exit 0: the exception may stand, or is gone; 1: the domain exists and the reader still skips it; 2: usage.

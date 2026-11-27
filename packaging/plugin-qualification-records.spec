@@ -192,6 +192,8 @@ done
 - The store is user_version 2: the DDL changed after the dated release at
   the same number. A user layer at 1 is migrated in place by the writer and
   the reader on open (schema/migrations/1-to-2.sql), a backup beside it.
+- The hosting exception has ended: omx-clap ships its hosting domain, so the
+  reader opens it and checks the hosting columns as every other.
 
 * Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.1-2026112701
 - The amd64 Debian package joins packaging/release-arches: the full matrix

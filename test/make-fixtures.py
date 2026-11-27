@@ -49,7 +49,7 @@ WORD_CHECK = [
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
-    # the hosting columns (section 3.4): mixed with probe words, or hosting words only
+    # the hosting columns (section 3.4), checked as any: mixed with probe words, or hosting words only
     ("history_verdict", "host", "qualification", "QUALIFICATION_HOST_PROFILES"),
     ("history_verdict", "measured", "qualification", "QUALIFICATION_PIN_VERDICTS"),
     ("history_verdict", "adjusted", "qualification", "QUALIFICATION_PIN_VERDICTS"),
@@ -73,7 +73,7 @@ WORD_CHECK = [
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("adapter_cell", "code", "probe", "PROBE_SIGNALS"),
 ]
-DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.33.1", "plugin-db": "1.0.0"}
+DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.1.0", "plugin-db": "1.0.0"}
 
 def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok"):
     """cost: (median, p, p value); lat: (declared, measured); mem: (first kb, per instance kb)."""

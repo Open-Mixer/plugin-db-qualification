@@ -75,7 +75,7 @@ column against the owner's installed domain. Nothing is copied into this reposit
 
 The hosting words are omx-clap's `hosting` domain (`<contractdir>/hosting/hosting.json`, which omx-clap-contract ships), read
 as every other domain: the writer refuses a hosting word the domain does not hold, and the store records the domain at its
-version. The reader still passes over the hosting columns (the spec's hosting exception, until `hosting-skip-ends` says so).
+version. The reader checks the hosting columns against it as every other column (the spec's hosting exception has ended).
 
 The contract directory is the one omx-contract installs. The writer takes `--contract-dir`, then `OMX_CONTRACT_PATH`,
 then the `contractdir` of `libomx-domain.pc`.

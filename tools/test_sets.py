@@ -430,8 +430,8 @@ class Import(Tree):
 class ReleaseArches(unittest.TestCase):
     """What this repository's own packaging/release-arches offers: no amd64 deb."""
 
-    def test_the_deb_is_arm64_alone_and_the_rpm_is_x86_64_and_aarch64(self):
-        self.assertEqual(sets.release_arches(ROOT), {"deb": ["arm64"], "rpm": ["x86_64", "aarch64"]})
+    def test_the_deb_is_arm64_and_amd64_and_the_rpm_is_x86_64_and_aarch64(self):
+        self.assertEqual(sets.release_arches(ROOT), {"deb": ["arm64", "amd64"], "rpm": ["x86_64", "aarch64"]})
 
     def test_every_consumer_still_passes(self):
         self.assertEqual(sets.problems(ROOT), [])
@@ -444,7 +444,7 @@ class ReleaseArches(unittest.TestCase):
             del os.environ["GITHUB_OUTPUT"]
         with open(out) as f:
             written = f.read().splitlines()
-        self.assertIn('deb-arches=["arm64"]', written)
+        self.assertIn('deb-arches=["arm64", "amd64"]', written)
         self.assertIn('rpm-arches=["x86_64", "aarch64"]', written)
         self.assertIn("deb-prove=true", written)
         self.assertIn("rpm-prove=true", written)

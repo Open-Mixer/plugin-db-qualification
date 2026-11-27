@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define PQDB_SCHEMA_VERSION 1
+#define PQDB_SCHEMA_VERSION 2
 
 typedef struct pqdb pqdb;                          /* an opened base and user layer; opaque */
 typedef enum { PQDB_SCOPE_USER, PQDB_SCOPE_SYSTEM } pqdb_scope;

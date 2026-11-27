@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #include <plugin-qualification-db/pqdb.h>
 #include "pqdb_record.h"
+#include "pqdb_sql.h"   /* PQDB_DDL and the migrations, generated from schema/ by the Makefile */
 
 #include <omxcontract/omx_domain.h>
 #include <sqlite3.h>
@@ -176,14 +177,6 @@ static int check_store(sqlite3 *db, const char *path, int want_user, pqdb_error 
     return S_OK;
 }
 
-/* The hosting exception (section 3.4, this pass only): there is no `hosting` domain. The reader does not open its
- * store_domain row and does not check the words `hosting.*` of the word_check columns that have an item of it (the
- * writer checked them against the contract package omx-clap); the other words of such a column are checked as any. Removing the exception is this one function's removal (and its two calls). */
-static int hosting_exception(const char *domain)
-{
-    return strcmp(domain, "hosting") == 0;
-}
-
 /* ---- the word check ---- */
 typedef struct { omx_domain *d[16]; char name[16][64]; int n; } domains;
 
@@ -212,8 +205,6 @@ static int open_domains(sqlite3 *db, const char *path, const char *cdir, domains
         const char *name = (const char *)sqlite3_column_text(st, 0), *ver = (const char *)sqlite3_column_text(st, 1);
         omx_domain_error e;
         int lrc;
-        if (hosting_exception(name))
-            continue;
         if (ds->n >= 16 || strlen(name) >= 64) {
             domains_close(ds); sqlite3_finalize(st);
             return fail(err, S_NOT_A_STORE, "%s: store_domain holds too many or too long domains", path);
@@ -239,7 +230,9 @@ static int open_domains(sqlite3 *db, const char *path, const char *cdir, domains
 }
 
 typedef struct { omx_domain *d; char item[96]; } item_ref;
-typedef struct { item_ref it[32]; int n; } item_set;
+/* a column's items: the hosting pattern alone expands to every HOSTING_<group>_CODES item (19 today, section 3.4) */
+#define MAX_ITEMS 64
+typedef struct { item_ref it[MAX_ITEMS]; int n; } item_set;
 
 static int in_items(const item_set *s, const char *word, const char *suffix)
 {
@@ -324,10 +317,8 @@ static int ident_ok(const char *s)
     return 1;
 }
 
-/* the distinct words of one column, each looked up in the column's items. A column that has an item of the hosting
- * domain (`hosting_col`) skips only the words that begin `hosting.`; any other word of it must be in its other items. */
-static int check_column(sqlite3 *db, const char *path, const char *tbl, const char *col, const item_set *set, int hosting_col,
-                        pqdb_error *err)
+/* the distinct words of one column, each looked up in the column's items */
+static int check_column(sqlite3 *db, const char *path, const char *tbl, const char *col, const item_set *set, pqdb_error *err)
 {
     sqlite3_stmt *words;
     char sql[300];
@@ -337,8 +328,6 @@ static int check_column(sqlite3 *db, const char *path, const char *tbl, const ch
         return fail(err, S_NOT_A_STORE, "%s: word_check names %s.%s, which is no column of the store", path, tbl, col);
     while ((wrc = sqlite3_step(words)) == SQLITE_ROW) {
         const char *w = (const char *)sqlite3_column_text(words, 0);
-        if (hosting_col && strncmp(w, "hosting.", 8) == 0)
-            continue;
         if (!in_items(set, w, NULL) && !adapter_code_ok(set, w)) {
             status = fail(err, S_WORD_UNKNOWN, "%s: %s.%s holds the word %s, which none of its items in the "
                           "installed domains holds", path, tbl, col, w);
@@ -355,7 +344,7 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
 {
     sqlite3_stmt *wc;
     int rc = sqlite3_prepare_v2(db, "SELECT tbl, col, domain, item FROM word_check ORDER BY tbl, col, domain, item", -1, &wc, NULL);
-    int pending = 0, status = S_OK, skip = 0;
+    int pending = 0, status = S_OK;
     char tbl[64] = "", col[64] = "";
     item_set set;
     if (rc != SQLITE_OK)
@@ -372,10 +361,9 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
             break;
         }
         if (pending && (rc == SQLITE_DONE || strcmp(t, tbl) != 0 || strcmp(c, col) != 0)) {
-            status = check_column(db, path, tbl, col, &set, skip, err);
+            status = check_column(db, path, tbl, col, &set, err);
             if (status != S_OK)
                 break;
-            skip = 0;
             set.n = 0;
             pending = 0;
         }
@@ -387,19 +375,12 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
         }
         {
             omx_domain *d = domain_named(ds, (const char *)sqlite3_column_text(wc, 2));
-            if (hosting_exception((const char *)sqlite3_column_text(wc, 2))) {
-                snprintf(tbl, sizeof tbl, "%s", t);
-                snprintf(col, sizeof col, "%s", c);
-                skip = 1;
-                pending = 1;
-                continue;
-            }
             if (!d) {
                 status = fail(err, S_NOT_A_STORE, "%s: word_check names the domain %s, which store_domain does not list",
                               path, sqlite3_column_text(wc, 2));
                 break;
             }
-            if (set.n >= 32) {
+            if (set.n >= MAX_ITEMS) {
                 status = fail(err, S_NOT_A_STORE, "%s: %s.%s has too many items", path, t, c);
                 break;
             }
@@ -413,6 +394,226 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
     }
     sqlite3_finalize(wc);
     return status;
+}
+
+/* ---- the migration of a user layer (spec section 3.6) ---- */
+#define MAX_TABLES 64
+
+static int exec_sql(sqlite3 *db, const char *sql, const char *path, const char *what, pqdb_error *err)
+{
+    char *msg = NULL;
+    if (sqlite3_exec(db, sql, NULL, NULL, &msg) == SQLITE_OK)
+        return S_OK;
+    int st = fail(err, S_SCHEMA_OTHER, "%s: %s: %s", path, what, msg ? msg : sqlite3_errmsg(db));
+    sqlite3_free(msg);
+    return st;
+}
+/* an exec of sqlite3_mprintf's string, freed */
+static int exec_fmt(sqlite3 *db, const char *path, pqdb_error *err, const char *fmt, ...)
+{
+    va_list ap;
+    char *sql;
+    int st;
+    va_start(ap, fmt);
+    sql = sqlite3_vmprintf(fmt, ap);
+    va_end(ap);
+    if (!sql)
+        return fail(err, S_UNREADABLE, "out of memory");
+    st = exec_sql(db, sql, path, "the migration", err);
+    sqlite3_free(sql);
+    return st;
+}
+
+typedef struct { char name[MAX_TABLES][64]; int n; } names;
+/* the first column of every row of a query, up to MAX_TABLES */
+static int names_of(sqlite3 *db, const char *sql, names *out)
+{
+    sqlite3_stmt *st;
+    int rc;
+    out->n = 0;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, NULL) != SQLITE_OK)
+        return -1;
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW && out->n < MAX_TABLES)
+        snprintf(out->name[out->n++], 64, "%s", (const char *)sqlite3_column_text(st, 0));
+    sqlite3_finalize(st);
+    return rc == SQLITE_DONE || rc == SQLITE_ROW ? 0 : -1;
+}
+static int in_names(const names *n, const char *s)
+{
+    for (int i = 0; i < n->n; i++)
+        if (strcmp(n->name[i], s) == 0)
+            return 1;
+    return 0;
+}
+
+/* the user layer at `from`, taken to PQDB_SCHEMA_VERSION in place, as tools/qualification_db.py migrate does it: a
+ * backup copy beside it (<layer>.user_version-<from>), then in one transaction every table T moved aside to v1_T and
+ * given the columns of the new T it lacks, the step run over the v1_ tables, the DDL run, every row copied column by
+ * column, the v1_ tables dropped, and the foreign keys, the store and every word checked against the installed domains
+ * before COMMIT; any failure rolls back and leaves the layer as it was */
+static int migrate_user(const char *path, int from, const char *cdir, pqdb_error *err)
+{
+    const char *step = from == 1 && PQDB_SCHEMA_VERSION == 2 ? PQDB_MIGRATION_1_TO_2 : NULL;
+    char bak[4200];
+    sqlite3 *db = NULL, *copy = NULL, *mem = NULL;
+    sqlite3_backup *b;
+    domains ds;
+    names old, tables, drop;
+    int st, v = 0, got = 0, rc;
+    if (!step)
+        return fail(err, S_SCHEMA_OTHER, "%s: user_version %d, this reader reads %d and has no migration from %d", path,
+                    from, PQDB_SCHEMA_VERSION, from);
+    if (snprintf(bak, sizeof bak, "%s.user_version-%d", path, from) >= (int)sizeof bak)
+        return fail(err, S_UNREADABLE, "%s: the path is too long", path);
+    if (sqlite3_open_v2(":memory:", &mem, SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK ||
+        sqlite3_exec(mem, PQDB_DDL, NULL, NULL, NULL) != SQLITE_OK ||
+        names_of(mem, "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid", &tables)) {
+        sqlite3_close(mem);
+        return fail(err, S_UNREADABLE, "%s: the reader's DDL does not build", path);
+    }
+    if (sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK) {
+        st = fail(err, S_SCHEMA_OTHER, "%s: user_version %d, and this reader cannot open it to migrate it to %d: %s "
+                  "(its writer migrates it)", path, from, PQDB_SCHEMA_VERSION, db ? sqlite3_errmsg(db) : "out of memory");
+        sqlite3_close(db);
+        sqlite3_close(mem);
+        return st;
+    }
+    sqlite3_extended_result_codes(db, 1);
+    sqlite3_busy_timeout(db, BUSY_MS);
+    if (sqlite3_open_v2(bak, &copy, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK ||
+        !(b = sqlite3_backup_init(copy, "main", db, "main"))) {
+        st = fail(err, S_UNREADABLE, "%s: cannot write the backup %s: %s", path, bak, sqlite3_errmsg(copy));
+        sqlite3_close(copy);
+        goto out;
+    }
+    rc = sqlite3_backup_step(b, -1);
+    sqlite3_backup_finish(b);
+    if (rc != SQLITE_DONE) {
+        st = fail(err, S_UNREADABLE, "%s: cannot write the backup %s: %s", path, bak, sqlite3_errmsg(copy));
+        sqlite3_close(copy);
+        goto out;
+    }
+    sqlite3_close(copy);
+    if ((st = exec_sql(db, "PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON; BEGIN EXCLUSIVE", path,
+                       "cannot begin the migration", err)) != S_OK)
+        goto out;
+    if (one_int(db, "PRAGMA user_version", &v, &got) != SQLITE_OK || !got) {
+        st = fail_sql(err, db, path, "cannot read it");
+        goto rollback;
+    }
+    if (v != from) {   /* another process migrated it meanwhile */
+        sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+        st = S_OK;
+        goto out;
+    }
+    if (names_of(db, "SELECT type || ' \"' || replace(name, '\"', '\"\"') || '\"' FROM sqlite_master "
+                     "WHERE type IN ('index', 'trigger') AND sql IS NOT NULL", &drop) ||
+        names_of(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", &old)) {
+        st = fail_sql(err, db, path, "cannot read its schema");
+        goto rollback;
+    }
+    for (int i = 0; i < drop.n; i++)
+        if ((st = exec_fmt(db, path, err, "DROP %s", drop.name[i])) != S_OK)
+            goto rollback;
+    for (int i = 0; i < old.n; i++)
+        if ((st = exec_fmt(db, path, err, "ALTER TABLE \"%w\" RENAME TO \"v1_%w\"", old.name[i], old.name[i])) != S_OK)
+            goto rollback;
+    for (int i = 0; i < tables.n; i++) {
+        sqlite3_stmt *c;
+        if (!in_names(&old, tables.name[i]))
+            continue;
+        if (sqlite3_prepare_v2(mem, "SELECT name, type FROM pragma_table_info(?)", -1, &c, NULL) != SQLITE_OK) {
+            st = fail(err, S_UNREADABLE, "%s: cannot read the reader's DDL", path);
+            goto rollback;
+        }
+        sqlite3_bind_text(c, 1, tables.name[i], -1, SQLITE_STATIC);
+        while (sqlite3_step(c) == SQLITE_ROW) {
+            const char *col = (const char *)sqlite3_column_text(c, 0), *ty = (const char *)sqlite3_column_text(c, 1);
+            char *q = sqlite3_mprintf("SELECT count(*) FROM pragma_table_info('v1_%q') WHERE name = %Q", tables.name[i], col);
+            int have = 0, g = 0;
+            if (!q || one_int(db, q, &have, &g) != SQLITE_OK) {
+                sqlite3_free(q);
+                sqlite3_finalize(c);
+                st = fail_sql(err, db, path, "cannot read its columns");
+                goto rollback;
+            }
+            sqlite3_free(q);
+            if (!have && (st = exec_fmt(db, path, err, "ALTER TABLE \"v1_%w\" ADD COLUMN \"%w\" %s", tables.name[i], col, ty)) != S_OK) {
+                sqlite3_finalize(c);
+                goto rollback;
+            }
+        }
+        sqlite3_finalize(c);
+    }
+    if ((st = exec_sql(db, step, path, "the migration's step", err)) != S_OK)
+        goto rollback;
+    for (int i = 0; i < old.n; i++) {
+        char *q;
+        int left = 0, g = 0;
+        if (in_names(&tables, old.name[i]))
+            continue;
+        q = sqlite3_mprintf("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'v1_%q'", old.name[i]);
+        if (!q || one_int(db, q, &left, &g) != SQLITE_OK) left = 1;
+        sqlite3_free(q);
+        if (left) {
+            st = fail(err, S_NOT_A_STORE, "%s: the migration from %d has no place for the table %s", path, from, old.name[i]);
+            goto rollback;
+        }
+    }
+    if ((st = exec_sql(db, PQDB_DDL, path, "the DDL", err)) != S_OK)
+        goto rollback;
+    for (int i = 0; i < tables.n; i++) {
+        char *q, *list;
+        sqlite3_stmt *l;
+        if (!in_names(&old, tables.name[i]))
+            continue;
+        q = sqlite3_mprintf("SELECT group_concat('\"' || replace(name, '\"', '\"\"') || '\"', ', ') FROM pragma_table_info(%Q)",
+                            tables.name[i]);
+        if (!q || sqlite3_prepare_v2(mem, q, -1, &l, NULL) != SQLITE_OK || sqlite3_step(l) != SQLITE_ROW) {
+            sqlite3_free(q);
+            st = fail(err, S_UNREADABLE, "%s: cannot read the reader's DDL", path);
+            goto rollback;
+        }
+        sqlite3_free(q);
+        list = sqlite3_mprintf("%s", (const char *)sqlite3_column_text(l, 0));
+        sqlite3_finalize(l);
+        st = list ? exec_fmt(db, path, err, "INSERT INTO \"%w\" (%s) SELECT %s FROM \"v1_%w\"", tables.name[i], list, list,
+                             tables.name[i]) : fail(err, S_UNREADABLE, "out of memory");
+        sqlite3_free(list);
+        if (st != S_OK)
+            goto rollback;
+    }
+    for (int i = 0; i < old.n; i++)
+        if ((st = exec_fmt(db, path, err, "DROP TABLE IF EXISTS \"v1_%w\"", old.name[i])) != S_OK)
+            goto rollback;
+    {
+        sqlite3_stmt *fk;
+        if (sqlite3_prepare_v2(db, "PRAGMA foreign_key_check", -1, &fk, NULL) != SQLITE_OK) {
+            st = fail_sql(err, db, path, "cannot check the foreign keys");
+            goto rollback;
+        }
+        rc = sqlite3_step(fk);
+        sqlite3_finalize(fk);
+        if (rc != SQLITE_DONE) {
+            st = fail(err, S_NOT_A_STORE, "%s: the migration from %d leaves foreign keys unmet", path, from);
+            goto rollback;
+        }
+    }
+    if ((st = check_store(db, path, 1, err)) != S_OK || (st = open_domains(db, path, cdir, &ds, err)) != S_OK)
+        goto rollback;
+    st = check_words(db, path, &ds, err);
+    domains_close(&ds);
+    if (st != S_OK)
+        goto rollback;
+    if ((st = exec_fmt(db, path, err, "PRAGMA user_version = %d; COMMIT", PQDB_SCHEMA_VERSION)) != S_OK)
+        goto rollback;
+    goto out;
+rollback:
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+out:
+    sqlite3_close(db);
+    sqlite3_close(mem);
+    return st;
 }
 
 /* ---- open ---- */
@@ -436,6 +637,13 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
         if (exists(user, &e)) {
             if ((st = open_layer(user, 1, &db->user, &vu, err)) != S_OK)
                 goto bad;
+            if (vu > 0 && vu < PQDB_SCHEMA_VERSION) {   /* an older user layer is migrated, then opened again */
+                sqlite3_close(db->user);
+                db->user = NULL;
+                if ((st = migrate_user(user, vu, cdir, err)) != S_OK ||
+                    (st = open_layer(user, 1, &db->user, &vu, err)) != S_OK)
+                    goto bad;
+            }
         } else if (e != ENOENT && e != ENOTDIR) {
             st = fail(err, S_UNREADABLE, "%s: %s", user, strerror(e));
             goto bad;

@@ -47,7 +47,7 @@ The spec is this repository's first design spec; each is named by its date and t
 | --- | --- | --- | --- |
 | record fields and their meaning | plugin-qualify (it writes each record) | plugin-qualify, in its record format | plugin-qualify |
 | words a record holds (ratings, reasons, dimensions, bases) | plugin-qualify | plugin-qualify, in a minor of the `qualification` domain | `qualification` (plugin-qualify) |
-| hosting codes in reasons (`hosting.*`) | omx-clap's hosting tables, copied by plugin-qualify | omx-clap | omx-clap's installed `data/hosting*.json` this pass, its `hosting` domain after it (precondition 5 and its exception) |
+| hosting codes in reasons (`hosting.*`) | omx-clap's hosting tables, copied by plugin-qualify | omx-clap | omx-clap's `hosting` domain (precondition 5; its exception has ended) |
 | probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | the `probe` domain (plugin-hostd), read directly (precondition 4) |
 | the outcome of plugin-qualify's own memory bound (`probe.oom`) | plugin-qualify | plugin-qualify | `qualification` (plugin-qualify) |
 | adapter codes (`<host>.<kind>[-<parameter>]`) | plugin-qualify (it composes them) | plugin-qualify | `qualification`: the host profiles and the kinds; a signal parameter is a `probe` word |
@@ -630,29 +630,28 @@ their owners before change 2 merges:
 3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain (the CPU families the probe writes).
 4. **plugin-hostd: a `probe` domain** with the probe's reasons, outcomes, steps and signals, which the probe reads.
 5. **omx-clap: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
-   one source. Not in this pass: see the exception below.
+   one source. Published: see the exception below, which has ended.
 
-**The hosting exception, this pass only (owner ruling, 2026-11-19).** omx-contract's domain render emits index macros
-only, while omx-clap's consumers need the hosting code strings, their sentences and the TypeScript module that
-`data/hosting*.json` renders today. So this pass omx-clap keeps `data/hosting*.json` as the one source of the
-hosting codes, and there is no `hosting` domain:
+**The hosting exception, ended (owner ruling of 2026-11-19; ended 2026-11-27).** omx-contract's domain render emitted
+index macros only, while omx-clap's consumers needed the hosting code strings, their sentences and the TypeScript module
+that `data/hosting*.json` rendered. So for one pass omx-clap kept `data/hosting*.json` as the one source of the hosting
+codes, there was no `hosting` domain, and the C reader did not open `hosting` and passed over every word beginning
+`hosting.`. omx-clap now ships its `hosting` domain (omx-clap-core's `contract.d/hosting`, `omx-clap-contract` 0.35.0 and
+later; on omx-clap-core's main from 0.36.0), so the exception is removed and `hosting` is read as every other domain:
 
 - **The writer** reads the hosting words from omx-clap's `hosting` domain document, `<contractdir>/hosting/hosting.json`
-  (omx-clap-core's `contract.d/hosting`, shipped by `omx-clap-contract` since 0.35.0, the devel wave of 2026-11-25: its
-  items `HOSTING_<group>_CODES`, each word a `const`), as it reads every other domain; it refuses a hosting word none of
-  them holds, writes the `store_domain` row `hosting` at the domain's `info.version`, and fills `word_check` for the
-  hosting columns as for the others. The contract package `omx-clap` (`data/hosting*.json`, items of kind `codes`),
+  (its items `HOSTING_<group>_CODES`, each word a `const`), as it reads every other domain; it refuses a hosting word
+  none of them holds, writes the `store_domain` row `hosting` at the domain's `info.version`, and fills `word_check` for
+  the hosting columns as for the others. The contract package `omx-clap` (`data/hosting*.json`, items of kind `codes`),
   which held them before, is read no more and is no fallback; the contract directory has no schema-major level.
-- **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents
-  only. A column whose only items are `hosting` items is not checked; in a column that also has other owners' items
-  (`verdict.deciding`, `tier.deciding`, `reason.code`), only a word beginning `hosting.` is passed over, and every
-  other word must be in one of the column's other items. Every other column is checked at open as below. A store's
-  hosting words are therefore checked once, by the writer, against the package it was built with.
-- **Its end.** Right after this pass, an omx-contract change lets a domain render the code strings, sentences and
-  TypeScript module, omx-clap moves the hosting codes to its `hosting` domain with byte-identical rendered
-  output, and the reader checks the hosting columns like every other column; this exception is then removed. The check
-  `hosting-skip-ends` holds the end: it fails when omx-clap's main ships a `hosting` domain document, or a
-  contract directory the tests read holds one, while the reader still skips the hosting words.
+- **The C reader** opens `hosting` from `store_domain` like any domain and checks the hosting columns at open like every
+  other column: a hosting word that none of the column's items holds is refused (`qualification-db.word-unknown`), in a
+  column whose only items are `hosting` items and in the mixed columns (`verdict.deciding`, `tier.deciding`,
+  `reason.code`, `history_blocked.code`) alike. A column holds up to 64 items (the hosting pattern expands to every
+  `HOSTING_<group>_CODES` item, 19 today).
+- **The check that held its end stays.** `hosting-skip-ends` fails when omx-clap's main ships a `hosting` domain
+  document while the reader holds `hosting_exception`; with the exception gone it passes, and it refuses the exception's
+  return.
 
 Change 2 builds against the contract packages that ship these, named with no version (the build installs the
 published packages). Until they are released, change 2 stays red. The
@@ -691,7 +690,7 @@ its column's items holds, naming the record file, the JSON path and the word.
 | `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
 | `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
 | `reason_param.name`, `adapter_param.name`, `adapter_cell_param.name` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...; the adapter params' keys `notes`, `peak`, `quantum`, `rate`, `resp`, `step` are in it too) | added |
-| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`, `remove`: `step` names the mod-host command that did not answer, `add` or `remove`) | added; `remove` added for plugin-qualify#169 (section 9, ruling 12) |
+| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`, `remove`: `step` names the mod-host command that did not answer, `add` or `remove`), and `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` (the word of `unmeasuredReason`, why a memory figure was not measured) | added; `remove` added for plugin-qualify#169 (section 9, ruling 12); the unmeasured reasons added for plugin-qualify 0.21.3's `hosting.memory.unmeasured` |
 | `tier.tier` | plugin-hostd | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
 | `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
 | `cell.voices_basis`, `cost_entry.voices_basis`, `cell.mem_basis` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
@@ -842,23 +841,41 @@ lists (section 9, ruling 1).
 
 ### 3.6 `user_version`
 
-`PRAGMA user_version = 1` for this schema, set by the writer as the last statement of a build. The rule:
+`PRAGMA user_version = 2` for this schema, set by the writer as the last statement of a build. The rule:
 
-- There is ONE version, `PQDB_SCHEMA_VERSION` (1). It is written in two places, the header line of
-  `schema/qualification.sql` (`user_version 1`), which the writer reads, and `pqdb.h`, which the reader compiles; a
-  test holds the two equal. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
-  and 3 release with the consumer switch, section 9, ruling 8), so the DDL of section 3.7's amendment is version 1, and
-  no store of an earlier shape exists to refuse. This holds only if no release of this repository ships a store before
-  the code of this amendment lands (section 9, ruling 10; section 10): that code must land before this pass's
-  release of this repository, or the DDL is version 2. A reader reads exactly its version; there is no range
-  and no reader of an older version.
-- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` (`schema-other`, naming the
-  file, its version and the reader's); a base and a user layer at different versions (`schema-mismatch`, naming both
-  files and both versions, checked first); 0, a file that is no store (`not-a-store`).
-- The base database is never upgraded: each build writes it new, at the writer's version. A package whose base is at a
-  new version depends on the reader at the floor that reads it.
-- The user layer is not upgraded in place in this pass: there is one version. A later version states its own rule,
-  with the owner (section 10).
+- There is ONE version, `PQDB_SCHEMA_VERSION` (2). It is written in two places, the header line of
+  `schema/qualification.sql` (`user_version 2`), which the writer reads, and `pqdb.h`, which the reader compiles; a
+  test holds the two equal. Any change of the DDL after a release is +1.
+- Version 1 is every layer the dated packages wrote: a device's user layer is at 1. The DDL of v2026112401 then
+  gained `cell_voice_point`, `record.adapter_content`, `.adapter_loaded`, `.adapter_refused`, `cost_entry.voices_basis`,
+  `.voices_capacity`, `.voices_held`, `cell.rt_events` and two table CHECKs of `cell` at the same number, and the later
+  dated builds wrote that DDL at 1 too; so the release of 0.1.x is version 2 (section 9, ruling 10 foresaw it).
+- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` and that no migration takes
+  to it (`schema-other`, naming the file, its version and the reader's); a base and a user layer at different versions
+  (`schema-mismatch`, naming both files and both versions, checked after a user layer's migration); 0, a file that is
+  no store (`not-a-store`).
+- The base database is never upgraded: each build writes it new, at the writer's version, from `records/`. A package
+  whose base is at a new version depends on the reader at the floor that reads it.
+- **The user layer is migrated in place** (owner, 2026-11-27: migrate, do not measure again). A migration is one step,
+  `schema/migrations/<from>-to-<to>.sql`, installed beside the DDL (`migrations/`) and compiled into the reader. The
+  writer, on a put or a delete, and the reader, on open, find the user layer below the current version, copy it to
+  `<layer>.user_version-<from>` (SQLite's backup), and migrate it in ONE transaction with foreign keys off. The part
+  every step shares is the runner's: it drops the layer's indexes and triggers, renames every table T to `v1_T` and
+  adds to it each column of the current T it lacks (NULL in every row); the step then runs over the `v1_` tables (it
+  fills what a new column says of the old rows and renames words); the current DDL runs; every row is copied, column
+  by column, and the `v1_` tables are dropped. So a layer at 1 in either dated shape keeps every row and every column
+  it holds. Before COMMIT the foreign keys are checked and every stored word is checked against the installed
+  domains; a word none of its column's items holds, which the step does not rename, is refused by name
+  (`migration-word-unknown` from the writer, `word-unknown` from the reader) and the layer is left as it was; so is a
+  table of the old layer the current DDL has no place for. A store already at the current version is not touched, so
+  a second open changes nothing.
+- **1 to 2 renames no word.** The words every word column's items held at version 1 (the domains of plugin-hostd,
+  plugin-hostd-protocol, plugin-db and omx-clap-core at 2026-11-24, `qualification` 1.4.0, `machine` 1.1.0, `probe`
+  1.0.0, `plugin-db` 1.0.0, the omx-clap package's codes 0.34.1) are all words of the same items at 2; 2 only adds
+  words. The step names every domain at 0.1.0 in `store_domain` (every domain started again at 0.1.0, owner
+  2026-11-25, and the words of 1 are words of each at 0.1.0), adds the four `word_check` items 2 reads that 1 did
+  not, and sets `cell.rt_events` to 1 where the audio thread's counts are (version 1 wrote `rtSafety.events` with
+  them, always).
 
 ### 3.7 Binary identity, the key's SHA-256 and the pin
 
@@ -1181,9 +1198,8 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     passed through when the domain cannot be opened.
 - **Word check at open.** `pqdb_open` opens each domain of `store_domain` through omx-contract's loader
   (`omx_domain_open(domain, floor)`), then for each column of `word_check` reads its distinct words and looks each up
-  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. This pass the
-  `hosting` row and its columns are skipped (section 3.4, the hosting exception); `hosting-skip-ends` fails once a
-  `hosting` domain exists and the skip is still there.
+  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. The `hosting`
+  row and its columns are checked as the others (section 3.4: the hosting exception has ended).
 - **Concurrency.** The base is opened `file:<path>?mode=ro&immutable=1`: no lock, no journal, nothing written. A package
   upgrade renames a new file over it; an open handle keeps reading the old one until it is closed. The user layer is
   opened `mode=ro` with `busy_timeout` 250 ms; it uses the rollback journal (`journal_mode` `DELETE`), not WAL, because a
@@ -1378,8 +1394,8 @@ makes it fail.
 7. **Sentence not stored.** No TEXT value in the database holds a field of the sentence list (search for their exact
    strings from the fixtures). Fails when a detail is written into a column.
 8. **Store info.** `user_version` = `PQDB_SCHEMA_VERSION`, `store_info.user_layer` = 0, one `store_domain` row per
-   domain at its installed `info.version` (`hosting` at the installed contract package `omx-clap`'s version, this
-   pass), and a `word_check` row for every word column of section 3.4. Fails when any
+   domain at its installed `info.version` (`hosting` at omx-clap's `hosting` domain's
+   version), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
    from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by

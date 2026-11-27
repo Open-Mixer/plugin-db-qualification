@@ -4,11 +4,13 @@
 """Builds the fixture stores of the reader's tests from schema/qualification.sql: a base, user layers, stores at
 other versions, a user layer with a hot journal, and the figures a reader must give back, worked out here from the
 fixture data by the rules of plugin-hostd's qualcost.h (not by the reader). Usage: make-fixtures.py <out dir>."""
-import os, shutil, signal, sqlite3, subprocess, sys
+import os, re, shutil, signal, sqlite3, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCHEMA = os.path.join(HERE, "..", "schema", "qualification.sql")
-VERSION = 1
+# the store's version, as the DDL's header gives it (the writer reads it there too)
+with open(SCHEMA, encoding="utf-8") as _f:
+    VERSION = int(re.search(r"^-- The qualification store, user_version (\d+)", _f.read(), re.M).group(1))
 
 def sha(c):
     return c * 64
@@ -47,7 +49,7 @@ WORD_CHECK = [
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
-    # the hosting columns (section 3.4): mixed with probe words, or hosting words only
+    # the hosting columns (section 3.4), checked as any: mixed with probe words, or hosting words only
     ("history_verdict", "host", "qualification", "QUALIFICATION_HOST_PROFILES"),
     ("history_verdict", "measured", "qualification", "QUALIFICATION_PIN_VERDICTS"),
     ("history_verdict", "adjusted", "qualification", "QUALIFICATION_PIN_VERDICTS"),
@@ -71,7 +73,7 @@ WORD_CHECK = [
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("adapter_cell", "code", "probe", "PROBE_SIGNALS"),
 ]
-DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.33.1", "plugin-db": "1.0.0"}
+DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.1.0", "plugin-db": "1.0.0"}
 
 def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok"):
     """cost: (median, p, p value); lat: (declared, measured); mem: (first kb, per instance kb)."""
@@ -440,13 +442,44 @@ def hot_journal(src, dst):
     j = dst + "-journal"
     assert os.path.exists(j) and os.path.getsize(j) > 0, "no hot journal was left"
 
+V1 = os.path.join(HERE, "..", "tools", "testdata", "store-v1", "store.sql")
+
+def at_version_1(src, dst, edit=None):
+    """A user layer at user_version 1, the dated writer's DDL (tools/testdata/store-v1/store.sql, its CREATE statements),
+    holding the rows of `src` in the columns version 1 has: what the reader migrates on open (spec section 3.6)."""
+    with open(V1, encoding="utf-8") as f:
+        ddl = [l for l in f.read().split(";\n") if l.lstrip().startswith("CREATE ")]
+    c = sqlite3.connect(dst)
+    for stmt in ddl:
+        c.execute(stmt)
+    c.execute("ATTACH ? AS src", (src,))
+    tables = [r[0] for r in c.execute("SELECT name FROM main.sqlite_master WHERE type = 'table' ORDER BY rowid")]
+    c.execute("PRAGMA foreign_keys = OFF")
+    for t in tables:
+        cols = [r[0] for r in c.execute("SELECT name FROM pragma_table_info(?, 'main')", (t,))]
+        have = {r[0] for r in c.execute("SELECT name FROM pragma_table_info(?, 'src')", (t,))}
+        cols = [x for x in cols if x in have]
+        c.execute('INSERT INTO main."%s" (%s) SELECT %s FROM src."%s"' % (t, ", ".join(cols), ", ".join(cols), t))
+    c.commit()
+    c.execute("DETACH src")
+    if edit:
+        c.execute(edit)
+    c.execute("PRAGMA user_version = 1")
+    c.commit(); c.close()
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     p = lambda n: os.path.join(out, n)
     build(p("base.sqlite"), 0, BASE)
     build(p("user.sqlite"), 1, USER)
-    build(p("base-v2.sqlite"), 0, BASE, version=2)
-    build(p("user-v2.sqlite"), 1, USER, version=2)
+    at_version_1(p("user.sqlite"), p("user-v1.sqlite"))
+    # the later dated builds wrote the DDL of 2 at user_version 1 (a device's layer): the same rows, at 1
+    shutil.copy(p("user.sqlite"), p("user-v1-later.sqlite"))
+    c = sqlite3.connect(p("user-v1-later.sqlite")); c.execute("PRAGMA user_version = 1"); c.commit(); c.close()
+    at_version_1(p("user.sqlite"), p("user-v1-bad-rating.sqlite"),
+                 "UPDATE verdict SET rating = 'excellent' WHERE record_id = (SELECT min(record_id) FROM verdict)")
+    build(p("base-v3.sqlite"), 0, BASE, version=VERSION + 1)
+    build(p("user-v3.sqlite"), 1, USER, version=VERSION + 1)
     build(p("base-v0.sqlite"), 0, BASE, version=0)
     build(p("base-bad-adapter-code.sqlite"), 0, BASE, adapter_code_override="omx-clap-host.signal-SIGBUS")
     # the hosting columns are checked like any other (section 3.4): in each of the three mixed columns and the hosting-only

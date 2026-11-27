@@ -913,7 +913,9 @@ class SmallStore(Base):
         build_ok(self, os.path.join(self.tmp, "records"), self.db)
         self.assertEqual(self.rows("SELECT user_layer, record_schema, built_from FROM store_info"),
                          [(0, "plugin-qualify.qualification-record/1", COMMIT)])
-        self.assertEqual(self.rows("PRAGMA user_version"), [(1,)])
+        with open(SCHEMA, encoding="utf-8") as f:
+            version = int(re.search(r"user_version (\d+)", f.read()).group(1))
+        self.assertEqual(self.rows("PRAGMA user_version"), [(version,)])
         self.assertEqual(self.rows("PRAGMA page_size"), [(4096,)])
         self.assertEqual(self.rows("PRAGMA journal_mode"), [("delete",)])
         domains = dict(self.rows("SELECT domain, version FROM store_domain"))

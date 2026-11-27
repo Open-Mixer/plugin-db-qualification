@@ -71,6 +71,9 @@ jobs:
         run: dnf install -y --setopt=install_weak_deps=False git dnf5-plugins gcc gcc-c++ make python3 binutils pkgconf-pkg-config sqlite-devel diffutils gawk sed grep findutils
       - name: Add the OpenMixer repository
         uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
+        with:
+          # a pull request into devel, or a dispatch off main, in a wave reads that wave's devel channel above staging (Open-Mixer/.github#329)
+          devel-channel: ${{ ((startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && vars.OMX_DEVEL_CHANNEL || '' }}
       - name: Install the contract loader
         run: dnf install -y --setopt=install_weak_deps=False libomx-domain-devel omx-contract-devel
       - uses: actions/checkout@v4
@@ -95,15 +98,17 @@ jobs:
           sh tools/hosting-skip-ends.sh /tmp/omx-clap src/pqdb.c
 
   # The layer writer (tools/qualification_db.py put and delete, and the command): its refusals by name. The words are the
-  # owners' own, read from their main (tools/sibling_contract.py assembles the contract directory from these clones:
+  # owners' own, read from the same branch of theirs (tools/sibling_contract.py assembles the contract directory from these clones:
   # qualification and machine are plugin-hostd's, probe plugin-hostd-protocol's); the hosting words are the data/ of
-  # omx-clap-core's main, laid out as its install-contract lays them, under the package name it installs (omx-clap).
+  # omx-clap-core's contract.d/hosting, from its clone siblings/omx-clap-core.
   layer-writer:
     name: the layer writer refuses by name
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PDQ_SIBLINGS: ${{ github.workspace }}/siblings
+      # the owners' words of the branch this change lands on: a pull request into devel reads the siblings' devel
+      PDQ_REF: origin/${{ github.base_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -113,19 +118,26 @@ jobs:
       - uses: actions/checkout@v4
         with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
       - uses: actions/checkout@v4
-        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap, fetch-depth: 0}
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
       - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
-      - run: python3 -m unittest tools/test_qualification_db_write.py
+      # every test reads the siblings' words: a skip means a sibling was not found where tools/sibling_contract.py
+      # reads it (siblings/<repository>), and a run that skips is red
+      - run: |
+          set -o pipefail
+          python3 -m unittest tools/test_qualification_db_write.py 2>&1 | tee unittest.log
+          ! grep -q 'skipped=' unittest.log
 
   # The base database (tools/records-db.py) over every record of records/: the round trip, the counts, the refusals. The
-  # words are the owners' own, read from their main (tools/sibling_contract.py, as for the layer writer); the hosting
-  # words are the data/ of omx-clap-core's main, laid out as its install-contract lays them (omx-clap).
+  # words are the owners' own, read from the same branch of theirs (tools/sibling_contract.py, as for the layer writer); the hosting
+  # words are omx-clap-core's contract.d/hosting, from its clone siblings/omx-clap-core.
   records-db:
     name: the base database round-trips records/
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       PDQ_SIBLINGS: ${{ github.workspace }}/siblings
+      # the owners' words of the branch this change lands on: a pull request into devel reads the siblings' devel
+      PDQ_REF: origin/${{ github.base_ref || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -135,9 +147,14 @@ jobs:
       - uses: actions/checkout@v4
         with: {repository: Open-Mixer/plugin-db, path: siblings/plugin-db, fetch-depth: 0}
       - uses: actions/checkout@v4
-        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap, fetch-depth: 0}
+        with: {repository: Open-Mixer/omx-clap-core, path: siblings/omx-clap-core, fetch-depth: 0}
       - run: sudo apt-get install -y --no-install-recommends python3-jsonschema
-      - run: python3 -m unittest tools/test_records_db.py
+      # every test reads the siblings' words: a skip means a sibling was not found where tools/sibling_contract.py
+      # reads it (siblings/<repository>), and a run that skips is red
+      - run: |
+          set -o pipefail
+          python3 -m unittest tools/test_records_db.py 2>&1 | tee unittest.log
+          ! grep -q 'skipped=' unittest.log
 
   # the commit messages, private references and layout every OpenMixer repository is held to
   public-sources:

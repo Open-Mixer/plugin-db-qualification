@@ -847,10 +847,10 @@ lists (section 9, ruling 1).
 - There is ONE version, `PQDB_SCHEMA_VERSION` (2). It is written in two places, the header line of
   `schema/qualification.sql` (`user_version 2`), which the writer reads, and `pqdb.h`, which the reader compiles; a
   test holds the two equal. Any change of the DDL after a release is +1.
-- Version 1 is the DDL of the release 2026112401, the dated packages: a device's user layer is at 1. The DDL then
+- Version 1 is every layer the dated packages wrote: a device's user layer is at 1. The DDL of v2026112401 then
   gained `cell_voice_point`, `record.adapter_content`, `.adapter_loaded`, `.adapter_refused`, `cost_entry.voices_basis`,
-  `.voices_capacity`, `.voices_held`, `cell.rt_events` and two table CHECKs of `cell` at the same number, so the
-  release of 0.1.x is version 2 (section 9, ruling 10 foresaw it).
+  `.voices_capacity`, `.voices_held`, `cell.rt_events` and two table CHECKs of `cell` at the same number, and the later
+  dated builds wrote that DDL at 1 too; so the release of 0.1.x is version 2 (section 9, ruling 10 foresaw it).
 - The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` and that no migration takes
   to it (`schema-other`, naming the file, its version and the reader's); a base and a user layer at different versions
   (`schema-mismatch`, naming both files and both versions, checked after a user layer's migration); 0, a file that is
@@ -859,13 +859,17 @@ lists (section 9, ruling 1).
   whose base is at a new version depends on the reader at the floor that reads it.
 - **The user layer is migrated in place** (owner, 2026-11-27: migrate, do not measure again). A migration is one step,
   `schema/migrations/<from>-to-<to>.sql`, installed beside the DDL (`migrations/`) and compiled into the reader. The
-  writer, on a put or a delete, and the reader, on open, find the user layer at `<to> - 1`, copy it to
-  `<layer>.user_version-<from>` (SQLite's backup), and run the step in ONE transaction with foreign keys off: the part
-  before its line `-- @schema` moves the old tables aside, the current DDL runs, the part after it copies every row and
-  maps every renamed word, then drops the old tables. Before COMMIT the foreign keys are checked and every stored word
-  is checked against the installed domains; a word none of its column's items holds, which the step does not rename,
-  is refused by name (`migration-word-unknown` from the writer, `word-unknown` from the reader) and the layer is left
-  as it was. A store already at `<to>` is not touched, so a second open changes nothing.
+  writer, on a put or a delete, and the reader, on open, find the user layer below the current version, copy it to
+  `<layer>.user_version-<from>` (SQLite's backup), and migrate it in ONE transaction with foreign keys off. The part
+  every step shares is the runner's: it drops the layer's indexes and triggers, renames every table T to `v1_T` and
+  adds to it each column of the current T it lacks (NULL in every row); the step then runs over the `v1_` tables (it
+  fills what a new column says of the old rows and renames words); the current DDL runs; every row is copied, column
+  by column, and the `v1_` tables are dropped. So a layer at 1 in either dated shape keeps every row and every column
+  it holds. Before COMMIT the foreign keys are checked and every stored word is checked against the installed
+  domains; a word none of its column's items holds, which the step does not rename, is refused by name
+  (`migration-word-unknown` from the writer, `word-unknown` from the reader) and the layer is left as it was; so is a
+  table of the old layer the current DDL has no place for. A store already at the current version is not touched, so
+  a second open changes nothing.
 - **1 to 2 renames no word.** The words every word column's items held at version 1 (the domains of plugin-hostd,
   plugin-hostd-protocol, plugin-db and omx-clap-core at 2026-11-24, `qualification` 1.4.0, `machine` 1.1.0, `probe`
   1.0.0, `plugin-db` 1.0.0, the omx-clap package's codes 0.34.1) are all words of the same items at 2; 2 only adds

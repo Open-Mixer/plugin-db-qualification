@@ -42,7 +42,10 @@ WORDS = {
         "QUALIFICATION_VERDICT_HOSTINGS": ["isolated", "in-process"],
         "QUALIFICATION_VERDICT_ARMS": ["declaration", "run"],
         "QUALIFICATION_ADAPTER_CODE_KINDS": ["resp", "signal", "no-jack-client"],
-        "QUALIFICATION_MEMORY_BOUND_OUTCOMES": ["probe.oom"]}),
+        "QUALIFICATION_MEMORY_BOUND_OUTCOMES": ["probe.oom"],
+        # the two items a migrated user layer (schema/migrations/1-to-2.sql) adds to word_check
+        "QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS": ["voices-unknown", "not-attempted"],
+        "QUALIFICATION_MEASUREMENT_VOICE_BASES": ["declared", "probe"]}),
 }
 
 def camel(w):

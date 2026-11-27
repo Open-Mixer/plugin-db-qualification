@@ -275,9 +275,9 @@ static void t01_base_is_junk(void)
 static void t01_base_wrong_version(void)
 {
     pqdb_error e;
-    expect_refusal(fx("base-v2.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
-    expect_refusal(fx("base-v2.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
-    CHECK(strstr(e.message, "base-v2.sqlite") != NULL, "%s", e.message);
+    expect_refusal(fx("base-v3.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    expect_refusal(fx("base-v3.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    CHECK(strstr(e.message, "base-v3.sqlite") != NULL, "%s", e.message);
 }
 static void t01_base_not_readable(void)
 {
@@ -312,11 +312,11 @@ static void t02_absent_user(void)
 static void t03_versions(void)
 {
     pqdb_error e;
-    expect_refusal(fx("base-v2.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
-    CHECK(strstr(e.message, "base-v2.sqlite") && strstr(e.message, "2") && strstr(e.message, "1"), "%s", e.message);
-    expect_refusal(fx("base.sqlite"), fx("user-v2.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
-    CHECK(strstr(e.message, "base.sqlite") && strstr(e.message, "user-v2.sqlite"), "%s", e.message);
-    expect_refusal(fx("base-v2.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);  /* checked first */
+    expect_refusal(fx("base-v3.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    CHECK(strstr(e.message, "base-v3.sqlite") && strstr(e.message, "3") && strstr(e.message, "2"), "%s", e.message);
+    expect_refusal(fx("base.sqlite"), fx("user-v3.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    CHECK(strstr(e.message, "base.sqlite") && strstr(e.message, "user-v3.sqlite"), "%s", e.message);
+    expect_refusal(fx("base-v3.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);  /* checked first */
     expect_refusal(fx("base-v0.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
     CHECK(strstr(e.message, "base-v0.sqlite") != NULL, "%s", e.message);
     expect_refusal(fx("user.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
@@ -1219,6 +1219,61 @@ static void t15_scopes(void)
     CHECK(!trace_has(trace, "/xdg/"), "the system scope touched XDG_DATA_HOME");
 }
 
+/* a user layer at user_version 1 (the dated writer's DDL, make-fixtures.py at_version_1) is migrated on open (spec
+ * section 3.6): a backup beside it, the layer at PQDB_SCHEMA_VERSION, the same counts as the layer it was made from, a
+ * second open changes nothing; a word no item holds is refused by name and the layer is left at 1 */
+static int int_of(const char *path, const char *sql)
+{
+    sqlite3 *h = NULL;
+    sqlite3_stmt *st;
+    int v = -1;
+    if (sqlite3_open_v2(path, &h, SQLITE_OPEN_READONLY, NULL) == SQLITE_OK &&
+        sqlite3_prepare_v2(h, sql, -1, &st, NULL) == SQLITE_OK) {
+        if (sqlite3_step(st) == SQLITE_ROW) v = sqlite3_column_int(st, 0);
+        sqlite3_finalize(st);
+    }
+    sqlite3_close(h);
+    return v;
+}
+#define version_of(path) int_of(path, "PRAGMA user_version")
+#define ROWS "SELECT (SELECT count(*) FROM record) * 1000 + (SELECT count(*) FROM cell)"
+static void t25_migrate_user_layer(void)
+{
+    pqdb *db;
+    tally a, b;
+    pqdb_error e;
+    char *root = tmpdir(), *user = under(root, "user.sqlite"), bak[600], first[600];
+    memset(&a, 0, sizeof a);
+    memset(&b, 0, sizeof b);
+    if (open_ok(fx("base.sqlite"), fx("user.sqlite"), GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_counts(db, "user", collect_count, &a) == 0, "counts of the layer at %d", PQDB_SCHEMA_VERSION);
+    pqdb_close(db);
+    copy(fx("user-v1.sqlite"), user);
+    CHECK(version_of(user) == 1, "the fixture is at %d", version_of(user));
+    if (open_ok(fx("base.sqlite"), user, GOOD, &db)) { CHECK(0, "open of the layer at 1"); return; }
+    CHECK(pqdb_counts(db, "user", collect_count, &b) == 0, "counts of the migrated layer");
+    pqdb_close(db);
+    CHECK(version_of(user) == PQDB_SCHEMA_VERSION, "the migrated layer is at %d", version_of(user));
+    snprintf(bak, sizeof bak, "%s.user_version-1", user);
+    CHECK(version_of(bak) == 1 && int_of(bak, ROWS) == int_of(fx("user-v1.sqlite"), ROWS), "no backup of the layer at 1 beside it");
+    CHECK(int_of(user, ROWS) == int_of(fx("user-v1.sqlite"), ROWS) && int_of(user, ROWS) > 0, "records and cells %d, at 1 %d",
+          int_of(user, ROWS), int_of(fx("user-v1.sqlite"), ROWS));
+    CHECK(a.n == b.n && a.n > 0, "%d formats, the layer it was made from %d", b.n, a.n);
+    for (int i = 0; i < a.n && i < b.n; i++)
+        CHECK(strcmp(a.fmt[i], b.fmt[i]) == 0 && a.plugins[i] == b.plugins[i] && a.offered[i] == b.offered[i] &&
+              a.not_offered[i] == b.not_offered[i], "%s: %ld plugins, the layer it was made from %ld", b.fmt[i], b.plugins[i], a.plugins[i]);
+    snprintf(first, sizeof first, "%s/once.sqlite", root);
+    copy(user, first);
+    if (open_ok(fx("base.sqlite"), user, GOOD, &db)) { CHECK(0, "second open"); return; }
+    pqdb_close(db);
+    CHECK(same_file(user, first), "a second open changed the migrated layer");
+    copy(fx("user-v1-bad-rating.sqlite"), user);
+    copy(fx("user-v1-bad-rating.sqlite"), first);
+    expect_refusal(fx("base.sqlite"), user, GOOD, "qualification-db.word-unknown", &e);
+    CHECK(strstr(e.message, "excellent") != NULL, "%s", e.message);
+    CHECK(version_of(user) == 1 && same_file(user, first), "a refused migration changed the layer");
+}
+
 typedef struct { const char *name; void (*fn)(void); int scoped; } test;
 static const test TESTS[] = {
     { "01 absent base is an empty base layer", t01_absent_base, 0 }, { "01 a base that is a directory", t01_base_is_a_directory, 0 },
@@ -1240,6 +1295,7 @@ static const test TESTS[] = {
     { "hosting words passed over, nothing else narrowed", hosting_columns, 0 }, { "hosting-skip-ends", hosting_skip_ends, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
     { "the document under a comma locale", comma_locale, 0 }, { "a non-finite number is refused", non_finite, 0 },
     { "pqdb_each refuses a non-finite figure", each_non_finite, 0 }, { "pqdb_number", number_writer, 0 }, { "19 PQDB_QUERY_ANY", t19_query_any, 0 }, { "20 PQDB_QUERY_ANY fields", t20_query_any_fields, 0 },
+    { "25 a user layer at 1 is migrated on open", t25_migrate_user_layer, 0 },
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 

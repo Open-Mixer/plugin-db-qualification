@@ -25,6 +25,8 @@ plugin-qualification-db-write \- put and delete records in the OpenMixer qualifi
 .I word
 .B \-\-host\-class
 .I word
+.RB [ \-\-contract\-dir
+.IR dir ]
 .SH DESCRIPTION
 .B put
 reads one qualification record, the JSON document of plugin-qualify.qualification-record/1, on standard input and
@@ -36,6 +38,10 @@ SHA-256 the one of the entry at that path.
 .B delete
 removes the layer's record of a key; a key the layer does not hold is not an error. Nothing is deleted from the base.
 .PP
+A layer of an older store version is migrated in place first (the installed migrations/<from>-to-<to>.sql beside the
+DDL): a backup copy <layer>.user_version-<from> is written beside it, and every row is kept in one transaction; a word
+no item of the installed domains holds is refused (migration-word-unknown) and the layer is left as it was.
+.PP
 The user scope's layer is ~/.local/share/omx/qualification/qualification.sqlite, the system scope's
 /var/lib/omx/qualification/qualification.sqlite. The contract directory is \-\-contract\-dir, then OMX_CONTRACT_PATH,
 then the contractdir of libomx-domain.pc.
@@ -43,4 +49,4 @@ then the contractdir of libomx-domain.pc.
 0 on success. A refusal is printed on standard error as
 .I plugin-qualification-db-write: refused: name: ...
 and exits 1: path-absolute, binary-not-in-files, key-not-the-binary, files-unordered, files-duplicate, files-empty,
-word-unknown, field-unmapped, schema-refused, among others. A usage error exits 2.
+word-unknown, field-unmapped, schema-refused, schema-other, migration-word-unknown, among others. A usage error exits 2.

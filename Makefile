@@ -38,9 +38,17 @@ all: lib cmd
 $(BUILD):
 	mkdir -p $(BUILD)
 
+# the DDL and the migration of a user layer, as C strings: the reader migrates a user layer with the same files the writer
+# runs (spec section 3.6), and links no file of the schema package
+MIGRATION := schema/migrations/1-to-2.sql
+$(BUILD)/pqdb_sql.h: schema/qualification.sql $(MIGRATION) | $(BUILD)
+	{ printf 'static const char PQDB_DDL[] =\n'; sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' schema/qualification.sql; \
+	  printf ';\nstatic const char PQDB_MIGRATION_1_TO_2[] =\n'; sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' $(MIGRATION); \
+	  printf ';\n'; } > $@.tmp && mv $@.tmp $@
+
 # only pqdb_* is exported: src/pqdb.map names it and hides the rest
-$(BUILD)/$(SONAME): src/pqdb.c src/pqdb_record.c src/pqdb_record.h src/pqdb.map include/plugin-qualification-db/pqdb.h | $(BUILD)
-	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) -fPIC $(INC) $(SQLITE_CFLAGS) $(DOMAIN_CFLAGS) -shared \
+$(BUILD)/$(SONAME): src/pqdb.c src/pqdb_record.c src/pqdb_record.h src/pqdb.map include/plugin-qualification-db/pqdb.h $(BUILD)/pqdb_sql.h | $(BUILD)
+	$(CC) $(WARN) $(CFLAGS) $(CPPFLAGS) -fPIC $(INC) -I$(BUILD) $(SQLITE_CFLAGS) $(DOMAIN_CFLAGS) -shared \
 	  -Wl,-soname,$(SONAME) -Wl,--version-script=src/pqdb.map $(LDFLAGS) src/pqdb.c src/pqdb_record.c -o $@ $(SQLITE_LIBS) $(DOMAIN_LIBS)
 	ln -sf $(SONAME) $(BUILD)/libplugin-qualification-db.so
 
@@ -61,6 +69,8 @@ install: all
 	install -m 0644 man/plugin-qualification-db.1 $(DESTDIR)$(MANDIR)/man1/
 	install -m 0644 include/plugin-qualification-db/pqdb.h $(DESTDIR)$(INCLUDEDIR)/plugin-qualification-db/
 	install -m 0644 schema/qualification.sql $(DESTDIR)$(DATADIR)/plugin-qualification-db/
+	install -d $(DESTDIR)$(DATADIR)/plugin-qualification-db/migrations
+	install -m 0644 $(MIGRATION) $(DESTDIR)$(DATADIR)/plugin-qualification-db/migrations/
 	install -m 0644 tools/qualification_db.py $(DESTDIR)$(DATADIR)/plugin-qualification-db/
 	sed -e 's|@MODULEDIR@|$(DATADIR)/plugin-qualification-db|' tools/plugin-qualification-db-write \
 	  > $(DESTDIR)$(BINDIR)/plugin-qualification-db-write

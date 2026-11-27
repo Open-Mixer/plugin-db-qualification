@@ -5,6 +5,7 @@
 #define _GNU_SOURCE
 #include <plugin-qualification-db/pqdb.h>
 #include "pqdb_record.h"
+#include "pqdb_sql.h"   /* PQDB_DDL and the migrations, generated from schema/ by the Makefile */
 
 #include <omxcontract/omx_domain.h>
 #include <sqlite3.h>
@@ -415,6 +416,115 @@ static int check_words(sqlite3 *db, const char *path, const domains *ds, pqdb_er
     return status;
 }
 
+/* ---- the migration of a user layer (spec section 3.6) ---- */
+#define SCHEMA_MARK "\n-- @schema\n"
+
+static int exec_sql(sqlite3 *db, const char *sql, const char *path, const char *what, pqdb_error *err)
+{
+    char *msg = NULL;
+    if (sqlite3_exec(db, sql, NULL, NULL, &msg) == SQLITE_OK)
+        return S_OK;
+    int st = fail(err, S_SCHEMA_OTHER, "%s: %s: %s", path, what, msg ? msg : sqlite3_errmsg(db));
+    sqlite3_free(msg);
+    return st;
+}
+
+/* the user layer at `from`, taken to PQDB_SCHEMA_VERSION in place: a backup copy beside it (<layer>.user_version-<from>),
+ * then the step in one transaction, the DDL run at its line `-- @schema`, and the foreign keys, the store and every
+ * word checked against the installed domains before COMMIT; any failure rolls back and leaves the layer as it was */
+static int migrate_user(const char *path, int from, const char *cdir, pqdb_error *err)
+{
+    const char *step = from == 1 && PQDB_SCHEMA_VERSION == 2 ? PQDB_MIGRATION_1_TO_2 : NULL;
+    const char *mark = step ? strstr(step, SCHEMA_MARK) : NULL;
+    char bak[4200], *before = NULL;
+    sqlite3 *db = NULL, *copy = NULL;
+    sqlite3_backup *b;
+    domains ds;
+    int st, v = 0, got = 0, rc;
+    if (!mark)
+        return fail(err, S_SCHEMA_OTHER, "%s: user_version %d, this reader reads %d and has no migration from %d", path,
+                    from, PQDB_SCHEMA_VERSION, from);
+    if (snprintf(bak, sizeof bak, "%s.user_version-%d", path, from) >= (int)sizeof bak)
+        return fail(err, S_UNREADABLE, "%s: the path is too long", path);
+    if (sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK) {
+        st = fail(err, S_SCHEMA_OTHER, "%s: user_version %d, and this reader cannot open it to migrate it to %d: %s "
+                  "(its writer migrates it)", path, from, PQDB_SCHEMA_VERSION, db ? sqlite3_errmsg(db) : "out of memory");
+        sqlite3_close(db);
+        return st;
+    }
+    sqlite3_extended_result_codes(db, 1);
+    sqlite3_busy_timeout(db, BUSY_MS);
+    if (sqlite3_open_v2(bak, &copy, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK ||
+        !(b = sqlite3_backup_init(copy, "main", db, "main"))) {
+        st = fail(err, S_UNREADABLE, "%s: cannot write the backup %s: %s", path, bak, sqlite3_errmsg(copy));
+        sqlite3_close(copy);
+        sqlite3_close(db);
+        return st;
+    }
+    rc = sqlite3_backup_step(b, -1);
+    sqlite3_backup_finish(b);
+    if (rc != SQLITE_DONE) {
+        st = fail(err, S_UNREADABLE, "%s: cannot write the backup %s: %s", path, bak, sqlite3_errmsg(copy));
+        sqlite3_close(copy);
+        sqlite3_close(db);
+        return st;
+    }
+    sqlite3_close(copy);
+    if ((st = exec_sql(db, "PRAGMA foreign_keys = OFF; PRAGMA legacy_alter_table = ON; BEGIN EXCLUSIVE", path,
+                       "cannot begin the migration", err)) != S_OK) {
+        sqlite3_close(db);
+        return st;
+    }
+    if (one_int(db, "PRAGMA user_version", &v, &got) != SQLITE_OK || !got) {
+        st = fail_sql(err, db, path, "cannot read it");
+        goto rollback;
+    }
+    if (v != from) {   /* another process migrated it meanwhile */
+        sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+        sqlite3_close(db);
+        return S_OK;
+    }
+    before = strndup(step, (size_t)(mark - step));
+    if (!before) { st = fail(err, S_UNREADABLE, "out of memory"); goto rollback; }
+    if ((st = exec_sql(db, before, path, "the migration's first part", err)) != S_OK ||
+        (st = exec_sql(db, PQDB_DDL, path, "the DDL", err)) != S_OK ||
+        (st = exec_sql(db, mark, path, "the migration's second part", err)) != S_OK)
+        goto rollback;
+    {
+        sqlite3_stmt *fk;
+        if (sqlite3_prepare_v2(db, "PRAGMA foreign_key_check", -1, &fk, NULL) != SQLITE_OK) {
+            st = fail_sql(err, db, path, "cannot check the foreign keys");
+            goto rollback;
+        }
+        rc = sqlite3_step(fk);
+        sqlite3_finalize(fk);
+        if (rc != SQLITE_DONE) {
+            st = fail(err, S_NOT_A_STORE, "%s: the migration from %d leaves foreign keys unmet", path, from);
+            goto rollback;
+        }
+    }
+    if ((st = check_store(db, path, 1, err)) != S_OK || (st = open_domains(db, path, cdir, &ds, err)) != S_OK)
+        goto rollback;
+    st = check_words(db, path, &ds, err);
+    domains_close(&ds);
+    if (st != S_OK)
+        goto rollback;
+    {
+        char sql[64];
+        snprintf(sql, sizeof sql, "PRAGMA user_version = %d; COMMIT", PQDB_SCHEMA_VERSION);
+        if ((st = exec_sql(db, sql, path, "cannot commit the migration", err)) != S_OK)
+            goto rollback;
+    }
+    free(before);
+    sqlite3_close(db);
+    return S_OK;
+rollback:
+    free(before);
+    sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
+    sqlite3_close(db);
+    return st;
+}
+
 /* ---- open ---- */
 static int open_internal(const char *base, const char *user, const char *cdir, pqdb **out, pqdb_error *err)
 {
@@ -436,6 +546,13 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
         if (exists(user, &e)) {
             if ((st = open_layer(user, 1, &db->user, &vu, err)) != S_OK)
                 goto bad;
+            if (vu > 0 && vu < PQDB_SCHEMA_VERSION) {   /* an older user layer is migrated, then opened again */
+                sqlite3_close(db->user);
+                db->user = NULL;
+                if ((st = migrate_user(user, vu, cdir, err)) != S_OK ||
+                    (st = open_layer(user, 1, &db->user, &vu, err)) != S_OK)
+                    goto bad;
+            }
         } else if (e != ENOENT && e != ENOTDIR) {
             st = fail(err, S_UNREADABLE, "%s: %s", user, strerror(e));
             goto bad;

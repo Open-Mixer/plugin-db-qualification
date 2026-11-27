@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
--- The qualification store, user_version 1 (this repository's qualification store spec, section 3.3, verbatim, with
+-- The qualification store, user_version 2 (this repository's qualification store spec, section 3.3, verbatim, with
 -- WORD(c) and RELPATH(c) written out as section 3.2 defines them). The writer sets PRAGMA user_version last.
 CREATE TABLE store_info (
   one            INTEGER PRIMARY KEY CHECK (one = 1),

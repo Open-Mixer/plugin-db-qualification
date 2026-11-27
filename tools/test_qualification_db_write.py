@@ -458,7 +458,7 @@ class Put(Layer):
     def test_a_layer_of_another_version_is_refused(self):
         self.put()
         with contextlib.closing(sqlite3.connect(self.db)) as db:
-            db.execute("PRAGMA user_version = 2")
+            db.execute(f"PRAGMA user_version = {q.schema_version() + 1}")
         with self.assertRaises(q.Refusal) as cm:
             self.put()
         self.assertEqual(cm.exception.name, "schema-other")
@@ -675,6 +675,143 @@ class Delete(Layer):
 
 
 COMMAND = os.path.join(HERE, "plugin-qualification-db-write")
+
+
+class Migration(unittest.TestCase):
+    """A user layer at user_version 1 (the dated writer's, tools/testdata/store-v1) is migrated in place on open
+    (spec section 3.6): every row kept, every record read back as it was put, the DDL that of a new layer, a backup
+    beside it; a second open changes nothing; a word no item holds is refused by name and the layer left as it was; a
+    word a step renames is renamed, and without the step's line it is refused."""
+
+    FIXTURE = os.path.join(REPO, "tools", "testdata", "store-v1")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="pdq-migration-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = os.path.join(self.tmp, "qualification")
+        os.makedirs(self.root)
+        self.db = os.path.join(self.root, "qualification.sqlite")
+        with open(os.path.join(self.FIXTURE, "store.sql"), encoding="utf-8") as f:
+            self.v1 = f.read()
+        self.records = load(os.path.join(self.FIXTURE, "records.json"))
+
+    def layer(self, edit=None):
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            db.executescript(self.v1)
+            if edit:
+                db.executescript(edit)
+                db.commit()
+
+    def dump(self, path=None):
+        with contextlib.closing(sqlite3.connect(path or self.db)) as db:
+            return db.execute("PRAGMA user_version").fetchone()[0], list(db.iterdump())
+
+    def dump_of(self, sql):
+        with contextlib.closing(sqlite3.connect(":memory:")) as db:
+            db.executescript(sql)
+            return db.execute("PRAGMA user_version").fetchone()[0], list(db.iterdump())
+
+    def counts(self, path=None):
+        with contextlib.closing(sqlite3.connect(path or self.db)) as db:
+            names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")]
+            return {t: db.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] for t in names}
+
+    def ddl(self, path):
+        with contextlib.closing(sqlite3.connect(path)) as db:
+            return sorted((t, n, sql.replace(f'"{n}"', n)) for t, n, sql in
+                          db.execute("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL"))
+
+    def open_it(self):
+        """the writer opens the layer: a delete of a key it does not hold, which changes no row"""
+        q.delete(scope="user", root=self.root, sha256="0" * 64, format="lv2", uri="urn:none", offer="default",
+                 host_class="rpi5", contract_dir=contract_dir())
+
+    def test_a_layer_at_1_is_migrated_with_every_row_and_record(self):
+        self.layer()
+        before = self.counts()
+        self.open_it()
+        after = self.counts()
+        self.assertEqual(after.pop("cell_voice_point"), 0)
+        self.assertEqual(after.pop("word_check"), before.pop("word_check") + 4)   # the four items 2 reads that 1 did not
+        self.assertEqual(after, before)
+        before = self.counts(self.db + ".user_version-1")
+        self.assertEqual(self.dump()[0], q.schema_version())
+        fresh = os.path.join(self.tmp, "fresh", "qualification.sqlite")
+        rec = self.records[0]
+        q.put(rec["record"], scope="user", offer=rec["offer"], host_class=rec["hostClass"], contract_dir=contract_dir(),
+              root=os.path.dirname(fresh))
+        self.assertEqual(self.ddl(self.db), self.ddl(fresh), "the migrated layer's DDL is not that of a new layer")
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            ex = q.Exporter(db)
+            for i, r in enumerate(self.records, 1):
+                self.assertIsNone(first_difference(without_sentences(r["record"]), ex.export_record(i)), r["file"])
+            self.assertEqual([tuple(r) for r in db.execute("SELECT DISTINCT version FROM store_domain")], [("0.1.0",)])
+            self.assertEqual(tuple(db.execute("SELECT count(*) FROM cell WHERE (rt_events IS NULL) <> (rt_allocations IS NULL)").fetchone()), (0,))
+        self.assertEqual(self.dump(self.db + ".user_version-1"), self.dump_of(self.v1), "the backup is not the layer at 1")
+
+    def test_the_migrated_word_check_is_the_writers(self):
+        self.layer()
+        self.open_it()
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            got = sorted(db.execute("SELECT tbl, col, domain, item FROM word_check").fetchall())
+        self.assertEqual(got, sorted(tuple(r) for r in q.Checker(q.Domains(contract_dir())).rows()))
+
+    def test_a_record_of_plugin_qualify_0_21_3_is_then_accepted(self):
+        self.layer()
+        r = copy.deepcopy(self.records[2])
+        reason = next(x for v in r["record"]["verdicts"] for x in v["reasons"] if x["code"] == "hosting.memory.unmeasured")
+        reason["params"]["unmeasuredReason"] = "voices-unknown"
+        q.put(r["record"], scope="user", offer=r["offer"], host_class=r["hostClass"], contract_dir=contract_dir(), root=self.root)
+        self.assertEqual(self.counts()["record"], len(self.records))
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT word FROM reason_param WHERE name = 'unmeasuredReason'").fetchall(), [("voices-unknown",)])
+
+    def test_a_second_open_changes_nothing(self):
+        self.layer()
+        self.open_it()
+        once = self.dump()
+        self.open_it()
+        self.assertEqual(self.dump(), once)
+
+    def test_a_word_no_item_holds_is_refused_by_name_and_the_layer_kept(self):
+        self.layer("UPDATE reason SET code = 'hosting.memory.renamed-away' WHERE code = 'hosting.memory.unmeasured';")
+        before = self.dump()
+        with self.assertRaises(q.Refusal) as cm:
+            self.open_it()
+        self.assertEqual(cm.exception.name, "migration-word-unknown")
+        self.assertIn("reason.code holds the word 'hosting.memory.renamed-away'", str(cm.exception))
+        self.assertEqual(self.dump(), before)
+
+    def test_a_word_the_step_renames_is_renamed_and_without_the_line_refused(self):
+        old = "hosting.memory.renamed-away"
+        self.layer(f"UPDATE reason SET code = '{old}' WHERE code = 'hosting.memory.unmeasured';")
+        steps = os.path.join(self.tmp, "migrations")
+        os.makedirs(steps)
+        with open(os.path.join(REPO, "schema", "migrations", "1-to-2.sql"), encoding="utf-8") as f:
+            script = f.read()
+        line = f"UPDATE reason SET code = 'hosting.memory.unmeasured' WHERE code = '{old}';\n"
+        mark = "-- the words renamed from 1 to 2, one UPDATE a word: none (see the header)\n"
+        self.assertIn(mark, script)
+        checker = q.Checker(q.Domains(contract_dir()))
+        with open(os.path.join(steps, "1-to-2.sql"), "w", encoding="utf-8") as f:
+            f.write(script.replace(mark, mark + line))
+        q.migrate(self.db, 1, 2, checker, migrations=steps)
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM reason WHERE code = ?", (old,)).fetchone(), (0,))
+        os.unlink(self.db)
+        self.layer(f"UPDATE reason SET code = '{old}' WHERE code = 'hosting.memory.unmeasured';")
+        with open(os.path.join(steps, "1-to-2.sql"), "w", encoding="utf-8") as f:
+            f.write(script)
+        with self.assertRaises(q.Refusal) as cm:
+            q.migrate(self.db, 1, 2, checker, migrations=steps)
+        self.assertEqual(cm.exception.name, "migration-word-unknown")
+        self.assertIn(old, str(cm.exception))
+
+    def test_a_layer_of_a_version_no_step_reaches_is_refused(self):
+        self.layer("PRAGMA user_version = 7;")
+        with self.assertRaises(q.Refusal) as cm:
+            self.open_it()
+        self.assertEqual(cm.exception.name, "schema-other")
 
 
 class Command(Layer):

@@ -175,6 +175,7 @@ done
 %license LICENSE
 %dir %{_datadir}/plugin-qualification-db
 %{_datadir}/plugin-qualification-db/qualification.sql
+%{_datadir}/plugin-qualification-db/migrations/
 
 %files -n plugin-qualification-db-write
 %license LICENSE
@@ -188,6 +189,9 @@ done
 - The writer takes a reason param's word from QUALIFICATION_MEASUREMENT_
   UNMEASURED_REASONS too: plugin-qualify 0.21.3 writes the memory reason it
   could not measure with unmeasuredReason, which the writer refused.
+- The store is user_version 2: the DDL changed after the dated release at
+  the same number. A user layer at 1 is migrated in place by the writer and
+  the reader on open (schema/migrations/1-to-2.sql), a backup beside it.
 
 * Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.1-2026112701
 - The amd64 Debian package joins packaging/release-arches: the full matrix

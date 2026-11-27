@@ -113,7 +113,7 @@ printf 'not sqlite' > "$fx/junk.sqlite"
 c=$("$cmd" counts --json --base "$fx/junk.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
 case "$c" in qualification-db.unreadable*) ;; *) note "a junk base printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "a junk base exited $rc"
-c=$("$cmd" check --base "$fx/base-v2.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+c=$("$cmd" check --base "$fx/base-v3.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
 case "$c" in qualification-db.schema-other*) ;; *) note "a base of version 2 printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "a base of version 2 exited $rc"
 if [ "$(id -u)" -ne 0 ]; then

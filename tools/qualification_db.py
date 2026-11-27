@@ -26,7 +26,6 @@ if not os.path.exists(SCHEMA_SQL):
     SCHEMA_SQL = os.path.join(ROOT, "schema", "qualification.sql")
 # the migrations, <from>-to-<to>.sql: beside the DDL (plugin-qualification-db-schema's migrations/), in schema/ of a checkout
 MIGRATIONS = os.path.join(os.path.dirname(SCHEMA_SQL), "migrations")
-SCHEMA_MARK = "-- @schema"
 RECORD_SCHEMA = "plugin-qualify.qualification-record/1"
 DOMAINS = ("qualification", "machine", "probe", "plugin-db", "hosting")
 # every one is a domain document: <contractdir>/<domain>/<domain>.json, at its info.version. `hosting` is omx-clap's domain
@@ -870,20 +869,24 @@ def stored_words(db, checker):
 
 def migrate(path, got, version, checker, schema=None, migrations=None):
     """The layer at user_version `got` taken to `version` in place, in one transaction, after a backup copy beside it
-    (<layer>.user_version-<got>, SQLite's backup): the migration's script with the DDL run at its `-- @schema` line, then the foreign keys
-    and every word checked against the installed domains (`checker`) before COMMIT. A word none of its column's items
-    holds is refused by name (migration-word-unknown) and the layer is left as it was; so is a store with no migration
-    to `version` (schema-other)."""
+    (<layer>.user_version-<got>, SQLite's backup). Every table T moves aside to v1_T, gains the columns of the new T it
+    lacks, the step's script runs over the v1_ tables, the DDL runs, every row is copied column by column and the v1_
+    tables are dropped; the foreign keys and every word are checked against the installed domains (`checker`) before
+    COMMIT. A word none of its column's items holds, which the step does not rename, is refused by name
+    (migration-word-unknown) and the layer is left as it was; so is a store with no step to `version` (schema-other),
+    and a table of the old layer the new DDL has no place for (schema-refused)."""
     script = migration(got, version, migrations)
     if script is None:
         raise Refusal("schema-other", f"{path}: user_version {got}, this writer writes {version} and has no migration from {got}")
     with open(script, encoding="utf-8") as f:
-        parts = re.split(rf"^{re.escape(SCHEMA_MARK)}$", f.read(), flags=re.M)
-    if len(parts) != 2:
-        raise Refusal("schema-unreadable", f"{script}: not one line {SCHEMA_MARK}")
-    before, after = parts
+        step = f.read()
     with open(schema or SCHEMA_SQL, encoding="utf-8") as f:
         ddl = f.read()
+    new = sqlite3.connect(":memory:")
+    new.executescript(ddl)
+    tables = [r[0] for r in new.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid")]
+    cols = {t: [(r[1], r[2]) for r in new.execute(f'PRAGMA table_info("{t}")')] for t in tables}
+    new.close()
     db = sqlite3.connect(path, isolation_level=None)
     try:
         backup = sqlite3.connect(f"{path}.user_version-{got}")
@@ -898,9 +901,33 @@ def migrate(path, got, version, checker, schema=None, migrations=None):
             if db.execute("PRAGMA user_version").fetchone()[0] != got:   # another writer migrated it meanwhile
                 db.execute("ROLLBACK")
                 return
-            for part in (before, ddl, after):
-                for stmt in _statements(part):
-                    db.execute(stmt)
+            for kind, name in db.execute("SELECT type, name FROM sqlite_master WHERE type IN ('index', 'trigger') "
+                                         "AND sql IS NOT NULL").fetchall():
+                db.execute(f'DROP {kind.upper()} "{name}"')
+            old = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
+            for t in old:
+                db.execute(f'ALTER TABLE "{t}" RENAME TO "v1_{t}"')
+            for t in tables:
+                if t not in old:
+                    continue
+                have = {r[1] for r in db.execute(f'PRAGMA table_info("v1_{t}")')}
+                for c, ty in cols[t]:
+                    if c not in have:
+                        db.execute(f'ALTER TABLE "v1_{t}" ADD COLUMN "{c}" {ty}')
+            for stmt in _statements(step):
+                db.execute(stmt)
+            left = [t for t in old if t not in tables and
+                    db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (f"v1_{t}",)).fetchone()]
+            if left:
+                raise Refusal("schema-refused", f"{path}: the migration from {got} has no place for the table {left[0]}")
+            for stmt in _statements(ddl):
+                db.execute(stmt)
+            for t in tables:
+                if t in old:
+                    names = ", ".join(f'"{c}"' for c, _ in cols[t])
+                    db.execute(f'INSERT INTO "{t}" ({names}) SELECT {names} FROM "v1_{t}"')
+            for t in old:
+                db.execute(f'DROP TABLE "v1_{t}"')
             bad = db.execute("PRAGMA foreign_key_check").fetchall()
             if bad:
                 raise Refusal("schema-refused", f"{path}: the migration from {got} leaves foreign keys unmet: {bad[:3]}")

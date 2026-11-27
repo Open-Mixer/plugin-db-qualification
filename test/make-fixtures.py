@@ -473,6 +473,9 @@ def main(out):
     build(p("base.sqlite"), 0, BASE)
     build(p("user.sqlite"), 1, USER)
     at_version_1(p("user.sqlite"), p("user-v1.sqlite"))
+    # the later dated builds wrote the DDL of 2 at user_version 1 (a device's layer): the same rows, at 1
+    shutil.copy(p("user.sqlite"), p("user-v1-later.sqlite"))
+    c = sqlite3.connect(p("user-v1-later.sqlite")); c.execute("PRAGMA user_version = 1"); c.commit(); c.close()
     at_version_1(p("user.sqlite"), p("user-v1-bad-rating.sqlite"),
                  "UPDATE verdict SET rating = 'excellent' WHERE record_id = (SELECT min(record_id) FROM verdict)")
     build(p("base-v3.sqlite"), 0, BASE, version=VERSION + 1)

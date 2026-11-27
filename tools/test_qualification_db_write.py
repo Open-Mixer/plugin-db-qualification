@@ -749,6 +749,24 @@ class Migration(unittest.TestCase):
             self.assertEqual(tuple(db.execute("SELECT count(*) FROM cell WHERE (rt_events IS NULL) <> (rt_allocations IS NULL)").fetchone()), (0,))
         self.assertEqual(self.dump(self.db + ".user_version-1"), self.dump_of(self.v1), "the backup is not the layer at 1")
 
+    def test_a_layer_at_1_in_the_later_dated_shape_keeps_every_new_column(self):
+        # the later dated builds wrote the columns of 2 at user_version 1 (the Pi's layer): nothing of them is lost
+        r = copy.deepcopy(self.records[2])
+        rec = r["record"]
+        rec["cost"][0]["voices"] = {"held": 16, "basis": "probe"}
+        rec["measurements"]["grid"][0]["cost"]["voiceCurve"] = [
+            {"held": 1, "median": 11.5752, "percentile": {"p": 95, "value": 11.7705}},
+            {"held": 16, "median": 11.8682, "percentile": {"p": 95, "value": 12.3027}}]
+        q.put(rec, scope="user", offer=r["offer"], host_class=r["hostClass"], contract_dir=contract_dir(), root=self.root)
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            db.execute("PRAGMA user_version = 1")
+        before = self.counts()
+        self.open_it()
+        self.assertEqual(self.dump()[0], q.schema_version())
+        self.assertEqual(self.counts(), before)
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            self.assertIsNone(first_difference(without_sentences(rec), q.Exporter(db).export_record(1)))
+
     def test_the_migrated_word_check_is_the_writers(self):
         self.layer()
         self.open_it()
@@ -789,7 +807,7 @@ class Migration(unittest.TestCase):
         os.makedirs(steps)
         with open(os.path.join(REPO, "schema", "migrations", "1-to-2.sql"), encoding="utf-8") as f:
             script = f.read()
-        line = f"UPDATE reason SET code = 'hosting.memory.unmeasured' WHERE code = '{old}';\n"
+        line = f"UPDATE v1_reason SET code = 'hosting.memory.unmeasured' WHERE code = '{old}';\n"
         mark = "-- the words renamed from 1 to 2, one UPDATE a word: none (see the header)\n"
         self.assertIn(mark, script)
         checker = q.Checker(q.Domains(contract_dir()))

@@ -1267,6 +1267,15 @@ static void t25_migrate_user_layer(void)
     if (open_ok(fx("base.sqlite"), user, GOOD, &db)) { CHECK(0, "second open"); return; }
     pqdb_close(db);
     CHECK(same_file(user, first), "a second open changed the migrated layer");
+    copy(fx("user-v1-later.sqlite"), user);
+    if (open_ok(fx("base.sqlite"), user, GOOD, &db)) { CHECK(0, "open of the later dated layer at 1"); return; }
+    memset(&b, 0, sizeof b);
+    CHECK(pqdb_counts(db, "user", collect_count, &b) == 0 && b.n == a.n, "counts of the migrated later layer");
+    pqdb_close(db);
+    CHECK(version_of(user) == PQDB_SCHEMA_VERSION && int_of(user, ROWS) == int_of(fx("user.sqlite"), ROWS),
+          "the later dated layer at 1: version %d, rows %d", version_of(user), int_of(user, ROWS));
+    CHECK(int_of(user, "SELECT count(*) FROM cell WHERE rt_events IS NOT NULL") ==
+          int_of(fx("user.sqlite"), "SELECT count(*) FROM cell WHERE rt_events IS NOT NULL"), "rt_events of the later layer changed");
     copy(fx("user-v1-bad-rating.sqlite"), user);
     copy(fx("user-v1-bad-rating.sqlite"), first);
     expect_refusal(fx("base.sqlite"), user, GOOD, "qualification-db.word-unknown", &e);

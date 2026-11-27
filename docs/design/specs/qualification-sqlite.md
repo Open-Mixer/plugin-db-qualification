@@ -47,7 +47,7 @@ The spec is this repository's first design spec; each is named by its date and t
 | --- | --- | --- | --- |
 | record fields and their meaning | plugin-qualify (it writes each record) | plugin-qualify, in its record format | plugin-qualify |
 | words a record holds (ratings, reasons, dimensions, bases) | plugin-qualify | plugin-qualify, in a minor of the `qualification` domain | `qualification` (plugin-qualify) |
-| hosting codes in reasons (`hosting.*`) | omx-clap's hosting tables, copied by plugin-qualify | omx-clap | omx-clap's installed `data/hosting*.json` this pass, its `hosting` domain after it (precondition 5 and its exception) |
+| hosting codes in reasons (`hosting.*`) | omx-clap's hosting tables, copied by plugin-qualify | omx-clap | omx-clap's `hosting` domain (precondition 5; its exception has ended) |
 | probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | the `probe` domain (plugin-hostd), read directly (precondition 4) |
 | the outcome of plugin-qualify's own memory bound (`probe.oom`) | plugin-qualify | plugin-qualify | `qualification` (plugin-qualify) |
 | adapter codes (`<host>.<kind>[-<parameter>]`) | plugin-qualify (it composes them) | plugin-qualify | `qualification`: the host profiles and the kinds; a signal parameter is a `probe` word |
@@ -630,29 +630,28 @@ their owners before change 2 merges:
 3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain (the CPU families the probe writes).
 4. **plugin-hostd: a `probe` domain** with the probe's reasons, outcomes, steps and signals, which the probe reads.
 5. **omx-clap: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
-   one source. Not in this pass: see the exception below.
+   one source. Published: see the exception below, which has ended.
 
-**The hosting exception, this pass only (owner ruling, 2026-11-19).** omx-contract's domain render emits index macros
-only, while omx-clap's consumers need the hosting code strings, their sentences and the TypeScript module that
-`data/hosting*.json` renders today. So this pass omx-clap keeps `data/hosting*.json` as the one source of the
-hosting codes, and there is no `hosting` domain:
+**The hosting exception, ended (owner ruling of 2026-11-19; ended 2026-11-27).** omx-contract's domain render emitted
+index macros only, while omx-clap's consumers needed the hosting code strings, their sentences and the TypeScript module
+that `data/hosting*.json` rendered. So for one pass omx-clap kept `data/hosting*.json` as the one source of the hosting
+codes, there was no `hosting` domain, and the C reader did not open `hosting` and passed over every word beginning
+`hosting.`. omx-clap now ships its `hosting` domain (omx-clap-core's `contract.d/hosting`, `omx-clap-contract` 0.35.0 and
+later; on omx-clap-core's main from 0.36.0), so the exception is removed and `hosting` is read as every other domain:
 
 - **The writer** reads the hosting words from omx-clap's `hosting` domain document, `<contractdir>/hosting/hosting.json`
-  (omx-clap-core's `contract.d/hosting`, shipped by `omx-clap-contract` since 0.35.0, the devel wave of 2026-11-25: its
-  items `HOSTING_<group>_CODES`, each word a `const`), as it reads every other domain; it refuses a hosting word none of
-  them holds, writes the `store_domain` row `hosting` at the domain's `info.version`, and fills `word_check` for the
-  hosting columns as for the others. The contract package `omx-clap` (`data/hosting*.json`, items of kind `codes`),
+  (its items `HOSTING_<group>_CODES`, each word a `const`), as it reads every other domain; it refuses a hosting word
+  none of them holds, writes the `store_domain` row `hosting` at the domain's `info.version`, and fills `word_check` for
+  the hosting columns as for the others. The contract package `omx-clap` (`data/hosting*.json`, items of kind `codes`),
   which held them before, is read no more and is no fallback; the contract directory has no schema-major level.
-- **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents
-  only. A column whose only items are `hosting` items is not checked; in a column that also has other owners' items
-  (`verdict.deciding`, `tier.deciding`, `reason.code`), only a word beginning `hosting.` is passed over, and every
-  other word must be in one of the column's other items. Every other column is checked at open as below. A store's
-  hosting words are therefore checked once, by the writer, against the package it was built with.
-- **Its end.** Right after this pass, an omx-contract change lets a domain render the code strings, sentences and
-  TypeScript module, omx-clap moves the hosting codes to its `hosting` domain with byte-identical rendered
-  output, and the reader checks the hosting columns like every other column; this exception is then removed. The check
-  `hosting-skip-ends` holds the end: it fails when omx-clap's main ships a `hosting` domain document, or a
-  contract directory the tests read holds one, while the reader still skips the hosting words.
+- **The C reader** opens `hosting` from `store_domain` like any domain and checks the hosting columns at open like every
+  other column: a hosting word that none of the column's items holds is refused (`qualification-db.word-unknown`), in a
+  column whose only items are `hosting` items and in the mixed columns (`verdict.deciding`, `tier.deciding`,
+  `reason.code`, `history_blocked.code`) alike. A column holds up to 64 items (the hosting pattern expands to every
+  `HOSTING_<group>_CODES` item, 19 today).
+- **The check that held its end stays.** `hosting-skip-ends` fails when omx-clap's main ships a `hosting` domain
+  document while the reader holds `hosting_exception`; with the exception gone it passes, and it refuses the exception's
+  return.
 
 Change 2 builds against the contract packages that ship these, named with no version (the build installs the
 published packages). Until they are released, change 2 stays red. The
@@ -1199,9 +1198,8 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     passed through when the domain cannot be opened.
 - **Word check at open.** `pqdb_open` opens each domain of `store_domain` through omx-contract's loader
   (`omx_domain_open(domain, floor)`), then for each column of `word_check` reads its distinct words and looks each up
-  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. This pass the
-  `hosting` row and its columns are skipped (section 3.4, the hosting exception); `hosting-skip-ends` fails once a
-  `hosting` domain exists and the skip is still there.
+  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. The `hosting`
+  row and its columns are checked as the others (section 3.4: the hosting exception has ended).
 - **Concurrency.** The base is opened `file:<path>?mode=ro&immutable=1`: no lock, no journal, nothing written. A package
   upgrade renames a new file over it; an open handle keeps reading the old one until it is closed. The user layer is
   opened `mode=ro` with `busy_timeout` 250 ms; it uses the rollback journal (`journal_mode` `DELETE`), not WAL, because a
@@ -1396,8 +1394,8 @@ makes it fail.
 7. **Sentence not stored.** No TEXT value in the database holds a field of the sentence list (search for their exact
    strings from the fixtures). Fails when a detail is written into a column.
 8. **Store info.** `user_version` = `PQDB_SCHEMA_VERSION`, `store_info.user_layer` = 0, one `store_domain` row per
-   domain at its installed `info.version` (`hosting` at the installed contract package `omx-clap`'s version, this
-   pass), and a `word_check` row for every word column of section 3.4. Fails when any
+   domain at its installed `info.version` (`hosting` at omx-clap's `hosting` domain's
+   version), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
    from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by

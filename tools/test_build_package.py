@@ -22,9 +22,11 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-# the version the spec carries today: a build at it changes nothing in debian/ the test does not expect
+# the version and release the spec carries today: a build at them changes nothing the test does not expect
 with open(os.path.join(ROOT, "packaging", "plugin-qualification-records.spec")) as _f:
-    VERSION = next(l.split()[1] for l in _f if l.startswith("Version:"))
+    _spec = _f.read().splitlines()
+VERSION = next(l.split()[1] for l in _spec if l.startswith("Version:"))
+RELEASE = next(l.split()[1].split("%")[0] for l in _spec if l.startswith("Release:"))
 DATA = os.path.join(HERE, "testdata")
 RUN = os.path.join(DATA, "run")
 CELLS = {"48000-512": "48000/512", "96000-256": "96000/256"}
@@ -81,7 +83,7 @@ class BuildPackage(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def build(self, *args, version=VERSION, release="2026112601", rc=0):
+    def build(self, *args, version=VERSION, release=RELEASE, rc=0):
         env = dict(os.environ, PATH=DATA + os.pathsep + os.environ["PATH"])
         r = subprocess.run(["bash", os.path.join(self.tree, "tools", "build-package.sh"), *args,
                             "--provenance", os.path.join(DATA, "provenance.json"), "--version", version,

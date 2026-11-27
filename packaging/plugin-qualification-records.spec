@@ -21,8 +21,8 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 0.1.0
-Release: 2026112601%{?dist}
+Version: 0.1.1
+Release: 2026112701%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/Open-Mixer/plugin-db-qualification
@@ -184,3 +184,8 @@ done
 %{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog
+* Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.1-2026112701
+- The amd64 Debian package joins packaging/release-arches: the full matrix
+  serves every package in every cell (owner ruling 2026-11-26), and plugin-
+  hostd's amd64 cells build against libplugin-qualification-db-dev.
+

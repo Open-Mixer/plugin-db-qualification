@@ -123,6 +123,9 @@ jobs:
           apt-get install -y --no-install-recommends ca-certificates curl
 
       - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
+        with:
+          # a pull request into devel in a wave reads that wave's devel channel above staging (Open-Mixer/.github#329)
+          devel-channel: ${{ startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel' && vars.OMX_DEVEL_CHANNEL || '' }}
 
       # the package installed once; each set it carries proven in turn (tools/prove-set.sh: a container has no
       # device tree, so the host class is the settings file's, and a set of one cell sets the sync's grid to it)
@@ -200,6 +203,9 @@ jobs:
           path: pkgs
 
       - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
+        with:
+          # a pull request into devel in a wave reads that wave's devel channel above staging (Open-Mixer/.github#329)
+          devel-channel: ${{ startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel' && vars.OMX_DEVEL_CHANNEL || '' }}
 
       - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |

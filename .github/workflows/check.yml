@@ -71,6 +71,9 @@ jobs:
         run: dnf install -y --setopt=install_weak_deps=False git dnf5-plugins gcc gcc-c++ make python3 binutils pkgconf-pkg-config sqlite-devel diffutils gawk sed grep findutils
       - name: Add the OpenMixer repository
         uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
+        with:
+          # a pull request into devel in a wave reads that wave's devel channel above staging (Open-Mixer/.github#329)
+          devel-channel: ${{ startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel' && vars.OMX_DEVEL_CHANNEL || '' }}
       - name: Install the contract loader
         run: dnf install -y --setopt=install_weak_deps=False libomx-domain-devel omx-contract-devel
       - uses: actions/checkout@v4

@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define PQDB_SCHEMA_VERSION 2
+#define PQDB_SCHEMA_VERSION 3
 
 typedef struct pqdb pqdb;                          /* an opened base and user layer; opaque */
 typedef enum { PQDB_SCOPE_USER, PQDB_SCOPE_SYSTEM } pqdb_scope;
@@ -108,6 +108,33 @@ int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqd
 /* Every verdict of a result's record, in the record's order, as each(host, verdict, ctx); the strings are valid until each
    returns. A non-zero return of each stops the walk and is returned. 0, or a refusal status. */
 int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char *host, const pqdb_verdict *, void *), void *ctx);
+
+/* The words of a result's record's pin under one host profile (this repository's qualification store spec, section 3.7,
+   the pin a match gives plugin-hostd): `verdict` one of QUALIFICATION_PIN_VERDICTS (`in-process`, `isolated`, `refused`)
+   or NULL for none, `pool` `cores` or `off` or NULL for none. The rule, from the stored rows: the host's verdict (not
+   measured, `unknown` or none: no word; `unsuitable`: `refused`; `suitable`: `in-process`; `conditional`: `in-process`
+   when it has a reason of rating `conditional` and every such reason's code is a groupable one, else `isolated`; the
+   groupable codes are the words of the qualification domain's QUALIFICATION_GROUPABLE_CONDITIONAL_CODES, read at open);
+   then the record's `isolated` step (`isolated` or `refused` is the word, `not-run` leaves none); then the history
+   adjustment as the store records it (the latest block of `history_class`, any class for NULL, that holds a verdict of
+   the host: its adjusted word, none for an adjusted null); then the `pool` step (`cores` or `off`, none for a `refused`
+   word). 0; 1 when the record gives no whole pin (unpinnable, or no layout), with both words NULL; a refusal status
+   otherwise. The words are string constants. */
+typedef struct { const char *verdict, *pool; } pqdb_pin;
+int  pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, const char *history_class, pqdb_pin *out);
+
+/* A quick check that ran and ended with no figures (section 6.0; plugin-hostd's pins-from-the-store spec, section 9
+   point 7, decided by the coordinator, the owner to confirm): 1 when a layer holds one of the plugin (format, the CLAP id
+   or the LV2 URI) for the host whose file list is exactly these `n` files and SHA-256s, in their order, with `*reason`
+   its word of QUALIFICATION_NO_FIGURES_REASONS (valid until the next call on the handle); its pin is verdict=refused.
+   The user layer first, then the base. 0 when none, a refusal status otherwise. */
+int  pqdb_no_figures_of(const pqdb *db, const char *format, const char *uri, const char *host, int n,
+                        const char *const *path, const char *const *sha256, const char **reason);
+
+/* 1 when a layer the handle opened is no longer the file it opened (device, inode, size or modification time of the file
+   or of its -wal), or a layer absent at the open now exists; 0 otherwise. It opens nothing and reads no row: a program
+   that keeps a handle asks it, cheaply, whether to open the store again. */
+int  pqdb_changed(const pqdb *db);
 
 #ifdef __cplusplus
 }

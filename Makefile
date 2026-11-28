@@ -40,10 +40,11 @@ $(BUILD):
 
 # the DDL and the migration of a user layer, as C strings: the reader migrates a user layer with the same files the writer
 # runs (spec section 3.6), and links no file of the schema package
-MIGRATION := schema/migrations/1-to-2.sql
+MIGRATION := schema/migrations/1-to-3.sql schema/migrations/2-to-3.sql
 $(BUILD)/pqdb_sql.h: schema/qualification.sql $(MIGRATION) | $(BUILD)
 	{ printf 'static const char PQDB_DDL[] =\n'; sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' schema/qualification.sql; \
-	  printf ';\nstatic const char PQDB_MIGRATION_1_TO_2[] =\n'; sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' $(MIGRATION); \
+	  printf ';\nstatic const char PQDB_MIGRATION_1_TO_3[] =\n'; sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' schema/migrations/1-to-3.sql; \
+	  printf ';\nstatic const char PQDB_MIGRATION_2_TO_3[] =\n'; sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/^/"/' -e 's/$$/\\n"/' schema/migrations/2-to-3.sql; \
 	  printf ';\n'; } > $@.tmp && mv $@.tmp $@
 
 # only pqdb_* is exported: src/pqdb.map names it and hides the rest
@@ -96,6 +97,9 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	LD_PRELOAD=$(abspath $(BUILD)/shim.so) PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) \
 	  $(BUILD)/test_reader $(BUILD)/fixtures $(abspath test/fixtures) scopes
 	sh tools/hosting-skip-ends.sh --self-test
+	sh test/test_no_copy.sh src
+	sh test/test_pool_round_trip.sh $(BUILD)/test_reader $(CONTRACTDIR)
+	sh test/test_no_figures.sh $(BUILD)/test_reader $(CONTRACTDIR)
 	sh test/test_nm.sh $(BUILD)/$(SONAME)
 	sh test/test_cxx.sh $(BUILD)
 	PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures $(abspath $(BUILD)/shim.so)

@@ -9,6 +9,7 @@
 #include <plugin-qualification-db/pqdb.h>
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <locale.h>
 #include <math.h>
 #include <sqlite3.h>
@@ -275,9 +276,9 @@ static void t01_base_is_junk(void)
 static void t01_base_wrong_version(void)
 {
     pqdb_error e;
-    expect_refusal(fx("base-v3.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
-    expect_refusal(fx("base-v3.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
-    CHECK(strstr(e.message, "base-v3.sqlite") != NULL, "%s", e.message);
+    expect_refusal(fx("base-next.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    expect_refusal(fx("base-next.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    CHECK(strstr(e.message, "base-next.sqlite") != NULL, "%s", e.message);
 }
 static void t01_base_not_readable(void)
 {
@@ -312,11 +313,16 @@ static void t02_absent_user(void)
 static void t03_versions(void)
 {
     pqdb_error e;
-    expect_refusal(fx("base-v3.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
-    CHECK(strstr(e.message, "base-v3.sqlite") && strstr(e.message, "3") && strstr(e.message, "2"), "%s", e.message);
-    expect_refusal(fx("base.sqlite"), fx("user-v3.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
-    CHECK(strstr(e.message, "base.sqlite") && strstr(e.message, "user-v3.sqlite"), "%s", e.message);
-    expect_refusal(fx("base-v3.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);  /* checked first */
+    expect_refusal(fx("base-next.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    {
+        char next[16], mine[16];
+        snprintf(next, sizeof next, "%d", PQDB_SCHEMA_VERSION + 1);
+        snprintf(mine, sizeof mine, "%d", PQDB_SCHEMA_VERSION);
+        CHECK(strstr(e.message, "base-next.sqlite") && strstr(e.message, next) && strstr(e.message, mine), "%s", e.message);
+    }
+    expect_refusal(fx("base.sqlite"), fx("user-next.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    CHECK(strstr(e.message, "base.sqlite") && strstr(e.message, "user-next.sqlite"), "%s", e.message);
+    expect_refusal(fx("base-next.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);  /* checked first */
     expect_refusal(fx("base-v0.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
     CHECK(strstr(e.message, "base-v0.sqlite") != NULL, "%s", e.message);
     expect_refusal(fx("user.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
@@ -1284,6 +1290,126 @@ static void t25_migrate_user_layer(void)
     CHECK(version_of(user) == 1 && same_file(user, first), "a refused migration changed the layer");
 }
 
+/* ---- the pin's words (section 3.7, pqdb_pin_of) and a changed store (pqdb_changed) ---- */
+struct pin_case { const char *uri, *verdict, *pool; int status; };
+static const struct pin_case PIN_CASES[] = {
+    { "urn:pin-suitable", "in-process", NULL, 0 },
+    { "urn:pin-conditional-groupable", "in-process", NULL, 0 },
+    { "urn:pin-conditional-other", "isolated", NULL, 0 },
+    { "urn:pin-conditional-none", "isolated", NULL, 0 },
+    { "urn:pin-unsuitable", "refused", NULL, 0 },
+    { "urn:pin-unknown", NULL, NULL, 0 },
+    { "urn:pin-isolated-step", "isolated", "cores", 0 },
+    { "urn:pin-refused-step", "refused", NULL, 0 },
+    { "urn:pin-not-run-step", NULL, NULL, 0 },
+    { "urn:pin-pool-off", "in-process", "off", 0 },
+    { "urn:pin-pool-not-asked", "in-process", NULL, 0 },
+    { "urn:pin-unsuitable-pool", "refused", NULL, 0 },
+    { "urn:pin-conditional-isolated-step", "isolated", NULL, 0 },
+    { "urn:pin-not-measured", NULL, NULL, 0 },
+    { "urn:pin-unpinnable", NULL, NULL, 1 },
+    { "urn:pin-no-layout", NULL, NULL, 1 },
+    /* the history adjustment as the store records it stands over the measured word */
+    { "urn:pin-adjusted-demote", "isolated", NULL, 0 },
+    { "urn:pin-adjusted-null", NULL, NULL, 0 },
+    { "urn:pin-adjusted-other-class", "refused", NULL, 0 },
+    { "urn:pin-adjusted-latest", "isolated", NULL, 0 },
+    { "urn:pin-adjusted-other-host", "in-process", NULL, 0 },
+};
+struct pin_ask { pqdb *db; const char *host, *klass; pqdb_pin *pin; int status; };
+static int pin_of_first(const pqdb_result *x, void *ctx)
+{
+    struct pin_ask *a = ctx;
+    a->status = pqdb_pin_of(a->db, x, a->host, a->klass, a->pin);
+    return 1;   /* one cell is enough: every cell of a record gives the same pin */
+}
+static int pin_of_class(pqdb *db, const char *uri, const char *host, const char *klass, pqdb_pin *pin)
+{
+    pqdb_query q = any();
+    struct pin_ask a = { db, host, klass, pin, -99 };
+    q.uri = uri;
+    pin->verdict = pin->pool = "(unset)";
+    pqdb_each(db, &q, pin_of_first, &a);
+    return a.status;
+}
+static int pin_of(pqdb *db, const char *uri, const char *host, pqdb_pin *pin)
+{
+    return pin_of_class(db, uri, host, NULL, pin);
+}
+static int same_word(const char *a, const char *b) { return (!a && !b) || (a && b && strcmp(a, b) == 0); }
+static void spec_pin_words(void)
+{
+    pqdb *db;
+    pqdb_pin pin;
+    if (open_ok(fx("pins.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open"); return; }
+    for (size_t i = 0; i < sizeof PIN_CASES / sizeof *PIN_CASES; i++) {
+        const struct pin_case *c = &PIN_CASES[i];
+        int status = pin_of(db, c->uri, "omx-clap-host", &pin);
+        CHECK(status == c->status && same_word(pin.verdict, c->verdict) && same_word(pin.pool, c->pool),
+              "%s: status %d verdict %s pool %s, wanted %d %s %s", c->uri, status, pin.verdict ? pin.verdict : "(none)",
+              pin.pool ? pin.pool : "(none)", c->status, c->verdict ? c->verdict : "(none)", c->pool ? c->pool : "(none)");
+    }
+    /* a host the record holds no verdict of: no verdict word, and the record still gives a whole pin */
+    CHECK(pin_of(db, "urn:pin-suitable", "openmixer-pi-4gb", &pin) == 0 && !pin.verdict && !pin.pool, "a host with no verdict");
+    /* a history class names the blocks that count: another class's adjustment leaves the measured word */
+    CHECK(pin_of_class(db, "urn:pin-adjusted-other-class", "omx-clap-host", "x86_64/5-8/2.5-3.5GHz", &pin) == 0 &&
+          same_word(pin.verdict, "in-process"), "another class's adjustment: %s", pin.verdict ? pin.verdict : "(none)");
+    CHECK(pin_of_class(db, "urn:pin-adjusted-other-class", "omx-clap-host", "aarch64/4/2-2.5GHz", &pin) == 0 &&
+          same_word(pin.verdict, "refused"), "its own class's adjustment: %s", pin.verdict ? pin.verdict : "(none)");
+    pqdb_close(db);
+    /* the groupable codes are the domain's: a document that declares one more makes that reason groupable */
+    if (open_ok(fx("pins.sqlite"), NULL, contract("contract-groupable-two"), &db)) { CHECK(0, "open groupable-two"); return; }
+    CHECK(pin_of(db, "urn:pin-conditional-other", "omx-clap-host", &pin) == 0 && same_word(pin.verdict, "in-process"),
+          "the rule follows the domain's item: %s", pin.verdict ? pin.verdict : "(none)");
+    pqdb_close(db);
+}
+static void touch_later(const char *path)
+{
+    struct timespec t[2];
+    struct stat st;
+    stat(path, &st);
+    t[0] = st.st_atim; t[1] = st.st_mtim;
+    t[1].tv_sec += 2;
+    utimensat(AT_FDCWD, path, t, 0);
+}
+static void spec_changed(void)
+{
+    char *d = tmpdir();
+    char base[512], user[512], wal[512], next[512];
+    pqdb *db;
+    snprintf(base, sizeof base, "%s", under(d, "base.sqlite"));
+    snprintf(user, sizeof user, "%s", under(d, "user.sqlite"));
+    snprintf(wal, sizeof wal, "%s-wal", user);
+    snprintf(next, sizeof next, "%s", under(d, "next.sqlite"));
+    copy(fx("base.sqlite"), base);
+    /* a user layer absent at the open, then there */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_changed(db) == 0, "an untouched store is no change");
+    CHECK(pqdb_changed(db) == 0, "asking twice changes nothing");
+    copy(fx("user.sqlite"), user);
+    CHECK(pqdb_changed(db) == 1, "a user layer that appeared is a change");
+    pqdb_close(db);
+    /* the base replaced by a rename over it */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_changed(db) == 0, "the store as opened");
+    copy(fx("base.sqlite"), next);
+    CHECK(rename(next, base) == 0, "rename");
+    CHECK(pqdb_changed(db) == 1, "a base renamed over is a change");
+    pqdb_close(db);
+    /* the user layer written in place: its modification time moves */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    touch_later(user);
+    CHECK(pqdb_changed(db) == 1, "a user layer written in place is a change");
+    pqdb_close(db);
+    /* a -wal beside the user layer */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    copy(fx("user.sqlite"), wal);
+    CHECK(pqdb_changed(db) == 1, "a -wal that appeared is a change");
+    unlink(wal);
+    pqdb_close(db);
+    CHECK(pqdb_changed(NULL) == 0, "no handle, no change");
+}
+
 typedef struct { const char *name; void (*fn)(void); int scoped; } test;
 static const test TESTS[] = {
     { "01 absent base is an empty base layer", t01_absent_base, 0 }, { "01 a base that is a directory", t01_base_is_a_directory, 0 },
@@ -1300,6 +1426,7 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
+    { "the words of a record's pin", spec_pin_words, 0 }, { "a changed store", spec_changed, 0 },
     { "the reference tier answers where two tiers hold a cell", tier_pick, 0 },
     { "the newer set answers where two sets of one tier hold a cell", newer_pick, 0 },
     { "hosting words checked as any", hosting_columns, 0 }, { "the hosting domain is read", hosting_domain_read, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },
@@ -1309,9 +1436,61 @@ static const test TESTS[] = {
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 
+/* test_reader pins <user layer> <contract dir> <host>: the pin words of every result of a store whose base is absent, one
+   line a record ("<uri> <verdict|-> <pool|->"), for the round trip of test_pool_round_trip.sh */
+static int print_one_pin(const pqdb_result *x, void *ctx)
+{
+    void **c = ctx;
+    pqdb_pin pin;
+    int rc = pqdb_pin_of(c[0], x, c[1], NULL, &pin);
+    printf("%s %s %s %d\n", x->uri, pin.verdict ? pin.verdict : "-", pin.pool ? pin.pool : "-", rc);
+    return 0;
+}
+static int print_pins(const char *user, const char *cdir, const char *host)
+{
+    pqdb *db;
+    pqdb_error e;
+    pqdb_query q = PQDB_QUERY_ANY;
+    void *ctx[2];
+    if (pqdb_open_at("/nonexistent/base.sqlite", user, cdir, &db, &e) != 0) { fprintf(stderr, "%s: %s\n", e.code, e.message); return 1; }
+    ctx[0] = db; ctx[1] = (void *)host;
+    pqdb_each(db, &q, print_one_pin, ctx);
+    pqdb_close(db);
+    return 0;
+}
+
+/* test_reader nofig <user layer> <contract dir> <format> <uri> <host> <path>=<sha256>...: "refused <reason>" when the
+   store holds a figure-less record of exactly those files, else "none", for test_no_figures.sh */
+static int print_no_figures(int argc, char **argv)
+{
+    pqdb *db;
+    pqdb_error e;
+    const char *path[32], *sha[32], *reason = NULL;
+    char buf[32][512];
+    int n = 0, rc;
+    for (int i = 7; i < argc && n < 32; i++, n++) {
+        char *eq;
+        snprintf(buf[n], sizeof buf[n], "%s", argv[i]);
+        eq = strrchr(buf[n], '=');
+        if (!eq) return 2;
+        *eq = 0;
+        path[n] = buf[n];
+        sha[n] = eq + 1;
+    }
+    if (pqdb_open_at("/nonexistent/base.sqlite", argv[2], argv[3], &db, &e) != 0) { fprintf(stderr, "%s: %s\n", e.code, e.message); return 1; }
+    rc = pqdb_no_figures_of(db, argv[4], argv[5], argv[6], n, path, sha, &reason);
+    if (rc == 1) printf("refused %s\n", reason); else if (rc == 0) printf("none\n"); else printf("refusal %d\n", rc);
+    pqdb_close(db);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int scoped = argc > 3 && strcmp(argv[3], "scopes") == 0, ran = 0, bad = 0;
+    if (argc >= 7 && strcmp(argv[1], "nofig") == 0)
+        return print_no_figures(argc, argv);
+    if (argc == 5 && strcmp(argv[1], "pins") == 0)
+        return print_pins(argv[2], argv[3], argv[4]);
     if (argc < 3) { fprintf(stderr, "usage: test_reader <fixture dir> <contract fixtures dir> [scopes]\n"); return 2; }
     FX = argv[1]; CT = argv[2];
     for (size_t i = 0; i < sizeof TESTS / sizeof *TESTS; i++) {

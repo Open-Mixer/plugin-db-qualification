@@ -1,0 +1,5 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
+-- The qualification store from user_version 2 to 3 (this repository's qualification store spec, sections 3.6 and 6.0):
+-- 3 adds the tables no_figures and no_figures_file, a quick check that ran and ended with no figures, which the DDL
+-- creates empty. No column of 2 is gone or renamed, and no word moves: the runner's copy is the whole step.

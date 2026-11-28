@@ -805,23 +805,23 @@ class Migration(unittest.TestCase):
         self.layer(f"UPDATE reason SET code = '{old}' WHERE code = 'hosting.memory.unmeasured';")
         steps = os.path.join(self.tmp, "migrations")
         os.makedirs(steps)
-        with open(os.path.join(REPO, "schema", "migrations", "1-to-2.sql"), encoding="utf-8") as f:
+        with open(os.path.join(REPO, "schema", "migrations", "1-to-3.sql"), encoding="utf-8") as f:
             script = f.read()
         line = f"UPDATE v1_reason SET code = 'hosting.memory.unmeasured' WHERE code = '{old}';\n"
         mark = "-- the words renamed from 1 to 2, one UPDATE a word: none (see the header)\n"
         self.assertIn(mark, script)
         checker = q.Checker(q.Domains(contract_dir()))
-        with open(os.path.join(steps, "1-to-2.sql"), "w", encoding="utf-8") as f:
+        with open(os.path.join(steps, "1-to-3.sql"), "w", encoding="utf-8") as f:
             f.write(script.replace(mark, mark + line))
-        q.migrate(self.db, 1, 2, checker, migrations=steps)
+        q.migrate(self.db, 1, 3, checker, migrations=steps)
         with contextlib.closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute("SELECT count(*) FROM reason WHERE code = ?", (old,)).fetchone(), (0,))
         os.unlink(self.db)
         self.layer(f"UPDATE reason SET code = '{old}' WHERE code = 'hosting.memory.unmeasured';")
-        with open(os.path.join(steps, "1-to-2.sql"), "w", encoding="utf-8") as f:
+        with open(os.path.join(steps, "1-to-3.sql"), "w", encoding="utf-8") as f:
             f.write(script)
         with self.assertRaises(q.Refusal) as cm:
-            q.migrate(self.db, 1, 2, checker, migrations=steps)
+            q.migrate(self.db, 1, 3, checker, migrations=steps)
         self.assertEqual(cm.exception.name, "migration-word-unknown")
         self.assertIn(old, str(cm.exception))
 

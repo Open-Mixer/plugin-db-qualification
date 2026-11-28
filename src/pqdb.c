@@ -35,9 +35,16 @@ static const char *const CODES[] = {
     "qualification-db.word-unknown", "qualification-db.hot-journal", "qualification-db.busy", NULL,
     "qualification-db.layer-unknown" };
 
+/* what a layer's file (or its -wal) was when the handle opened it, so pqdb_changed can tell it is another */
+typedef struct { int present; dev_t dev; ino_t ino; off_t size; struct timespec mtime; } stamp;
+
 struct pqdb {
     sqlite3 *base, *user;           /* base NULL: no base file, an empty base layer (pqdb_base_absent) */
-    char verdict_rating[64], verdict_deciding[64];
+    char *base_path, *user_path;    /* the layers' places, as opened; user NULL: no user layer asked for */
+    stamp seen[4];                  /* base, base -wal, user, user -wal at the open */
+    char groupable[16][96];         /* QUALIFICATION_GROUPABLE_CONDITIONAL_CODES of the installed qualification domain */
+    int ngroupable;
+    char verdict_rating[64], verdict_deciding[64], no_figures_reason[64];
     char msg[256];                  /* what the last refusal of pqdb_each said */
 };
 
@@ -453,7 +460,7 @@ static int in_names(const names *n, const char *s)
  * before COMMIT; any failure rolls back and leaves the layer as it was */
 static int migrate_user(const char *path, int from, const char *cdir, pqdb_error *err)
 {
-    const char *step = from == 1 && PQDB_SCHEMA_VERSION == 2 ? PQDB_MIGRATION_1_TO_2 : NULL;
+    const char *step = PQDB_SCHEMA_VERSION != 3 ? NULL : from == 1 ? PQDB_MIGRATION_1_TO_3 : from == 2 ? PQDB_MIGRATION_2_TO_3 : NULL;
     char bak[4200];
     sqlite3 *db = NULL, *copy = NULL, *mem = NULL;
     sqlite3_backup *b;
@@ -616,6 +623,81 @@ out:
     return st;
 }
 
+/* ---- the files as opened (pqdb_changed) ---- */
+static void stamp_of(const char *path, const char *suffix, stamp *out)
+{
+    char full[4096];
+    struct stat st;
+    memset(out, 0, sizeof *out);
+    if (!path || snprintf(full, sizeof full, "%s%s", path, suffix) >= (int)sizeof full || stat(full, &st) != 0)
+        return;
+    out->present = 1;
+    out->dev = st.st_dev;
+    out->ino = st.st_ino;
+    out->size = st.st_size;
+    out->mtime = st.st_mtim;
+}
+
+static void stamps_of(const pqdb *db, stamp out[4])
+{
+    stamp_of(db->base_path, "", &out[0]);
+    stamp_of(db->base_path, "-wal", &out[1]);
+    stamp_of(db->user_path, "", &out[2]);
+    stamp_of(db->user_path, "-wal", &out[3]);
+}
+
+static int stamp_same(const stamp *a, const stamp *b)
+{
+    return a->present == b->present && (!a->present || (a->dev == b->dev && a->ino == b->ino && a->size == b->size &&
+           a->mtime.tv_sec == b->mtime.tv_sec && a->mtime.tv_nsec == b->mtime.tv_nsec));
+}
+
+int pqdb_changed(const pqdb *db)
+{
+    stamp now[4];
+    if (!db)
+        return 0;
+    stamps_of(db, now);
+    for (int i = 0; i < 4; i++)
+        if (!stamp_same(&now[i], &db->seen[i]))
+            return 1;
+    return 0;
+}
+
+/* the groupable codes (section 6.0): the qualification domain declares them, once, and the reader reads them at open */
+#define GROUPABLE_ITEM "QUALIFICATION_GROUPABLE_CONDITIONAL_CODES"
+#define GROUPABLE_SINCE "0.1.2"
+static int read_groupable(pqdb *db, const char *cdir, pqdb_error *err)
+{
+    omx_domain *d;
+    omx_domain_error e;
+    int lrc = cdir ? omx_domain_open_at(cdir, "qualification", GROUPABLE_SINCE, &d, &e)
+                   : omx_domain_open("qualification", GROUPABLE_SINCE, &d, &e);
+    int count;
+    if (lrc != 0) {
+        if (lrc == OMX_CONTRACT_CODE_PACKAGE_TOO_OLD)
+            return fail(err, S_DOMAIN_TOO_OLD, "the qualification domain is older than %s, which declares " GROUPABLE_ITEM ": %s",
+                        GROUPABLE_SINCE, e.message);
+        if (err) {
+            err->code = e.code;
+            snprintf(err->message, sizeof err->message, "the qualification domain: %s", e.message);
+        }
+        return S_CONTRACT;
+    }
+    count = omx_domain_word_count(d, GROUPABLE_ITEM);
+    if (count < 0 || count > (int)(sizeof db->groupable / sizeof db->groupable[0])) {
+        omx_domain_close(d);
+        return fail(err, S_DOMAIN_TOO_OLD, "the qualification domain holds no item " GROUPABLE_ITEM " the reader can hold");
+    }
+    for (int k = 0; k < count; k++) {
+        omx_domain_word_info wi;
+        if (omx_domain_word_at(d, GROUPABLE_ITEM, k, &wi) == 0)
+            snprintf(db->groupable[db->ngroupable++], sizeof db->groupable[0], "%s", wi.word);
+    }
+    omx_domain_close(d);
+    return S_OK;
+}
+
 /* ---- open ---- */
 static int open_internal(const char *base, const char *user, const char *cdir, pqdb **out, pqdb_error *err)
 {
@@ -631,6 +713,14 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
     db = calloc(1, sizeof *db);
     if (!db)
         return fail(err, S_UNREADABLE, "out of memory");
+    /* the files as they are before any is opened: a change from here on is a change pqdb_changed answers */
+    db->base_path = strdup(base);
+    db->user_path = user ? strdup(user) : NULL;
+    if (!db->base_path || (user && !db->user_path)) {
+        st = fail(err, S_UNREADABLE, "out of memory");
+        goto bad;
+    }
+    stamps_of(db, db->seen);
     if (have_base && (st = open_layer(base, 0, &db->base, &vb, err)) != S_OK)
         goto bad;
     if (user) {
@@ -643,6 +733,7 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
                 if ((st = migrate_user(user, vu, cdir, err)) != S_OK ||
                     (st = open_layer(user, 1, &db->user, &vu, err)) != S_OK)
                     goto bad;
+                stamps_of(db, db->seen);   /* the migration is this open's own write, not a change */
             }
         } else if (e != ENOENT && e != ENOTDIR) {
             st = fail(err, S_UNREADABLE, "%s: %s", user, strerror(e));
@@ -677,6 +768,8 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
         if (st != S_OK)
             goto bad;
     }
+    if ((st = read_groupable(db, cdir, err)) != S_OK)
+        goto bad;
     *out = db;
     return S_OK;
 bad:
@@ -717,6 +810,8 @@ void pqdb_close(pqdb *db)
         return;
     sqlite3_close(db->base);
     sqlite3_close(db->user);
+    free(db->base_path);
+    free(db->user_path);
     free(db);
 }
 
@@ -939,6 +1034,241 @@ int pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb
     }
     sqlite3_finalize(st);
     return rc;
+}
+
+/* ---- the pin (section 3.7) ---- */
+/* the conditional reasons that leave a plugin groupable: the words of the domain's item, read at open */
+static int groupable(const pqdb *db, const char *code)
+{
+    for (int i = 0; i < db->ngroupable; i++)
+        if (strcmp(db->groupable[i], code) == 0)
+            return 1;
+    return 0;
+}
+
+/* the record a result is a cell of, by its claim; 0 for none */
+static long long record_of(sqlite3 *h, const pqdb_result *r, int *status)
+{
+    sqlite3_stmt *st;
+    long long rid = 0;
+    int rc;
+    *status = 0;
+    if (sqlite3_prepare_v2(h, "SELECT cl.record_id FROM claim cl JOIN plugin p ON p.plugin_id = cl.plugin_id "
+                           "WHERE p.sha256 = ?1 AND p.format = ?2 AND p.uri = ?3 AND cl.offer = ?4 AND cl.host_class = ?5 "
+                           "AND cl.rate = ?6 AND cl.quantum = ?7", -1, &st, NULL) != SQLITE_OK) {
+        *status = status_of(h);
+        return 0;
+    }
+    sqlite3_bind_text(st, 1, r->sha256, -1, SQLITE_STATIC); sqlite3_bind_text(st, 2, r->format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, r->uri, -1, SQLITE_STATIC); sqlite3_bind_text(st, 4, r->offer, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 5, r->host_class, -1, SQLITE_STATIC); sqlite3_bind_int(st, 6, r->rate);
+    sqlite3_bind_int(st, 7, r->quantum);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW)
+        rid = sqlite3_column_int64(st, 0);
+    else if (rc != SQLITE_DONE)
+        *status = status_of(h);
+    sqlite3_finalize(st);
+    return rid;
+}
+
+/* the word the host's verdict gives, before the steps: NULL for none */
+static const char *verdict_word(const pqdb *db, sqlite3 *h, long long rid, const char *host, int *status)
+{
+    sqlite3_stmt *st;
+    const char *word = NULL;
+    int rc, ord, measured, conditional = 0, all_groupable = 1;
+    char rating[32];
+    *status = 0;
+    if (sqlite3_prepare_v2(h, "SELECT ord, measured, rating FROM verdict WHERE record_id = ?1 AND host = ?2", -1, &st, NULL)
+        != SQLITE_OK) {
+        *status = status_of(h);
+        return NULL;
+    }
+    sqlite3_bind_int64(st, 1, rid);
+    sqlite3_bind_text(st, 2, host, -1, SQLITE_STATIC);
+    rc = sqlite3_step(st);
+    if (rc != SQLITE_ROW) {
+        if (rc != SQLITE_DONE)
+            *status = status_of(h);
+        sqlite3_finalize(st);
+        return NULL;
+    }
+    ord = sqlite3_column_int(st, 0);
+    measured = sqlite3_column_int(st, 1);
+    snprintf(rating, sizeof rating, "%s", sqlite3_column_text(st, 2));
+    sqlite3_finalize(st);
+    if (!measured)
+        return NULL;
+    if (strcmp(rating, "suitable") == 0)
+        return "in-process";
+    if (strcmp(rating, "unsuitable") == 0)
+        return "refused";
+    if (strcmp(rating, "conditional") != 0)
+        return NULL;                                   /* unknown: no opinion */
+    if (sqlite3_prepare_v2(h, "SELECT code FROM reason WHERE record_id = ?1 AND verdict_ord = ?2 AND rating = 'conditional'",
+                           -1, &st, NULL) != SQLITE_OK) {
+        *status = status_of(h);
+        return NULL;
+    }
+    sqlite3_bind_int64(st, 1, rid);
+    sqlite3_bind_int(st, 2, ord);
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+        conditional++;
+        if (!groupable(db, (const char *)sqlite3_column_text(st, 0)))
+            all_groupable = 0;
+    }
+    if (rc != SQLITE_DONE)
+        *status = status_of(h);
+    sqlite3_finalize(st);
+    word = conditional > 0 && all_groupable ? "in-process" : "isolated";
+    return *status ? NULL : word;
+}
+
+/* the verdict the history adjustment of the record gives the host (record_history, history_verdict): the latest block of
+   the class (any class for NULL) that holds a verdict of the host. 1 and *word set (NULL for an adjusted null) when there
+   is one, 0 when there is none, a refusal status otherwise */
+static int adjusted_word(sqlite3 *h, long long rid, const char *host, const char *klass, const char **word)
+{
+    sqlite3_stmt *st;
+    int rc, found = 0;
+    static const char *const WORDS[] = { "in-process", "isolated", "refused" };
+    *word = NULL;
+    if (sqlite3_prepare_v2(h, "SELECT hv.adjusted FROM history_verdict hv JOIN record_history rh ON rh.record_id = hv.record_id "
+                           "AND rh.ord = hv.history_ord WHERE hv.record_id = ?1 AND hv.host = ?2 AND (?3 IS NULL OR rh.host_class = ?3) "
+                           "ORDER BY hv.history_ord DESC LIMIT 1", -1, &st, NULL) != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_int64(st, 1, rid);
+    sqlite3_bind_text(st, 2, host, -1, SQLITE_STATIC);
+    if (klass)
+        sqlite3_bind_text(st, 3, klass, -1, SQLITE_STATIC);
+    else
+        sqlite3_bind_null(st, 3);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        found = 1;
+        if (sqlite3_column_type(st, 0) != SQLITE_NULL)
+            for (int i = 0; i < 3; i++)
+                if (strcmp((const char *)sqlite3_column_text(st, 0), WORDS[i]) == 0)
+                    *word = WORDS[i];
+    } else if (rc != SQLITE_DONE) {
+        found = status_of(h);
+    }
+    sqlite3_finalize(st);
+    return found;
+}
+
+int pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, const char *history_class, pqdb_pin *out)
+{
+    sqlite3 *h = strcmp(r->layer, "user") == 0 ? db->user : db->base;
+    sqlite3_stmt *st;
+    long long rid;
+    int status, rc, isolated_seen = 0, pool_seen = 0;
+    const char *verdict, *pool = NULL;
+    out->verdict = out->pool = NULL;
+    if (!h)
+        return 1;
+    if (r->unpinnable || !r->layout_scheme || !r->layout_sha256)
+        return 1;
+    rid = record_of(h, r, &status);
+    if (status)
+        return status;
+    if (!rid)
+        return 1;
+    verdict = verdict_word(db, h, rid, host, &status);
+    if (status)
+        return status;
+    /* the steps, in the run's order; of a step named twice the first is the one plugin-qualify reads (steps.find) */
+    if (sqlite3_prepare_v2(h, "SELECT step, result FROM run_step WHERE record_id = ?1 ORDER BY ord", -1, &st, NULL) != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_int64(st, 1, rid);
+    while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
+        const char *step = (const char *)sqlite3_column_text(st, 0), *result = (const char *)sqlite3_column_text(st, 1);
+        if (strcmp(step, "isolated") == 0 && !isolated_seen) {
+            isolated_seen = 1;
+            verdict = strcmp(result, "isolated") == 0 ? "isolated" : strcmp(result, "refused") == 0 ? "refused" : NULL;
+        } else if (strcmp(step, "pool") == 0 && !pool_seen) {
+            pool_seen = 1;
+            pool = strcmp(result, "cores") == 0 ? "cores" : strcmp(result, "off") == 0 ? "off" : NULL;
+        }
+    }
+    if (rc != SQLITE_DONE) {
+        sqlite3_finalize(st);
+        return status_of(h);
+    }
+    sqlite3_finalize(st);
+    /* the history adjustment, as the store records it, stands over the measured word */
+    {
+        const char *adjusted;
+        int got = adjusted_word(h, rid, host, history_class, &adjusted);
+        if (got < 0)
+            return got;
+        if (got == 1)
+            verdict = adjusted;
+    }
+    out->verdict = verdict;
+    out->pool = verdict && strcmp(verdict, "refused") == 0 ? NULL : pool;
+    return 0;
+}
+
+/* ---- a quick check that ran with no figures (section 6.0) ---- */
+static int no_figures_in(pqdb *db, sqlite3 *h, const char *format, const char *uri, const char *host, int n,
+                         const char *const *path, const char *const *sha256)
+{
+    sqlite3_stmt *st, *fs;
+    int rc, found = 0;
+    if (!h)
+        return 0;
+    if (sqlite3_prepare_v2(h, "SELECT nf_id, reason FROM no_figures WHERE format = ?1 AND uri = ?2 AND host = ?3", -1, &st, NULL)
+        != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_text(st, 1, format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 2, uri, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, host, -1, SQLITE_STATIC);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        long long nf = sqlite3_column_int64(st, 0);
+        int k = 0, same = 1, frc;
+        snprintf(db->no_figures_reason, sizeof db->no_figures_reason, "%s", sqlite3_column_text(st, 1));
+        if (sqlite3_prepare_v2(h, "SELECT path, sha256 FROM no_figures_file WHERE nf_id = ?1 ORDER BY ord", -1, &fs, NULL) != SQLITE_OK) {
+            sqlite3_finalize(st);
+            return status_of(h);
+        }
+        sqlite3_bind_int64(fs, 1, nf);
+        while ((frc = sqlite3_step(fs)) == SQLITE_ROW) {
+            if (k >= n || strcmp((const char *)sqlite3_column_text(fs, 0), path[k]) ||
+                strcmp((const char *)sqlite3_column_text(fs, 1), sha256[k]))
+                same = 0;
+            k++;
+        }
+        sqlite3_finalize(fs);
+        if (frc != SQLITE_DONE) {
+            sqlite3_finalize(st);
+            return status_of(h);
+        }
+        found = same && k == n;
+    } else if (rc != SQLITE_DONE) {
+        found = status_of(h);
+    }
+    sqlite3_finalize(st);
+    return found;
+}
+
+int pqdb_no_figures_of(const pqdb *db, const char *format, const char *uri, const char *host, int n,
+                       const char *const *path, const char *const *sha256, const char **reason)
+{
+    pqdb *w = (pqdb *)db;
+    int got;
+    *reason = NULL;
+    if (!db || !format || !uri || !host || n <= 0)
+        return 0;
+    /* the user layer first, then the base (section 4) */
+    got = no_figures_in(w, db->user, format, uri, host, n, path, sha256);
+    if (got == 0)
+        got = no_figures_in(w, db->base, format, uri, host, n, path, sha256);
+    if (got == 1)
+        *reason = w->no_figures_reason;
+    return got;
 }
 
 /* ---- whole records ---- */

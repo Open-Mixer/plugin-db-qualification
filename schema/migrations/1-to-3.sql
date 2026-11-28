@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
--- The qualification store from user_version 1 to 2 (this repository's qualification store spec, section 3.6).
+-- The qualification store from user_version 1 to 3 (this repository's qualification store spec, section 3.6): the step
+-- from 1 to 2, below, and 3's two new tables (no_figures, no_figures_file), which the DDL creates empty.
 --
 -- user_version 1 is every layer the dated writers wrote: the DDL of v2026112401, and the later dated builds, which
 -- added cell_voice_point, record.adapter_content, .adapter_loaded, .adapter_refused, cost_entry.voices_basis,

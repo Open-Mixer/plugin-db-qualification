@@ -81,15 +81,13 @@ jobs:
       package-name: plugin-db-qualification
       binary-names: ${{ needs.plan.outputs.deb-names }}
       publish: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish == true }}
-      # the arm64 records are for plugin-qualify on a Raspberry Pi 5 running Debian (Zynthian's base, trixie, and the
-      # bookworm images before it); the reader builds with sqlite, pkgconf and the channel's libomx-domain-dev, the records with python3 (tools/sets.py)
+      # the arm64 records are for plugin-qualify on a Raspberry Pi 5 running Debian trixie (Zynthian's base); the reader builds with sqlite, pkgconf and the channel's libomx-domain-dev, the records with python3 (tools/sets.py)
       dependencies: ''
       requires: ''
       # the reader's Build-Depends libomx-domain-dev comes from the channel; sqlite and pkgconf are Debian's
       channel-deps: true
       build-packages: python3
-      # trixie only: the channel has no bookworm suite to install plugin-qualify from, so a bookworm package could not
-      # pass its install check; ZynthianOS Vangelis is trixie
+      # Debian is trixie only (owner ruling 2026-11-28); ZynthianOS Vangelis is trixie
       suite-matrix: '["trixie"]'
       arch-matrix: ${{ needs.plan.outputs.deb-arches }}
       # the cycle with plugin-hostd, as the rpm job below says
@@ -136,6 +134,7 @@ jobs:
         with:
           # a pull request into devel, or a dispatch off main, in a wave reads that wave's devel channel above staging (Open-Mixer/.github#329)
           devel-channel: ${{ ((startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && vars.OMX_DEVEL_CHANNEL || '' }}
+          devel-base: ${{ ((startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && vars.OMX_DEVEL_BASE || '' }}
 
       # the package installed once; each set it carries proven in turn (tools/prove-set.sh: a container has no
       # device tree, so the host class is the settings file's, and a set of one cell sets the sync's grid to it)
@@ -220,6 +219,7 @@ jobs:
         with:
           # a pull request into devel, or a dispatch off main, in a wave reads that wave's devel channel above staging (Open-Mixer/.github#329)
           devel-channel: ${{ ((startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && vars.OMX_DEVEL_CHANNEL || '' }}
+          devel-base: ${{ ((startsWith(github.event_name, 'pull_request') && github.base_ref == 'devel') || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')) && vars.OMX_DEVEL_BASE || '' }}
 
       - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |

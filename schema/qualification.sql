@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Pau Aliagas <linuxnow@gmail.com>
--- The qualification store, user_version 2 (this repository's qualification store spec, section 3.3, verbatim, with
+-- The qualification store, user_version 3 (this repository's qualification store spec, section 3.3, verbatim, with
 -- WORD(c) and RELPATH(c) written out as section 3.2 defines them). The writer sets PRAGMA user_version last.
 CREATE TABLE store_info (
   one            INTEGER PRIMARY KEY CHECK (one = 1),
@@ -440,6 +440,29 @@ CREATE TABLE rejudged_owe (                -- rejudged.owes[]
   code TEXT NOT NULL CHECK ((length(code) > 0 AND instr(code, ' ') = 0 AND instr(code, char(9)) = 0 AND instr(code, char(10)) = 0)),
   measurement TEXT NOT NULL CHECK ((length(measurement) > 0 AND instr(measurement, ' ') = 0 AND instr(measurement, char(9)) = 0 AND instr(measurement, char(10)) = 0)),
   PRIMARY KEY (record_id, ord)
+) STRICT;
+
+-- a quick check that ran and ended with no figures (the spool's check crashed, outgrew its memory limit or ran past its
+-- budget): a record kind of its own, read as a refusal of these files (user_version 3; plugin-hostd's pins-from-the-store
+-- spec, section 9 point 7, decided by the coordinator, the owner to confirm). One per plugin and host; the writer's put
+-- of a record with figures for the plugin removes it
+CREATE TABLE no_figures (
+  nf_id   INTEGER PRIMARY KEY,
+  format  TEXT NOT NULL CHECK ((length(format) > 0 AND instr(format, ' ') = 0 AND instr(format, char(9)) = 0 AND instr(format, char(10)) = 0)),
+  uri     TEXT NOT NULL CHECK (length(uri) > 0),   -- the CLAP id or the LV2 URI, as plugin.uri
+  host    TEXT NOT NULL CHECK ((length(host) > 0 AND instr(host, ' ') = 0 AND instr(host, char(9)) = 0 AND instr(host, char(10)) = 0)),
+  reason  TEXT NOT NULL CHECK ((length(reason) > 0 AND instr(reason, ' ') = 0 AND instr(reason, char(9)) = 0 AND instr(reason, char(10)) = 0)),     -- a word of QUALIFICATION_NO_FIGURES_REASONS
+  at      TEXT NOT NULL,
+  UNIQUE (format, uri, host)
+) STRICT;
+
+CREATE TABLE no_figures_file (             -- the files the check was about, as the daemon hashed them (section 3.7's list)
+  nf_id   INTEGER NOT NULL REFERENCES no_figures ON DELETE CASCADE,
+  ord     INTEGER NOT NULL,
+  path    TEXT NOT NULL CHECK (length(path) > 0 AND path NOT GLOB '/*' AND substr(path, -1) <> '/' AND instr(path, '//') = 0 AND instr('/' || path || '/', '/./') = 0 AND instr('/' || path || '/', '/../') = 0),
+  sha256  TEXT NOT NULL CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*'),
+  PRIMARY KEY (nf_id, ord),
+  UNIQUE (nf_id, path)
 ) STRICT;
 
 CREATE TRIGGER record_set_by_layer BEFORE INSERT ON record

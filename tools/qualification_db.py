@@ -448,6 +448,9 @@ WORDS = {
     ("record_set", "tier"): [_q("SET_TIERS")],
     ("record_set", "host_profile"): _PROFILE,
     ("verdict", "host"): _PROFILE,
+    ("no_figures", "format"): [("plugin-db", "PLUGIN_DB_ADDRESS_FORMATS")],
+    ("no_figures", "host"): _PROFILE,
+    ("no_figures", "reason"): [_q("NO_FIGURES_REASONS")],
     ("cost_entry", "host"): _PROFILE,
     ("tier", "host"): _PROFILE,
     ("record", "adapter_host"): [_q("ADAPTER_HOSTS")],
@@ -1082,6 +1085,8 @@ def put(rec, *, scope, offer, host_class, contract_dir, root=None, schema=None):
 def _write(cur, domains, checker, rows, p, extra, label):
     try:
         _words(cur, domains, checker)
+        # a record with figures takes the place of the plugin's figure-less ones (spec section 6.0)
+        cur.execute("DELETE FROM no_figures WHERE format = ? AND uri = ?", (p["format"], p["uri"]))
         pid = _plugin(cur, p)
         if pid is None:
             pid = _insert(cur, "plugin", p)
@@ -1094,6 +1099,82 @@ def _write(cur, domains, checker, rows, p, extra, label):
                         (rid, pid, extra["offer"], extra["host_class"], cell.cols["rate"], cell.cols["quantum"]))
     except sqlite3.IntegrityError as e:
         raise Refusal("schema-refused", f"{label}: {e}") from e
+
+
+def put_no_figures(*, scope, format, uri, host, reason, files, at, contract_dir, root=None, schema=None):
+    """A quick check that ran and ended with no figures, into the scope's layer (spec section 6.0; plugin-hostd's
+    pins-from-the-store spec, section 9 point 7, decided by the coordinator, the owner to confirm): the files it was
+    about, `files` [(path, sha256)] in byte order of the path, and its reason, a word of QUALIFICATION_NO_FIGURES_REASONS.
+    It replaces the plugin's earlier one of that host. No reason, or a word no item holds, is refused by name
+    (no-figures-reason) and nothing is written. A missing layer is created from the DDL."""
+    path = layer_path(scope, root)
+    schema = schema or SCHEMA_SQL
+    version = schema_version(schema)
+    domains = Domains(contract_dir)
+    checker = Checker(domains)
+    if not isinstance(reason, str) or reason == "":
+        raise Refusal("no-figures-reason", "a record with no figures names the reason its check ended with: none was given")
+    if not checker.ok("no_figures", "reason", reason):
+        raise Refusal("no-figures-reason", f"{reason!r} is no word of {checker.describe('no_figures', 'reason')}")
+    for col, word in (("format", format), ("host", host)):
+        if not isinstance(word, str) or not checker.ok("no_figures", col, word):
+            raise Refusal("word-unknown", f"no_figures.{col}: {word!r} is no word of {checker.describe('no_figures', col)}")
+    if not files or [p for p, _ in files] != sorted(p for p, _ in files):
+        raise Refusal("files-unordered" if files else "files-empty", "the files of a record with no figures, in byte order of the path")
+
+    def write(cur):
+        try:
+            _words(cur, domains, checker)
+            cur.execute("DELETE FROM no_figures WHERE format = ? AND uri = ? AND host = ?", (format, uri, host))
+            cur.execute("INSERT INTO no_figures (format, uri, host, reason, at) VALUES (?, ?, ?, ?, ?)", (format, uri, host, reason, at))
+            nf = cur.lastrowid
+            for o, (fp, sha) in enumerate(files):
+                cur.execute("INSERT INTO no_figures_file (nf_id, ord, path, sha256) VALUES (?, ?, ?, ?)", (nf, o, fp, sha))
+        except sqlite3.IntegrityError as e:
+            raise Refusal("schema-refused", f"no_figures: {e}") from e
+
+    if os.path.exists(path):
+        db = _open_layer(path, version, checker, schema)
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                write(db.cursor())
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
+        finally:
+            db.close()
+        return
+    outdir = os.path.dirname(os.path.abspath(path))
+    os.makedirs(outdir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".qualification-", suffix=".tmp", dir=outdir)
+    os.close(fd)
+    try:
+        os.unlink(tmp)
+        db = sqlite3.connect(tmp, isolation_level=None)
+        try:
+            db.execute("PRAGMA page_size = 4096")
+            db.execute("PRAGMA journal_mode = DELETE")
+            db.execute("PRAGMA foreign_keys = ON")
+            with open(schema, encoding="utf-8") as f:
+                db.executescript(f.read())
+            cur = db.cursor()
+            cur.execute("BEGIN")
+            cur.execute("INSERT INTO store_info (one, user_layer, record_schema, built_from) VALUES (1, 1, ?, NULL)", (RECORD_SCHEMA,))
+            write(cur)
+            cur.execute("COMMIT")
+            db.execute(f"PRAGMA user_version = {version}")
+        finally:
+            db.close()
+        os.replace(tmp, path)
+    except BaseException:
+        for t in (tmp, tmp + "-journal"):
+            try:
+                os.unlink(t)
+            except FileNotFoundError:
+                pass
+        raise
 
 
 def delete(*, scope, sha256, format, uri, offer, host_class, root=None, schema=None, contract_dir=None):

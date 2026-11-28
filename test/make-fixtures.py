@@ -81,17 +81,19 @@ def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok
 
 def rec(key, offer, cls, cells, set=None, pkg=None, adapter_code=None, cell_code=None, verdict_rating="qualified",
         bpath=None, files=None, layout=None, unpinnable=None, tested=None, offered=False, tier="reference",
-        measured="2026-11-09"):
+        measured="2026-11-09", reasons=(), steps=(), verdict_measured=1, history=()):
     """bpath: the binary's path below its install root (default: the file's own name); files: the per-file list as
     (path, sha256) in byte order of the path, which holds bpath at the key's SHA-256 (default: that one entry);
     layout: (scheme, sha256); unpinnable: 1 for a record that holds it; tested: testedVersion;
     offered: the record has a tier_offered row (a tier the plugin is offered on); tier: the tier of the record's set
-    (record_set.tier); measured: its set's measurement date (record_set.measured)."""
+    (record_set.tier); measured: its set's measurement date (record_set.measured); reasons: the (rating, code) of the
+    omx-clap-host verdict's reasons; steps: the run's (step, result) in order; verdict_measured: that verdict's measured; history: the adjust blocks, each
+    (host class, [(host, measured word, adjusted word or None)])."""
     bpath = bpath or key[2].split(":")[-1] + (".clap" if key[1] == "clap" else ".so")
     return dict(key=key, offer=offer, cls=cls, cells=cells, set=set, pkg=pkg, adapter_code=adapter_code,
                 cell_code=cell_code, verdict_rating=verdict_rating, bpath=bpath, files=files or [(bpath, key[0])],
                 layout=layout or (None, None), unpinnable=unpinnable, tested=tested, offered=offered, tier=tier,
-                measured=measured)
+                measured=measured, reasons=reasons, steps=steps, verdict_measured=verdict_measured, history=history)
 
 BASE = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", adapter_code="omx-clap-host.signal-SIGSEGV",
@@ -122,9 +124,10 @@ USER = [
     rec((P5, "clap", "urn:p5"), "default", "x86-64", bpath="P1.clap", cells=[cell(48000, 256, (30.0, 95, 31.0), (1, 2), (3, 4))]),
 ]
 
-def word_checks(c):
+def word_checks(c, unchecked=()):
+    """unchecked: the (table, column) pairs left out of the check, for a fixture of words the fixture contract lacks"""
     c.executemany("INSERT INTO store_domain VALUES (?, ?)", sorted(DOMAINS.items()))
-    c.executemany("INSERT INTO word_check VALUES (?, ?, ?, ?)", WORD_CHECK)
+    c.executemany("INSERT INTO word_check VALUES (?, ?, ?, ?)", [w for w in WORD_CHECK if (w[0], w[1]) not in unchecked])
 
 def claimants(records):
     """{record index: the cells it claims} by the base's rule (the store spec, section 4): one record per key, offer, class
@@ -148,7 +151,7 @@ def claimants(records):
         out[top[0]].add((rate, quantum))
     return out
 
-def build(path, layer, records, version=VERSION, adapter_code_override=None, filler=False):
+def build(path, layer, records, version=VERSION, adapter_code_override=None, filler=False, unchecked=()):
     if os.path.exists(path):
         os.unlink(path)
     c = sqlite3.connect(path)
@@ -158,7 +161,7 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
     c.execute("PRAGMA foreign_keys = ON")
     c.execute("INSERT INTO store_info VALUES (1, ?, 'plugin-qualify.qualification-record/1', ?)",
               (layer, None if layer else "0123456789abcdef0123456789abcdef01234567"))
-    word_checks(c)
+    word_checks(c, unchecked)
     plugin, sets = {}, {}
     claims = claimants(records)
     for n, r in enumerate(records):
@@ -197,8 +200,19 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
             c.execute("INSERT INTO record_file VALUES (?, ?, ?, ?)", (rid, o, path, digest))
         c.execute("UPDATE record SET layout_scheme = ?, layout_sha256 = ?, unpinnable = ?, tested_version = ? WHERE record_id = ?",
                   (*r["layout"], r["unpinnable"], r["tested"], rid))
-        c.execute("INSERT INTO verdict VALUES (?, 0, 'omx-clap-host', 1, ?, 1, 'isolated', 'run', NULL)",
-                  (rid, r["verdict_rating"]))
+        c.execute("INSERT INTO verdict VALUES (?, 0, 'omx-clap-host', ?, ?, 1, 'isolated', 'run', NULL)",
+                  (rid, r["verdict_measured"], r["verdict_rating"]))
+        for o, (rating, code) in enumerate(r["reasons"]):
+            c.execute("INSERT INTO reason (record_id, verdict_ord, cost_ord, ord, dimension, rating, code) "
+                      "VALUES (?, 0, NULL, ?, 'rtSafety', ?, ?)", (rid, o, rating, code))
+        for o, (step, result) in enumerate(r["steps"]):
+            c.execute("INSERT INTO run_step (record_id, ord, step, result) VALUES (?, ?, ?, ?)", (rid, o, step, result))
+        for h, (klass, verdicts) in enumerate(r["history"]):
+            c.execute("INSERT INTO record_history (record_id, ord, host_class, file, at, found) VALUES (?, ?, ?, 'history', "
+                      "'2026-11-28T00:00:00Z', 1)", (rid, h, klass))
+            for o, (host, measured_word, adjusted) in enumerate(verdicts):
+                c.execute("INSERT INTO history_verdict (record_id, history_ord, ord, host, measured, adjusted, move, reason) "
+                          "VALUES (?, ?, ?, ?, ?, ?, 'demote', 'history.crashed')", (rid, h, o, host, measured_word, adjusted))
         c.execute("INSERT INTO verdict VALUES (?, 1, 'openmixer-console', 1, 'qualified', 1, 'in-process', "
                   "'declaration', 'probe.crashed')", (rid,))
         for o, ce in enumerate(r["cells"]):
@@ -467,10 +481,56 @@ def at_version_1(src, dst, edit=None):
     c.execute("PRAGMA user_version = 1")
     c.commit(); c.close()
 
+# ---- the pin's words (section 3.7, pqdb_pin_of): one plugin per case, its omx-clap-host verdict, reasons and steps; the
+# expected words in the uri: urn:pin-<case>. The ratings are the qualification domain's (suitable, unsuitable, unknown),
+# which the fixture contract does not hold: verdict.rating and reason.code are left out of this fixture's word check ----
+OWN = "hosting.rt-safety.own-threads"
+PINS = [
+    ("suitable", "suitable", (), ()),
+    ("conditional-groupable", "conditional", (("conditional", OWN),), ()),
+    ("conditional-other", "conditional", (("conditional", OWN), ("conditional", "hosting.rt-safety.allocations")), ()),
+    ("conditional-none", "conditional", (("suitable", OWN),), ()),
+    ("unsuitable", "unsuitable", (), ()),
+    ("unknown", "unknown", (), ()),
+    ("isolated-step", "suitable", (), (("probe", "ok"), ("isolated", "isolated"), ("pool", "cores"))),
+    ("refused-step", "suitable", (), (("isolated", "refused"), ("pool", "cores"))),
+    ("not-run-step", "suitable", (), (("isolated", "not-run"),)),
+    ("pool-off", "suitable", (), (("pool", "off"),)),
+    ("pool-not-asked", "suitable", (), (("pool", "not-asked"),)),
+    ("unsuitable-pool", "unsuitable", (), (("pool", "cores"),)),
+    ("conditional-isolated-step", "conditional", (("conditional", "hosting.rt-safety.allocations"),), (("isolated", "isolated"),)),
+]
+X86_CLASS, PI_CLASS = "x86_64/5-8/2.5-3.5GHz", "aarch64/4/2-2.5GHz"
+# the history adjustment (adjust --history): (case, blocks), each block (host class, [(host, measured, adjusted)])
+ADJUSTED = [
+    ("adjusted-demote", ((X86_CLASS, (("omx-clap-host", "in-process", "isolated"),)),)),
+    ("adjusted-null", ((X86_CLASS, (("omx-clap-host", "in-process", None),)),)),
+    ("adjusted-other-class", ((PI_CLASS, (("omx-clap-host", "in-process", "refused"),)),)),
+    ("adjusted-latest", ((X86_CLASS, (("omx-clap-host", "in-process", "refused"),)), (X86_CLASS, (("omx-clap-host", "in-process", "isolated"),)))),
+    ("adjusted-other-host", ((X86_CLASS, (("openmixer-console", "in-process", "refused"),)),)),
+]
+def pins_records():
+    out = []
+    for n, (case, rating, reasons, steps) in enumerate(PINS):
+        out.append(rec(("%02x" % (n + 1) * 32, "clap", "urn:pin-" + case), "default", "x86-64",
+                       [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))], set="fedora44-48000-256", verdict_rating=rating,
+                       layout=("omx-layout/1", sha("c")), reasons=reasons, steps=steps))
+    for n, (case, blocks) in enumerate(ADJUSTED):
+        out.append(rec(("b%x" % (n + 1) * 32, "clap", "urn:pin-" + case), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],
+                       set="fedora44-48000-256", verdict_rating="suitable", layout=("omx-layout/1", sha("c")), history=blocks))
+    out.append(rec(("a1" * 32, "clap", "urn:pin-not-measured"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],
+                   set="fedora44-48000-256", verdict_rating="suitable", layout=("omx-layout/1", sha("c")), verdict_measured=0))
+    out.append(rec(("a2" * 32, "clap", "urn:pin-unpinnable"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],
+                   set="fedora44-48000-256", verdict_rating="suitable", layout=("omx-layout/1", sha("c")), unpinnable=1))
+    out.append(rec(("a3" * 32, "clap", "urn:pin-no-layout"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],
+                   set="fedora44-48000-256", verdict_rating="suitable"))
+    return out
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     p = lambda n: os.path.join(out, n)
     build(p("base.sqlite"), 0, BASE)
+    build(p("pins.sqlite"), 0, pins_records(), unchecked={("verdict", "rating"), ("reason", "code")})
     build(p("user.sqlite"), 1, USER)
     at_version_1(p("user.sqlite"), p("user-v1.sqlite"))
     # the later dated builds wrote the DDL of 2 at user_version 1 (a device's layer): the same rows, at 1
@@ -478,8 +538,8 @@ def main(out):
     c = sqlite3.connect(p("user-v1-later.sqlite")); c.execute("PRAGMA user_version = 1"); c.commit(); c.close()
     at_version_1(p("user.sqlite"), p("user-v1-bad-rating.sqlite"),
                  "UPDATE verdict SET rating = 'excellent' WHERE record_id = (SELECT min(record_id) FROM verdict)")
-    build(p("base-v3.sqlite"), 0, BASE, version=VERSION + 1)
-    build(p("user-v3.sqlite"), 1, USER, version=VERSION + 1)
+    build(p("base-next.sqlite"), 0, BASE, version=VERSION + 1)
+    build(p("user-next.sqlite"), 1, USER, version=VERSION + 1)
     build(p("base-v0.sqlite"), 0, BASE, version=0)
     build(p("base-bad-adapter-code.sqlite"), 0, BASE, adapter_code_override="omx-clap-host.signal-SIGBUS")
     # the hosting columns are checked like any other (section 3.4): in each of the three mixed columns and the hosting-only

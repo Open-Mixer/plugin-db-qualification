@@ -21,8 +21,8 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 0.1.4
-Release: 2026112802%{?dist}
+Version: 0.1.5
+Release: 2026112803%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/Open-Mixer/plugin-db-qualification
@@ -185,6 +185,16 @@ done
 %{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog
+* Sat Nov 28 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.5-2026112803
+- the reader gives plugin-hostd a record's pin words (pqdb_pin_of) and says
+  when the store changed (pqdb_changed)
+- the pin's words read the groupable codes from the qualification domain,
+  the history-adjusted verdict and the pool of cores
+- store user_version 3: a quick check that ran with no figures is stored as
+  a refusal of its files
+- ci: a job reading the wave's devel channel reads its base wave too
+- Debian is trixie only
+
 * Sat Nov 28 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.4-2026112802
 - The release's install-and-sync proof and the reader take their Fedora
   cells from check-matrix, no Fedora release written into a job (#7).

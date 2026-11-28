@@ -6,6 +6,9 @@ repository's qualification store spec, section 6.1). It is the sync's writer: th
 
   put    --scope user|system --offer WORD --host-class WORD    one record, a JSON document, on standard input
   delete --scope user|system --sha256 .. --format .. --uri .. --offer .. --host-class ..
+  no-figures --scope user|system --format .. --uri .. --host .. --reason WORD --file <path>=<sha256> ...
+         a quick check that ran and ended with no figures, refused for those files; its reason is a word of
+         QUALIFICATION_NO_FIGURES_REASONS (probe.crashed, probe.memory-limit, probe.timeout)
 
 A refusal prints `plugin-qualification-db-write: refused: <name>: <file>: <path>: <why>` on standard error, writes
 nothing and exits 1; a usage error exits 2; success prints nothing and exits 0. --root, --contract-dir and --schema
@@ -13,6 +16,7 @@ are for tests and for a caller with places of its own: the contract directory ot
 then from the contractdir of libomx-domain.pc.
 """
 import argparse
+import datetime
 import json
 import os
 import subprocess
@@ -54,9 +58,30 @@ def main(argv):
             sp.add_argument("--sha256", required=True)
             sp.add_argument("--format", required=True)
             sp.add_argument("--uri", required=True)
+    nf = sub.add_parser("no-figures")
+    nf.add_argument("--scope", required=True, choices=("user", "system"))
+    nf.add_argument("--format", required=True)
+    nf.add_argument("--uri", required=True)
+    nf.add_argument("--host", required=True)
+    nf.add_argument("--reason", default="")
+    nf.add_argument("--file", action="append", default=[])
+    nf.add_argument("--at", default=None)
+    nf.add_argument("--root", help="TEST ONLY: the directory that holds the layer file, in place of the scope's")
+    nf.add_argument("--schema", help="the DDL, in place of the installed one")
+    nf.add_argument("--contract-dir", help="the installed contract directory: <domain>/<domain>.json")
     a = ap.parse_args(argv)
     try:
-        if a.verb == "put":
+        if a.verb == "no-figures":
+            files = []
+            for f in a.file:
+                path, eq, sha = f.rpartition("=")
+                if not eq:
+                    raise q.Refusal("field-type", f"--file {f}: not <path>=<sha256>")
+                files.append((path, sha))
+            at = a.at or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            q.put_no_figures(scope=a.scope, format=a.format, uri=a.uri, host=a.host, reason=a.reason, files=files, at=at,
+                             contract_dir=contract_dir(a.contract_dir), root=a.root, schema=a.schema)
+        elif a.verb == "put":
             try:
                 rec = json.load(sys.stdin)
             except ValueError as e:

@@ -21,8 +21,8 @@
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 0.1.2
-Release: 2026112702%{?dist}
+Version: 0.1.4
+Release: 2026112802%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/Open-Mixer/plugin-db-qualification
@@ -185,6 +185,14 @@ done
 %{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog
+* Sat Nov 28 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.4-2026112802
+- The release's install-and-sync proof and the reader take their Fedora
+  cells from check-matrix, no Fedora release written into a job (#7).
+
+* Sat Nov 28 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.3-2026112801
+- tools/sets.py import leaves an *.unmeasured.json beside the records out
+  and names it: an unmeasured record never applies (#70).
+
 * Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.2-2026112702
 - The writer takes a reason param's word from QUALIFICATION_MEASUREMENT_
   UNMEASURED_REASONS too: plugin-qualify 0.21.3 writes the memory reason it

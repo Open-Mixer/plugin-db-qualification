@@ -7,7 +7,7 @@ name: release
 # attached to the GitHub release; the arm64 one is then installed in Debian trixie on arm64 beside plugin-qualify
 # from the channel, and plugin-qualify-sync --system takes plugins from every set it carries. The RPMs are built from
 # packaging/plugin-qualification-records.spec (whose Version is the tag's too), published into the rpm/ tree and
-# proven the same way in Fedora 45 on x86_64 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
+# proven the same way in each Fedora cell check-matrix names on x86_64 (tools/sets.py prove, tools/prove-set.sh). A manual run builds and proves
 # the same and publishes nothing unless `publish` is set, and even then only on a tag. The build and the publish are
 # in Open-Mixer/.github; the secrets (OPENMIXER_PACKAGES_SIGNING_KEY, PAGES_TOKEN) are the organisation's.
 #
@@ -47,8 +47,18 @@ jobs:
       rpm-run: ${{ steps.read.outputs.rpm-run }}
       rpm-names: ${{ steps.read.outputs.rpm-names }}
       rpm-prove: ${{ steps.read.outputs.rpm-prove }}
+      rpm-cells: ${{ steps.cells.outputs.rpm }}
+      rpm-cells-count: ${{ steps.cells.outputs.rpm-count }}
     steps:
       - uses: actions/checkout@v4
+      # the cells the RPM is installed in: check-matrix's answer, Fedora 45 on x86_64 (rule 11-10, Fedora 45 only; the quick set
+      # while a release wave is open, the whole matrix declared here otherwise)
+      - id: cells
+        uses: Open-Mixer/.github/.github/actions/check-matrix@openmixer-v1
+        with:
+          wave: ${{ vars.OMX_RELEASE_MATRIX }}
+          rpm-releases: '["45"]'
+          rpm-arches: '["x86_64"]'
       - id: read
         run: |
           set -euo pipefail
@@ -174,7 +184,7 @@ jobs:
       bootstrap: ${{ github.ref == 'refs/heads/devel' && 'Open-Mixer/plugin-hostd@05fbbb58abafd89964099dd86b13ff621ab7c2dd:plugin-hostd-contract' || '' }}
     secrets: inherit
 
-  # The x86_64 RPM installed where it is used, each set in turn: Fedora 45 x86_64 with plugin-qualify and the
+  # The x86_64 RPM installed where it is used, each set in turn, in each Fedora cell check-matrix names, with plugin-qualify and the
   # channel's current omx-plugins (the channel keeps the newest only; the proof logs the version each set measured
   # beside the one installed). A container has no device tree, and an x86_64 machine never has one, so the host class
   # is the settings file's. A record of bytes the channel no longer serves (`binary differs`, another omx-plugins
@@ -182,15 +192,19 @@ jobs:
   # Only when the build ran, and not on a merge to devel, as the deb proof above (the staging channel has no
   # plugin-qualify of the wave yet).
   rpm-installed:
-    name: Install and sync (Fedora 45, x86_64)
+    name: Install and sync (${{ matrix.cell.image }}, ${{ matrix.cell.arch }})
     needs: [plan, rpm]
-    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.rpm.outputs.skipped != 'true' && github.ref != 'refs/heads/devel' && needs.plan.outputs.rpm-prove == 'true' }}
+    if: ${{ !cancelled() && needs.rpm.result == 'success' && needs.rpm.outputs.skipped != 'true' && github.ref != 'refs/heads/devel' && needs.plan.outputs.rpm-prove == 'true' && needs.plan.outputs.rpm-cells-count != '0' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        cell: ${{ fromJSON(needs.plan.outputs.rpm-cells) }}
     container:
-      image: fedora:45
+      image: ${{ matrix.cell.image }}
     defaults:
       run:
         shell: bash
@@ -199,7 +213,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: plugin-qualification-records-rpms-fc45-x86_64
+          name: plugin-qualification-records-rpms-fc${{ matrix.cell.fedora }}-${{ matrix.cell.arch }}
           path: pkgs
 
       - uses: Open-Mixer/.github/.github/actions/add-openmixer@openmixer-v1
@@ -210,23 +224,23 @@ jobs:
       - name: The package installed, and plugin-qualify-sync --system applies each set's records
         run: |
           set -euo pipefail
-          # fedora:45 has no python3; tools/sets.py and the provenance read need it
+          # the Fedora container has no python3; tools/sets.py and the provenance read need it
           dnf install -y --setopt=install_weak_deps=False python3
           python3 tools/sets.py prove rpm pkgs
         env:
-          PROVE_NOTES: ${{ github.workspace }}/proof-notes-rpm.md
+          PROVE_NOTES: ${{ github.workspace }}/proof-notes-rpm-fc${{ matrix.cell.fedora }}.md
 
       - name: What the proof found, for the release notes
         if: ${{ !cancelled() }}
         run: |
-          [ -s proof-notes-rpm.md ] || exit 0
-          { echo '## Install and sync proof (rpm)'; echo; cat proof-notes-rpm.md; } | tee proof-notes-rpm-section.md >> "$GITHUB_STEP_SUMMARY"
+          [ -s "proof-notes-rpm-fc${{ matrix.cell.fedora }}.md" ] || exit 0
+          { echo '## Install and sync proof (rpm, fc${{ matrix.cell.fedora }})'; echo; cat "proof-notes-rpm-fc${{ matrix.cell.fedora }}.md"; } | tee "proof-notes-rpm-fc${{ matrix.cell.fedora }}-section.md" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: proof-notes-rpm
-          path: proof-notes-rpm-section.md
+          name: proof-notes-rpm-fc${{ matrix.cell.fedora }}
+          path: proof-notes-rpm-fc${{ matrix.cell.fedora }}-section.md
           if-no-files-found: ignore
 
   # On a tag, what the proofs found (the set plugin-qualify takes at each cell against the store rule's winner, the

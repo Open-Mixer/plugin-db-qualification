@@ -1267,6 +1267,17 @@ nothing is migrated. The reader gains two functions:
 - **The pool word `cores`** is a word of `QUALIFICATION_STEP_RESULTS` from qualification domain 0.1.2 (owner ruling
   2026-11-28): the writer stores a pool step that ended `cores`, and the reader gives its pin `pool=cores`
   (`test/test_pool_round_trip.sh`, whose control is a domain without the word, refused by the word).
+- **A quick check that ran with no figures** (decided by the coordinator 2026-11-28, the owner to confirm: plugin-hostd's
+  pins-from-the-store spec, section 9 point 7). user_version 3 adds `no_figures` (format, uri, host, reason, at; one per
+  plugin and host) and `no_figures_file` (the files the check was about and their SHA-256s, in byte order of the path).
+  The migrations are SQL alone: `1-to-3.sql` (the step of 1 to 2, kept whole) and `2-to-3.sql` (no statement: the DDL
+  creates the two tables empty), run by the writer and by the reader on open. The writer's `no-figures` verb stores
+  one; its reason is a word of `QUALIFICATION_NO_FIGURES_REASONS` (qualification domain 0.1.2: `probe.crashed`,
+  `probe.memory-limit`, `probe.timeout`), and no reason or another word is refused by name (`no-figures-reason`),
+  nothing written. `put` of a record with figures for the plugin removes its figure-less ones.
+  `pqdb_no_figures_of(db, format, uri, host, n, paths, sha256s, &reason)` answers 1 with the reason when a layer (the
+  user's first) holds one of exactly those files: plugin-hostd reads it as `verdict=refused`. The base package is built
+  at 3 in the same release (a base at 2 beside a reader at 3 is a schema mismatch, by design).
 - `pqdb_changed(db)`: 1 when a layer the handle opened is not the file it opened (device, inode, size or modification
   time of the file or its `-wal`) or a layer absent at the open now exists. It opens nothing and reads no row, so the
   daemon may ask it at every idle tick and open the store again only when it says 1.

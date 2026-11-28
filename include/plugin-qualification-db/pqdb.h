@@ -109,6 +109,22 @@ int  pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqd
    returns. A non-zero return of each stops the walk and is returned. 0, or a refusal status. */
 int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char *host, const pqdb_verdict *, void *), void *ctx);
 
+/* The words of a result's record's pin under one host profile (this repository's qualification store spec, section 3.7,
+   the pin a match gives plugin-hostd): `verdict` one of QUALIFICATION_PIN_VERDICTS (`in-process`, `isolated`, `refused`)
+   or NULL for none, `pool` `cores` or `off` or NULL for none. The rule, from the stored rows: the host's verdict (not
+   measured, `unknown` or none: no word; `unsuitable`: `refused`; `suitable`: `in-process`; `conditional`: `in-process`
+   when it has a reason of rating `conditional` and every such reason's code is a groupable one, else `isolated`; the
+   groupable codes are plugin-qualify's GROUPABLE_CONDITIONAL_CODES, D20: hosting.rt-safety.own-threads); then the record's `isolated` step (`isolated` or `refused` is the word, `not-run` leaves none); then its
+   `pool` step (`cores` or `off`, none for a `refused` word). 0; 1 when the record gives no whole pin (unpinnable, or no
+   layout), with both words NULL; a refusal status otherwise. The words are string constants. */
+typedef struct { const char *verdict, *pool; } pqdb_pin;
+int  pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_pin *out);
+
+/* 1 when a layer the handle opened is no longer the file it opened (device, inode, size or modification time of the file
+   or of its -wal), or a layer absent at the open now exists; 0 otherwise. It opens nothing and reads no row: a program
+   that keeps a handle asks it, cheaply, whether to open the store again. */
+int  pqdb_changed(const pqdb *db);
+
 #ifdef __cplusplus
 }
 #endif

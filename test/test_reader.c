@@ -9,6 +9,7 @@
 #include <plugin-qualification-db/pqdb.h>
 
 #include <dirent.h>
+#include <fcntl.h>
 #include <locale.h>
 #include <math.h>
 #include <sqlite3.h>
@@ -1284,6 +1285,106 @@ static void t25_migrate_user_layer(void)
     CHECK(version_of(user) == 1 && same_file(user, first), "a refused migration changed the layer");
 }
 
+/* ---- the pin's words (section 3.7, pqdb_pin_of) and a changed store (pqdb_changed) ---- */
+struct pin_case { const char *uri, *verdict, *pool; int status; };
+static const struct pin_case PIN_CASES[] = {
+    { "urn:pin-suitable", "in-process", NULL, 0 },
+    { "urn:pin-conditional-groupable", "in-process", NULL, 0 },
+    { "urn:pin-conditional-other", "isolated", NULL, 0 },
+    { "urn:pin-conditional-none", "isolated", NULL, 0 },
+    { "urn:pin-unsuitable", "refused", NULL, 0 },
+    { "urn:pin-unknown", NULL, NULL, 0 },
+    { "urn:pin-isolated-step", "isolated", "cores", 0 },
+    { "urn:pin-refused-step", "refused", NULL, 0 },
+    { "urn:pin-not-run-step", NULL, NULL, 0 },
+    { "urn:pin-pool-off", "in-process", "off", 0 },
+    { "urn:pin-pool-not-asked", "in-process", NULL, 0 },
+    { "urn:pin-unsuitable-pool", "refused", NULL, 0 },
+    { "urn:pin-conditional-isolated-step", "isolated", NULL, 0 },
+    { "urn:pin-not-measured", NULL, NULL, 0 },
+    { "urn:pin-unpinnable", NULL, NULL, 1 },
+    { "urn:pin-no-layout", NULL, NULL, 1 },
+};
+struct pin_ask { pqdb *db; const char *host; pqdb_pin *pin; int status; };
+static int pin_of_first(const pqdb_result *x, void *ctx)
+{
+    struct pin_ask *a = ctx;
+    a->status = pqdb_pin_of(a->db, x, a->host, a->pin);
+    return 1;   /* one cell is enough: every cell of a record gives the same pin */
+}
+static int pin_of(pqdb *db, const char *uri, const char *host, pqdb_pin *pin)
+{
+    pqdb_query q = any();
+    struct pin_ask a = { db, host, pin, -99 };
+    q.uri = uri;
+    pin->verdict = pin->pool = "(unset)";
+    pqdb_each(db, &q, pin_of_first, &a);
+    return a.status;
+}
+static int same_word(const char *a, const char *b) { return (!a && !b) || (a && b && strcmp(a, b) == 0); }
+static void spec_pin_words(void)
+{
+    pqdb *db;
+    pqdb_pin pin;
+    if (open_ok(fx("pins.sqlite"), NULL, GOOD, &db)) { CHECK(0, "open"); return; }
+    for (size_t i = 0; i < sizeof PIN_CASES / sizeof *PIN_CASES; i++) {
+        const struct pin_case *c = &PIN_CASES[i];
+        int status = pin_of(db, c->uri, "omx-clap-host", &pin);
+        CHECK(status == c->status && same_word(pin.verdict, c->verdict) && same_word(pin.pool, c->pool),
+              "%s: status %d verdict %s pool %s, wanted %d %s %s", c->uri, status, pin.verdict ? pin.verdict : "(none)",
+              pin.pool ? pin.pool : "(none)", c->status, c->verdict ? c->verdict : "(none)", c->pool ? c->pool : "(none)");
+    }
+    /* a host the record holds no verdict of: no verdict word, and the record still gives a whole pin */
+    CHECK(pin_of(db, "urn:pin-suitable", "openmixer-pi-4gb", &pin) == 0 && !pin.verdict && !pin.pool, "a host with no verdict");
+    pqdb_close(db);
+}
+static void touch_later(const char *path)
+{
+    struct timespec t[2];
+    struct stat st;
+    stat(path, &st);
+    t[0] = st.st_atim; t[1] = st.st_mtim;
+    t[1].tv_sec += 2;
+    utimensat(AT_FDCWD, path, t, 0);
+}
+static void spec_changed(void)
+{
+    char *d = tmpdir();
+    char base[512], user[512], wal[512], next[512];
+    pqdb *db;
+    snprintf(base, sizeof base, "%s", under(d, "base.sqlite"));
+    snprintf(user, sizeof user, "%s", under(d, "user.sqlite"));
+    snprintf(wal, sizeof wal, "%s-wal", user);
+    snprintf(next, sizeof next, "%s", under(d, "next.sqlite"));
+    copy(fx("base.sqlite"), base);
+    /* a user layer absent at the open, then there */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_changed(db) == 0, "an untouched store is no change");
+    CHECK(pqdb_changed(db) == 0, "asking twice changes nothing");
+    copy(fx("user.sqlite"), user);
+    CHECK(pqdb_changed(db) == 1, "a user layer that appeared is a change");
+    pqdb_close(db);
+    /* the base replaced by a rename over it */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    CHECK(pqdb_changed(db) == 0, "the store as opened");
+    copy(fx("base.sqlite"), next);
+    CHECK(rename(next, base) == 0, "rename");
+    CHECK(pqdb_changed(db) == 1, "a base renamed over is a change");
+    pqdb_close(db);
+    /* the user layer written in place: its modification time moves */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    touch_later(user);
+    CHECK(pqdb_changed(db) == 1, "a user layer written in place is a change");
+    pqdb_close(db);
+    /* a -wal beside the user layer */
+    if (open_ok(base, user, GOOD, &db)) { CHECK(0, "open"); return; }
+    copy(fx("user.sqlite"), wal);
+    CHECK(pqdb_changed(db) == 1, "a -wal that appeared is a change");
+    unlink(wal);
+    pqdb_close(db);
+    CHECK(pqdb_changed(NULL) == 0, "no handle, no change");
+}
+
 typedef struct { const char *name; void (*fn)(void); int scoped; } test;
 static const test TESTS[] = {
     { "01 absent base is an empty base layer", t01_absent_base, 0 }, { "01 a base that is a directory", t01_base_is_a_directory, 0 },
@@ -1300,6 +1401,7 @@ static const test TESTS[] = {
     { "spec 19 binary_path and layer filters", spec19_filters, 0 },
     { "spec 20 pqdb_counts", spec20_counts, 0 }, { "spec 21 pqdb_record_json", spec21_record_json, 0 },
     { "spec 24 read only still", spec24_read_only, 0 },
+    { "the words of a record's pin", spec_pin_words, 0 }, { "a changed store", spec_changed, 0 },
     { "the reference tier answers where two tiers hold a cell", tier_pick, 0 },
     { "the newer set answers where two sets of one tier hold a cell", newer_pick, 0 },
     { "hosting words checked as any", hosting_columns, 0 }, { "the hosting domain is read", hosting_domain_read, 0 }, { "numbers as JSON.stringify writes them", number_edges, 0 },

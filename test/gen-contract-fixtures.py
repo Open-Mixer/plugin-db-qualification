@@ -8,6 +8,8 @@ this script is how they were made and how to change them. Three directories:
   contract-good              every domain (hosting too), the words the stores hold, qualification at 1.1.0
   contract-no-conditional    the same, but the rating word `conditional` is not in QUALIFICATION_MEASUREMENT_VERDICT_RATINGS
   contract-old               the same as good, but qualification at 1.0.0 (a store checked against 1.1.0 is too new for it)
+  contract-groupable-two     the same as good, but QUALIFICATION_GROUPABLE_CONDITIONAL_CODES also holds
+                             hosting.rt-safety.allocations: the reader's rule follows the document
 """
 import json, os, re, sys
 
@@ -51,7 +53,9 @@ WORDS = {
         "QUALIFICATION_MEMORY_BOUND_OUTCOMES": ["probe.oom"],
         # the two items a migrated user layer (schema/migrations/1-to-2.sql) adds to word_check
         "QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS": ["voices-unknown", "not-attempted"],
-        "QUALIFICATION_MEASUREMENT_VOICE_BASES": ["declared", "probe"]}),
+        "QUALIFICATION_MEASUREMENT_VOICE_BASES": ["declared", "probe"],
+        "QUALIFICATION_STEP_RESULTS": ["ok", "safe", "unsafe", "refused", "not-asked", "isolated", "not-run", "off", "cores"],
+        "QUALIFICATION_GROUPABLE_CONDITIONAL_CODES": ["hosting.rt-safety.own-threads"]}),
 }
 
 def camel(w):
@@ -81,6 +85,8 @@ def write(root, variant):
             items["QUALIFICATION_MEASUREMENT_VERDICT_RATINGS"].remove("conditional")
         if variant == "old" and domain == "qualification":
             version = "1.0.0"
+        if variant == "groupable-two" and domain == "qualification":
+            items["QUALIFICATION_GROUPABLE_CONDITIONAL_CODES"].append("hosting.rt-safety.allocations")
         d = os.path.join(root, "contract-" + variant, domain)
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, domain + ".json"), "w") as f:
@@ -89,5 +95,5 @@ def write(root, variant):
 
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "fixtures")
-    for v in ("good", "no-conditional", "old"):
+    for v in ("good", "no-conditional", "old", "groupable-two"):
         write(out, v)

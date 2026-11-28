@@ -81,18 +81,19 @@ def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok
 
 def rec(key, offer, cls, cells, set=None, pkg=None, adapter_code=None, cell_code=None, verdict_rating="qualified",
         bpath=None, files=None, layout=None, unpinnable=None, tested=None, offered=False, tier="reference",
-        measured="2026-11-09", reasons=(), steps=(), verdict_measured=1):
+        measured="2026-11-09", reasons=(), steps=(), verdict_measured=1, history=()):
     """bpath: the binary's path below its install root (default: the file's own name); files: the per-file list as
     (path, sha256) in byte order of the path, which holds bpath at the key's SHA-256 (default: that one entry);
     layout: (scheme, sha256); unpinnable: 1 for a record that holds it; tested: testedVersion;
     offered: the record has a tier_offered row (a tier the plugin is offered on); tier: the tier of the record's set
     (record_set.tier); measured: its set's measurement date (record_set.measured); reasons: the (rating, code) of the
-    omx-clap-host verdict's reasons; steps: the run's (step, result) in order; verdict_measured: that verdict's measured."""
+    omx-clap-host verdict's reasons; steps: the run's (step, result) in order; verdict_measured: that verdict's measured; history: the adjust blocks, each
+    (host class, [(host, measured word, adjusted word or None)])."""
     bpath = bpath or key[2].split(":")[-1] + (".clap" if key[1] == "clap" else ".so")
     return dict(key=key, offer=offer, cls=cls, cells=cells, set=set, pkg=pkg, adapter_code=adapter_code,
                 cell_code=cell_code, verdict_rating=verdict_rating, bpath=bpath, files=files or [(bpath, key[0])],
                 layout=layout or (None, None), unpinnable=unpinnable, tested=tested, offered=offered, tier=tier,
-                measured=measured, reasons=reasons, steps=steps, verdict_measured=verdict_measured)
+                measured=measured, reasons=reasons, steps=steps, verdict_measured=verdict_measured, history=history)
 
 BASE = [
     rec((P1, "clap", "urn:p1"), "default", "x86-64", set="fedora44-48000-256", adapter_code="omx-clap-host.signal-SIGSEGV",
@@ -206,6 +207,12 @@ def build(path, layer, records, version=VERSION, adapter_code_override=None, fil
                       "VALUES (?, 0, NULL, ?, 'rtSafety', ?, ?)", (rid, o, rating, code))
         for o, (step, result) in enumerate(r["steps"]):
             c.execute("INSERT INTO run_step (record_id, ord, step, result) VALUES (?, ?, ?, ?)", (rid, o, step, result))
+        for h, (klass, verdicts) in enumerate(r["history"]):
+            c.execute("INSERT INTO record_history (record_id, ord, host_class, file, at, found) VALUES (?, ?, ?, 'history', "
+                      "'2026-11-28T00:00:00Z', 1)", (rid, h, klass))
+            for o, (host, measured_word, adjusted) in enumerate(verdicts):
+                c.execute("INSERT INTO history_verdict (record_id, history_ord, ord, host, measured, adjusted, move, reason) "
+                          "VALUES (?, ?, ?, ?, ?, ?, 'demote', 'history.crashed')", (rid, h, o, host, measured_word, adjusted))
         c.execute("INSERT INTO verdict VALUES (?, 1, 'openmixer-console', 1, 'qualified', 1, 'in-process', "
                   "'declaration', 'probe.crashed')", (rid,))
         for o, ce in enumerate(r["cells"]):
@@ -493,12 +500,24 @@ PINS = [
     ("unsuitable-pool", "unsuitable", (), (("pool", "cores"),)),
     ("conditional-isolated-step", "conditional", (("conditional", "hosting.rt-safety.allocations"),), (("isolated", "isolated"),)),
 ]
+X86_CLASS, PI_CLASS = "x86_64/5-8/2.5-3.5GHz", "aarch64/4/2-2.5GHz"
+# the history adjustment (adjust --history): (case, blocks), each block (host class, [(host, measured, adjusted)])
+ADJUSTED = [
+    ("adjusted-demote", ((X86_CLASS, (("omx-clap-host", "in-process", "isolated"),)),)),
+    ("adjusted-null", ((X86_CLASS, (("omx-clap-host", "in-process", None),)),)),
+    ("adjusted-other-class", ((PI_CLASS, (("omx-clap-host", "in-process", "refused"),)),)),
+    ("adjusted-latest", ((X86_CLASS, (("omx-clap-host", "in-process", "refused"),)), (X86_CLASS, (("omx-clap-host", "in-process", "isolated"),)))),
+    ("adjusted-other-host", ((X86_CLASS, (("openmixer-console", "in-process", "refused"),)),)),
+]
 def pins_records():
     out = []
     for n, (case, rating, reasons, steps) in enumerate(PINS):
         out.append(rec(("%02x" % (n + 1) * 32, "clap", "urn:pin-" + case), "default", "x86-64",
                        [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))], set="fedora44-48000-256", verdict_rating=rating,
                        layout=("omx-layout/1", sha("c")), reasons=reasons, steps=steps))
+    for n, (case, blocks) in enumerate(ADJUSTED):
+        out.append(rec(("b%x" % (n + 1) * 32, "clap", "urn:pin-" + case), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],
+                       set="fedora44-48000-256", verdict_rating="suitable", layout=("omx-layout/1", sha("c")), history=blocks))
     out.append(rec(("a1" * 32, "clap", "urn:pin-not-measured"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],
                    set="fedora44-48000-256", verdict_rating="suitable", layout=("omx-layout/1", sha("c")), verdict_measured=0))
     out.append(rec(("a2" * 32, "clap", "urn:pin-unpinnable"), "default", "x86-64", [cell(48000, 256, (1.0, 95, 2.0), (1, 2), (3, 4))],

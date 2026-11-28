@@ -114,11 +114,14 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
    or NULL for none, `pool` `cores` or `off` or NULL for none. The rule, from the stored rows: the host's verdict (not
    measured, `unknown` or none: no word; `unsuitable`: `refused`; `suitable`: `in-process`; `conditional`: `in-process`
    when it has a reason of rating `conditional` and every such reason's code is a groupable one, else `isolated`; the
-   groupable codes are plugin-qualify's GROUPABLE_CONDITIONAL_CODES, D20: hosting.rt-safety.own-threads); then the record's `isolated` step (`isolated` or `refused` is the word, `not-run` leaves none); then its
-   `pool` step (`cores` or `off`, none for a `refused` word). 0; 1 when the record gives no whole pin (unpinnable, or no
-   layout), with both words NULL; a refusal status otherwise. The words are string constants. */
+   groupable codes are the words of the qualification domain's QUALIFICATION_GROUPABLE_CONDITIONAL_CODES, read at open);
+   then the record's `isolated` step (`isolated` or `refused` is the word, `not-run` leaves none); then the history
+   adjustment as the store records it (the latest block of `history_class`, any class for NULL, that holds a verdict of
+   the host: its adjusted word, none for an adjusted null); then the `pool` step (`cores` or `off`, none for a `refused`
+   word). 0; 1 when the record gives no whole pin (unpinnable, or no layout), with both words NULL; a refusal status
+   otherwise. The words are string constants. */
 typedef struct { const char *verdict, *pool; } pqdb_pin;
-int  pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_pin *out);
+int  pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, const char *history_class, pqdb_pin *out);
 
 /* 1 when a layer the handle opened is no longer the file it opened (device, inode, size or modification time of the file
    or of its -wal), or a layer absent at the open now exists; 0 otherwise. It opens nothing and reads no row: a program

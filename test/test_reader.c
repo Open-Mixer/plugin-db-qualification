@@ -1304,22 +1304,32 @@ static const struct pin_case PIN_CASES[] = {
     { "urn:pin-not-measured", NULL, NULL, 0 },
     { "urn:pin-unpinnable", NULL, NULL, 1 },
     { "urn:pin-no-layout", NULL, NULL, 1 },
+    /* the history adjustment as the store records it stands over the measured word */
+    { "urn:pin-adjusted-demote", "isolated", NULL, 0 },
+    { "urn:pin-adjusted-null", NULL, NULL, 0 },
+    { "urn:pin-adjusted-other-class", "refused", NULL, 0 },
+    { "urn:pin-adjusted-latest", "isolated", NULL, 0 },
+    { "urn:pin-adjusted-other-host", "in-process", NULL, 0 },
 };
-struct pin_ask { pqdb *db; const char *host; pqdb_pin *pin; int status; };
+struct pin_ask { pqdb *db; const char *host, *klass; pqdb_pin *pin; int status; };
 static int pin_of_first(const pqdb_result *x, void *ctx)
 {
     struct pin_ask *a = ctx;
-    a->status = pqdb_pin_of(a->db, x, a->host, a->pin);
+    a->status = pqdb_pin_of(a->db, x, a->host, a->klass, a->pin);
     return 1;   /* one cell is enough: every cell of a record gives the same pin */
 }
-static int pin_of(pqdb *db, const char *uri, const char *host, pqdb_pin *pin)
+static int pin_of_class(pqdb *db, const char *uri, const char *host, const char *klass, pqdb_pin *pin)
 {
     pqdb_query q = any();
-    struct pin_ask a = { db, host, pin, -99 };
+    struct pin_ask a = { db, host, klass, pin, -99 };
     q.uri = uri;
     pin->verdict = pin->pool = "(unset)";
     pqdb_each(db, &q, pin_of_first, &a);
     return a.status;
+}
+static int pin_of(pqdb *db, const char *uri, const char *host, pqdb_pin *pin)
+{
+    return pin_of_class(db, uri, host, NULL, pin);
 }
 static int same_word(const char *a, const char *b) { return (!a && !b) || (a && b && strcmp(a, b) == 0); }
 static void spec_pin_words(void)
@@ -1336,6 +1346,16 @@ static void spec_pin_words(void)
     }
     /* a host the record holds no verdict of: no verdict word, and the record still gives a whole pin */
     CHECK(pin_of(db, "urn:pin-suitable", "openmixer-pi-4gb", &pin) == 0 && !pin.verdict && !pin.pool, "a host with no verdict");
+    /* a history class names the blocks that count: another class's adjustment leaves the measured word */
+    CHECK(pin_of_class(db, "urn:pin-adjusted-other-class", "omx-clap-host", "x86_64/5-8/2.5-3.5GHz", &pin) == 0 &&
+          same_word(pin.verdict, "in-process"), "another class's adjustment: %s", pin.verdict ? pin.verdict : "(none)");
+    CHECK(pin_of_class(db, "urn:pin-adjusted-other-class", "omx-clap-host", "aarch64/4/2-2.5GHz", &pin) == 0 &&
+          same_word(pin.verdict, "refused"), "its own class's adjustment: %s", pin.verdict ? pin.verdict : "(none)");
+    pqdb_close(db);
+    /* the groupable codes are the domain's: a document that declares one more makes that reason groupable */
+    if (open_ok(fx("pins.sqlite"), NULL, contract("contract-groupable-two"), &db)) { CHECK(0, "open groupable-two"); return; }
+    CHECK(pin_of(db, "urn:pin-conditional-other", "omx-clap-host", &pin) == 0 && same_word(pin.verdict, "in-process"),
+          "the rule follows the domain's item: %s", pin.verdict ? pin.verdict : "(none)");
     pqdb_close(db);
 }
 static void touch_later(const char *path)
@@ -1411,9 +1431,34 @@ static const test TESTS[] = {
     { "11 no environment in production", t11_no_environment, 1 }, { "15 scopes", t15_scopes, 1 },
 };
 
+/* test_reader pins <user layer> <contract dir> <host>: the pin words of every result of a store whose base is absent, one
+   line a record ("<uri> <verdict|-> <pool|->"), for the round trip of test_pool_round_trip.sh */
+static int print_one_pin(const pqdb_result *x, void *ctx)
+{
+    void **c = ctx;
+    pqdb_pin pin;
+    int rc = pqdb_pin_of(c[0], x, c[1], NULL, &pin);
+    printf("%s %s %s %d\n", x->uri, pin.verdict ? pin.verdict : "-", pin.pool ? pin.pool : "-", rc);
+    return 0;
+}
+static int print_pins(const char *user, const char *cdir, const char *host)
+{
+    pqdb *db;
+    pqdb_error e;
+    pqdb_query q = PQDB_QUERY_ANY;
+    void *ctx[2];
+    if (pqdb_open_at("/nonexistent/base.sqlite", user, cdir, &db, &e) != 0) { fprintf(stderr, "%s: %s\n", e.code, e.message); return 1; }
+    ctx[0] = db; ctx[1] = (void *)host;
+    pqdb_each(db, &q, print_one_pin, ctx);
+    pqdb_close(db);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int scoped = argc > 3 && strcmp(argv[3], "scopes") == 0, ran = 0, bad = 0;
+    if (argc == 5 && strcmp(argv[1], "pins") == 0)
+        return print_pins(argv[2], argv[3], argv[4]);
     if (argc < 3) { fprintf(stderr, "usage: test_reader <fixture dir> <contract fixtures dir> [scopes]\n"); return 2; }
     FX = argv[1]; CT = argv[2];
     for (size_t i = 0; i < sizeof TESTS / sizeof *TESTS; i++) {

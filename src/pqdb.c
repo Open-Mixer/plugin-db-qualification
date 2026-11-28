@@ -42,6 +42,8 @@ struct pqdb {
     sqlite3 *base, *user;           /* base NULL: no base file, an empty base layer (pqdb_base_absent) */
     char *base_path, *user_path;    /* the layers' places, as opened; user NULL: no user layer asked for */
     stamp seen[4];                  /* base, base -wal, user, user -wal at the open */
+    char groupable[16][96];         /* QUALIFICATION_GROUPABLE_CONDITIONAL_CODES of the installed qualification domain */
+    int ngroupable;
     char verdict_rating[64], verdict_deciding[64];
     char msg[256];                  /* what the last refusal of pqdb_each said */
 };
@@ -662,6 +664,40 @@ int pqdb_changed(const pqdb *db)
     return 0;
 }
 
+/* the groupable codes (section 6.0): the qualification domain declares them, once, and the reader reads them at open */
+#define GROUPABLE_ITEM "QUALIFICATION_GROUPABLE_CONDITIONAL_CODES"
+#define GROUPABLE_SINCE "0.1.2"
+static int read_groupable(pqdb *db, const char *cdir, pqdb_error *err)
+{
+    omx_domain *d;
+    omx_domain_error e;
+    int lrc = cdir ? omx_domain_open_at(cdir, "qualification", GROUPABLE_SINCE, &d, &e)
+                   : omx_domain_open("qualification", GROUPABLE_SINCE, &d, &e);
+    int count;
+    if (lrc != 0) {
+        if (lrc == OMX_CONTRACT_CODE_PACKAGE_TOO_OLD)
+            return fail(err, S_DOMAIN_TOO_OLD, "the qualification domain is older than %s, which declares " GROUPABLE_ITEM ": %s",
+                        GROUPABLE_SINCE, e.message);
+        if (err) {
+            err->code = e.code;
+            snprintf(err->message, sizeof err->message, "the qualification domain: %s", e.message);
+        }
+        return S_CONTRACT;
+    }
+    count = omx_domain_word_count(d, GROUPABLE_ITEM);
+    if (count < 0 || count > (int)(sizeof db->groupable / sizeof db->groupable[0])) {
+        omx_domain_close(d);
+        return fail(err, S_DOMAIN_TOO_OLD, "the qualification domain holds no item " GROUPABLE_ITEM " the reader can hold");
+    }
+    for (int k = 0; k < count; k++) {
+        omx_domain_word_info wi;
+        if (omx_domain_word_at(d, GROUPABLE_ITEM, k, &wi) == 0)
+            snprintf(db->groupable[db->ngroupable++], sizeof db->groupable[0], "%s", wi.word);
+    }
+    omx_domain_close(d);
+    return S_OK;
+}
+
 /* ---- open ---- */
 static int open_internal(const char *base, const char *user, const char *cdir, pqdb **out, pqdb_error *err)
 {
@@ -732,6 +768,8 @@ static int open_internal(const char *base, const char *user, const char *cdir, p
         if (st != S_OK)
             goto bad;
     }
+    if ((st = read_groupable(db, cdir, err)) != S_OK)
+        goto bad;
     *out = db;
     return S_OK;
 bad:
@@ -999,14 +1037,11 @@ int pqdb_verdict_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb
 }
 
 /* ---- the pin (section 3.7) ---- */
-/* the conditional reasons that leave a plugin groupable: plugin-qualify's GROUPABLE_CONDITIONAL_CODES (D20), the one set its
-   pin-grouping.ts holds; written twice until the qualification domain declares it */
-static const char *const GROUPABLE[] = { "hosting.rt-safety.own-threads", NULL };
-
-static int groupable(const char *code)
+/* the conditional reasons that leave a plugin groupable: the words of the domain's item, read at open */
+static int groupable(const pqdb *db, const char *code)
 {
-    for (int i = 0; GROUPABLE[i]; i++)
-        if (strcmp(GROUPABLE[i], code) == 0)
+    for (int i = 0; i < db->ngroupable; i++)
+        if (strcmp(db->groupable[i], code) == 0)
             return 1;
     return 0;
 }
@@ -1038,7 +1073,7 @@ static long long record_of(sqlite3 *h, const pqdb_result *r, int *status)
 }
 
 /* the word the host's verdict gives, before the steps: NULL for none */
-static const char *verdict_word(sqlite3 *h, long long rid, const char *host, int *status)
+static const char *verdict_word(const pqdb *db, sqlite3 *h, long long rid, const char *host, int *status)
 {
     sqlite3_stmt *st;
     const char *word = NULL;
@@ -1080,7 +1115,7 @@ static const char *verdict_word(sqlite3 *h, long long rid, const char *host, int
     sqlite3_bind_int(st, 2, ord);
     while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
         conditional++;
-        if (!groupable((const char *)sqlite3_column_text(st, 0)))
+        if (!groupable(db, (const char *)sqlite3_column_text(st, 0)))
             all_groupable = 0;
     }
     if (rc != SQLITE_DONE)
@@ -1090,7 +1125,40 @@ static const char *verdict_word(sqlite3 *h, long long rid, const char *host, int
     return *status ? NULL : word;
 }
 
-int pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_pin *out)
+/* the verdict the history adjustment of the record gives the host (record_history, history_verdict): the latest block of
+   the class (any class for NULL) that holds a verdict of the host. 1 and *word set (NULL for an adjusted null) when there
+   is one, 0 when there is none, a refusal status otherwise */
+static int adjusted_word(sqlite3 *h, long long rid, const char *host, const char *klass, const char **word)
+{
+    sqlite3_stmt *st;
+    int rc, found = 0;
+    static const char *const WORDS[] = { "in-process", "isolated", "refused" };
+    *word = NULL;
+    if (sqlite3_prepare_v2(h, "SELECT hv.adjusted FROM history_verdict hv JOIN record_history rh ON rh.record_id = hv.record_id "
+                           "AND rh.ord = hv.history_ord WHERE hv.record_id = ?1 AND hv.host = ?2 AND (?3 IS NULL OR rh.host_class = ?3) "
+                           "ORDER BY hv.history_ord DESC LIMIT 1", -1, &st, NULL) != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_int64(st, 1, rid);
+    sqlite3_bind_text(st, 2, host, -1, SQLITE_STATIC);
+    if (klass)
+        sqlite3_bind_text(st, 3, klass, -1, SQLITE_STATIC);
+    else
+        sqlite3_bind_null(st, 3);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        found = 1;
+        if (sqlite3_column_type(st, 0) != SQLITE_NULL)
+            for (int i = 0; i < 3; i++)
+                if (strcmp((const char *)sqlite3_column_text(st, 0), WORDS[i]) == 0)
+                    *word = WORDS[i];
+    } else if (rc != SQLITE_DONE) {
+        found = status_of(h);
+    }
+    sqlite3_finalize(st);
+    return found;
+}
+
+int pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, const char *history_class, pqdb_pin *out)
 {
     sqlite3 *h = strcmp(r->layer, "user") == 0 ? db->user : db->base;
     sqlite3_stmt *st;
@@ -1107,7 +1175,7 @@ int pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_pin
         return status;
     if (!rid)
         return 1;
-    verdict = verdict_word(h, rid, host, &status);
+    verdict = verdict_word(db, h, rid, host, &status);
     if (status)
         return status;
     /* the steps, in the run's order; of a step named twice the first is the one plugin-qualify reads (steps.find) */
@@ -1129,6 +1197,15 @@ int pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, pqdb_pin
         return status_of(h);
     }
     sqlite3_finalize(st);
+    /* the history adjustment, as the store records it, stands over the measured word */
+    {
+        const char *adjusted;
+        int got = adjusted_word(h, rid, host, history_class, &adjusted);
+        if (got < 0)
+            return got;
+        if (got == 1)
+            verdict = adjusted;
+    }
     out->verdict = verdict;
     out->pool = verdict && strcmp(verdict, "refused") == 0 ? NULL : pool;
     return 0;

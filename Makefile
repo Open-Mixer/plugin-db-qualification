@@ -96,6 +96,8 @@ check: $(BUILD)/test_reader $(BUILD)/plugin-qualification-db $(BUILD)/shim.so
 	LD_PRELOAD=$(abspath $(BUILD)/shim.so) PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) \
 	  $(BUILD)/test_reader $(BUILD)/fixtures $(abspath test/fixtures) scopes
 	sh tools/hosting-skip-ends.sh --self-test
+	sh test/test_no_copy.sh src
+	sh test/test_pool_round_trip.sh $(BUILD)/test_reader $(CONTRACTDIR)
 	sh test/test_nm.sh $(BUILD)/$(SONAME)
 	sh test/test_cxx.sh $(BUILD)
 	PQDB_TEST_CONTRACTDIR=$(CONTRACTDIR) sh test/test_command.sh $(BUILD)/plugin-qualification-db $(BUILD)/fixtures test/fixtures $(abspath $(BUILD)/shim.so)

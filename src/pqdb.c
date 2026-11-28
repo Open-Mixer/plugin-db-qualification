@@ -44,7 +44,7 @@ struct pqdb {
     stamp seen[4];                  /* base, base -wal, user, user -wal at the open */
     char groupable[16][96];         /* QUALIFICATION_GROUPABLE_CONDITIONAL_CODES of the installed qualification domain */
     int ngroupable;
-    char verdict_rating[64], verdict_deciding[64];
+    char verdict_rating[64], verdict_deciding[64], no_figures_reason[64];
     char msg[256];                  /* what the last refusal of pqdb_each said */
 };
 
@@ -460,7 +460,7 @@ static int in_names(const names *n, const char *s)
  * before COMMIT; any failure rolls back and leaves the layer as it was */
 static int migrate_user(const char *path, int from, const char *cdir, pqdb_error *err)
 {
-    const char *step = from == 1 && PQDB_SCHEMA_VERSION == 2 ? PQDB_MIGRATION_1_TO_2 : NULL;
+    const char *step = PQDB_SCHEMA_VERSION != 3 ? NULL : from == 1 ? PQDB_MIGRATION_1_TO_3 : from == 2 ? PQDB_MIGRATION_2_TO_3 : NULL;
     char bak[4200];
     sqlite3 *db = NULL, *copy = NULL, *mem = NULL;
     sqlite3_backup *b;
@@ -1209,6 +1209,66 @@ int pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, const ch
     out->verdict = verdict;
     out->pool = verdict && strcmp(verdict, "refused") == 0 ? NULL : pool;
     return 0;
+}
+
+/* ---- a quick check that ran with no figures (section 6.0) ---- */
+static int no_figures_in(pqdb *db, sqlite3 *h, const char *format, const char *uri, const char *host, int n,
+                         const char *const *path, const char *const *sha256)
+{
+    sqlite3_stmt *st, *fs;
+    int rc, found = 0;
+    if (!h)
+        return 0;
+    if (sqlite3_prepare_v2(h, "SELECT nf_id, reason FROM no_figures WHERE format = ?1 AND uri = ?2 AND host = ?3", -1, &st, NULL)
+        != SQLITE_OK)
+        return status_of(h);
+    sqlite3_bind_text(st, 1, format, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 2, uri, -1, SQLITE_STATIC);
+    sqlite3_bind_text(st, 3, host, -1, SQLITE_STATIC);
+    rc = sqlite3_step(st);
+    if (rc == SQLITE_ROW) {
+        long long nf = sqlite3_column_int64(st, 0);
+        int k = 0, same = 1, frc;
+        snprintf(db->no_figures_reason, sizeof db->no_figures_reason, "%s", sqlite3_column_text(st, 1));
+        if (sqlite3_prepare_v2(h, "SELECT path, sha256 FROM no_figures_file WHERE nf_id = ?1 ORDER BY ord", -1, &fs, NULL) != SQLITE_OK) {
+            sqlite3_finalize(st);
+            return status_of(h);
+        }
+        sqlite3_bind_int64(fs, 1, nf);
+        while ((frc = sqlite3_step(fs)) == SQLITE_ROW) {
+            if (k >= n || strcmp((const char *)sqlite3_column_text(fs, 0), path[k]) ||
+                strcmp((const char *)sqlite3_column_text(fs, 1), sha256[k]))
+                same = 0;
+            k++;
+        }
+        sqlite3_finalize(fs);
+        if (frc != SQLITE_DONE) {
+            sqlite3_finalize(st);
+            return status_of(h);
+        }
+        found = same && k == n;
+    } else if (rc != SQLITE_DONE) {
+        found = status_of(h);
+    }
+    sqlite3_finalize(st);
+    return found;
+}
+
+int pqdb_no_figures_of(const pqdb *db, const char *format, const char *uri, const char *host, int n,
+                       const char *const *path, const char *const *sha256, const char **reason)
+{
+    pqdb *w = (pqdb *)db;
+    int got;
+    *reason = NULL;
+    if (!db || !format || !uri || !host || n <= 0)
+        return 0;
+    /* the user layer first, then the base (section 4) */
+    got = no_figures_in(w, db->user, format, uri, host, n, path, sha256);
+    if (got == 0)
+        got = no_figures_in(w, db->base, format, uri, host, n, path, sha256);
+    if (got == 1)
+        *reason = w->no_figures_reason;
+    return got;
 }
 
 /* ---- whole records ---- */

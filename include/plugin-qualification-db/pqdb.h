@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-#define PQDB_SCHEMA_VERSION 2
+#define PQDB_SCHEMA_VERSION 3
 
 typedef struct pqdb pqdb;                          /* an opened base and user layer; opaque */
 typedef enum { PQDB_SCOPE_USER, PQDB_SCOPE_SYSTEM } pqdb_scope;
@@ -122,6 +122,14 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
    otherwise. The words are string constants. */
 typedef struct { const char *verdict, *pool; } pqdb_pin;
 int  pqdb_pin_of(const pqdb *db, const pqdb_result *r, const char *host, const char *history_class, pqdb_pin *out);
+
+/* A quick check that ran and ended with no figures (section 6.0; plugin-hostd's pins-from-the-store spec, section 9
+   point 7, decided by the coordinator, the owner to confirm): 1 when a layer holds one of the plugin (format, the CLAP id
+   or the LV2 URI) for the host whose file list is exactly these `n` files and SHA-256s, in their order, with `*reason`
+   its word of QUALIFICATION_NO_FIGURES_REASONS (valid until the next call on the handle); its pin is verdict=refused.
+   The user layer first, then the base. 0 when none, a refusal status otherwise. */
+int  pqdb_no_figures_of(const pqdb *db, const char *format, const char *uri, const char *host, int n,
+                        const char *const *path, const char *const *sha256, const char **reason);
 
 /* 1 when a layer the handle opened is no longer the file it opened (device, inode, size or modification time of the file
    or of its -wal), or a layer absent at the open now exists; 0 otherwise. It opens nothing and reads no row: a program

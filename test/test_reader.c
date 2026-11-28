@@ -276,9 +276,9 @@ static void t01_base_is_junk(void)
 static void t01_base_wrong_version(void)
 {
     pqdb_error e;
-    expect_refusal(fx("base-v3.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
-    expect_refusal(fx("base-v3.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
-    CHECK(strstr(e.message, "base-v3.sqlite") != NULL, "%s", e.message);
+    expect_refusal(fx("base-next.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    expect_refusal(fx("base-next.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    CHECK(strstr(e.message, "base-next.sqlite") != NULL, "%s", e.message);
 }
 static void t01_base_not_readable(void)
 {
@@ -313,11 +313,16 @@ static void t02_absent_user(void)
 static void t03_versions(void)
 {
     pqdb_error e;
-    expect_refusal(fx("base-v3.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
-    CHECK(strstr(e.message, "base-v3.sqlite") && strstr(e.message, "3") && strstr(e.message, "2"), "%s", e.message);
-    expect_refusal(fx("base.sqlite"), fx("user-v3.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
-    CHECK(strstr(e.message, "base.sqlite") && strstr(e.message, "user-v3.sqlite"), "%s", e.message);
-    expect_refusal(fx("base-v3.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);  /* checked first */
+    expect_refusal(fx("base-next.sqlite"), NULL, GOOD, "qualification-db.schema-other", &e);
+    {
+        char next[16], mine[16];
+        snprintf(next, sizeof next, "%d", PQDB_SCHEMA_VERSION + 1);
+        snprintf(mine, sizeof mine, "%d", PQDB_SCHEMA_VERSION);
+        CHECK(strstr(e.message, "base-next.sqlite") && strstr(e.message, next) && strstr(e.message, mine), "%s", e.message);
+    }
+    expect_refusal(fx("base.sqlite"), fx("user-next.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);
+    CHECK(strstr(e.message, "base.sqlite") && strstr(e.message, "user-next.sqlite"), "%s", e.message);
+    expect_refusal(fx("base-next.sqlite"), fx("user.sqlite"), GOOD, "qualification-db.schema-mismatch", &e);  /* checked first */
     expect_refusal(fx("base-v0.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
     CHECK(strstr(e.message, "base-v0.sqlite") != NULL, "%s", e.message);
     expect_refusal(fx("user.sqlite"), NULL, GOOD, "qualification-db.not-a-store", &e);
@@ -1454,9 +1459,36 @@ static int print_pins(const char *user, const char *cdir, const char *host)
     return 0;
 }
 
+/* test_reader nofig <user layer> <contract dir> <format> <uri> <host> <path>=<sha256>...: "refused <reason>" when the
+   store holds a figure-less record of exactly those files, else "none", for test_no_figures.sh */
+static int print_no_figures(int argc, char **argv)
+{
+    pqdb *db;
+    pqdb_error e;
+    const char *path[32], *sha[32], *reason = NULL;
+    char buf[32][512];
+    int n = 0, rc;
+    for (int i = 7; i < argc && n < 32; i++, n++) {
+        char *eq;
+        snprintf(buf[n], sizeof buf[n], "%s", argv[i]);
+        eq = strrchr(buf[n], '=');
+        if (!eq) return 2;
+        *eq = 0;
+        path[n] = buf[n];
+        sha[n] = eq + 1;
+    }
+    if (pqdb_open_at("/nonexistent/base.sqlite", argv[2], argv[3], &db, &e) != 0) { fprintf(stderr, "%s: %s\n", e.code, e.message); return 1; }
+    rc = pqdb_no_figures_of(db, argv[4], argv[5], argv[6], n, path, sha, &reason);
+    if (rc == 1) printf("refused %s\n", reason); else if (rc == 0) printf("none\n"); else printf("refusal %d\n", rc);
+    pqdb_close(db);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     int scoped = argc > 3 && strcmp(argv[3], "scopes") == 0, ran = 0, bad = 0;
+    if (argc >= 7 && strcmp(argv[1], "nofig") == 0)
+        return print_no_figures(argc, argv);
     if (argc == 5 && strcmp(argv[1], "pins") == 0)
         return print_pins(argv[2], argv[3], argv[4]);
     if (argc < 3) { fprintf(stderr, "usage: test_reader <fixture dir> <contract fixtures dir> [scopes]\n"); return 2; }

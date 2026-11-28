@@ -538,8 +538,8 @@ def main(out):
     c = sqlite3.connect(p("user-v1-later.sqlite")); c.execute("PRAGMA user_version = 1"); c.commit(); c.close()
     at_version_1(p("user.sqlite"), p("user-v1-bad-rating.sqlite"),
                  "UPDATE verdict SET rating = 'excellent' WHERE record_id = (SELECT min(record_id) FROM verdict)")
-    build(p("base-v3.sqlite"), 0, BASE, version=VERSION + 1)
-    build(p("user-v3.sqlite"), 1, USER, version=VERSION + 1)
+    build(p("base-next.sqlite"), 0, BASE, version=VERSION + 1)
+    build(p("user-next.sqlite"), 1, USER, version=VERSION + 1)
     build(p("base-v0.sqlite"), 0, BASE, version=0)
     build(p("base-bad-adapter-code.sqlite"), 0, BASE, adapter_code_override="omx-clap-host.signal-SIGBUS")
     # the hosting columns are checked like any other (section 3.4): in each of the three mixed columns and the hosting-only

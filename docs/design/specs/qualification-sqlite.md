@@ -1243,6 +1243,27 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     `user`), which opens the production places of that scope (`pqdb_open`) when neither `--base` nor `--user` is given.
     `--scope` with either of them is a usage error. Exit 2 on a usage error.
 
+### 6.0 The pin plugin-hostd reads, and a changed store (plugin-hostd's spec of 2026-11-28)
+
+The owner ruled on 2026-11-28 that plugin-hostd reads every plugin's pin and verdict straight from this store, and that
+the pin file plugin-qualify-sync wrote (`/var/lib/omx/qualified.pins`) goes (plugin-hostd's
+`docs/design/specs/2026-11-28-pins-from-the-store.md`). The store already holds every fact the pin takes (section 3.7:
+the list, the layout, `unpinnable`; the verdicts, their reasons and the run's steps), so the schema does not change and
+nothing is migrated. The reader gains two functions:
+
+- `pqdb_pin_of(db, result, host, &pin)`: the words of the record's pin under one host profile, `pin.verdict`
+  (`in-process`, `isolated`, `refused`, or NULL) and `pin.pool` (`cores`, `off`, or NULL); 1 when the record gives no
+  whole pin (unpinnable, or no layout). The rule, from the rows, in order: the host's verdict (not measured, `unknown` or
+  none: no word; `unsuitable`: `refused`; `suitable`: `in-process`; `conditional`: `in-process` when it has a reason of
+  rating `conditional` and every such reason's code is groupable, `hosting.rt-safety.own-threads`, else `isolated`),
+  then the record's `isolated` step (`isolated` or `refused` is the word; `not-run` leaves none), then its `pool` step
+  (`cores` or `off`; none for `refused`). It is plugin-qualify's `pinVerdictOf`, `pinAfterStep` and `pinAfterPool` in
+  one place; the groupable set is written twice (plugin-qualify's `GROUPABLE_CONDITIONAL_CODES`) until the
+  qualification domain declares it.
+- `pqdb_changed(db)`: 1 when a layer the handle opened is not the file it opened (device, inode, size or modification
+  time of the file or its `-wal`) or a layer absent at the open now exists. It opens nothing and reads no row, so the
+  daemon may ask it at every idle tick and open the store again only when it says 1.
+
 ### 6.1 plugin-qualify-sync on the store (the consumer switch)
 
 The store REPLACES the distributed JSON layer and the JSON files of `qualification_dir`. The switch is whole

@@ -4,11 +4,13 @@
 """Builds the fixture stores of the reader's tests from schema/qualification.sql: a base, user layers, stores at
 other versions, a user layer with a hot journal, and the figures a reader must give back, worked out here from the
 fixture data by the rules of plugin-hostd's qualcost.h (not by the reader). Usage: make-fixtures.py <out dir>."""
-import os, shutil, signal, sqlite3, subprocess, sys
+import os, re, shutil, signal, sqlite3, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCHEMA = os.path.join(HERE, "..", "schema", "qualification.sql")
-VERSION = 1
+# the store's version, as the DDL's header gives it (the writer reads it there too)
+with open(SCHEMA, encoding="utf-8") as _f:
+    VERSION = int(re.search(r"^-- The qualification store, user_version (\d+)", _f.read(), re.M).group(1))
 
 def sha(c):
     return c * 64
@@ -47,7 +49,7 @@ WORD_CHECK = [
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_HOSTS"),
     ("record", "adapter_code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("record", "adapter_code", "probe", "PROBE_SIGNALS"),
-    # the hosting columns (section 3.4): mixed with probe words, or hosting words only
+    # the hosting columns (section 3.4), checked as any: mixed with probe words, or hosting words only
     ("history_verdict", "host", "qualification", "QUALIFICATION_HOST_PROFILES"),
     ("history_verdict", "measured", "qualification", "QUALIFICATION_PIN_VERDICTS"),
     ("history_verdict", "adjusted", "qualification", "QUALIFICATION_PIN_VERDICTS"),
@@ -71,7 +73,7 @@ WORD_CHECK = [
     ("adapter_cell", "code", "qualification", "QUALIFICATION_ADAPTER_CODE_KINDS"),
     ("adapter_cell", "code", "probe", "PROBE_SIGNALS"),
 ]
-DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.33.1", "plugin-db": "1.0.0"}
+DOMAINS = {"qualification": "1.1.0", "machine": "1.0.0", "probe": "1.0.0", "hosting": "0.1.0", "plugin-db": "1.0.0"}
 
 def cell(rate, quantum, cost=None, lat=(None, None), mem=None, outcome="probe.ok"):
     """cost: (median, p, p value); lat: (declared, measured); mem: (first kb, per instance kb)."""
@@ -276,6 +278,7 @@ def fill_nulls(c, table, where, skip=(), flags=(), bools=()):
     checked = {col for t, col, _, _ in WORD_CHECK if t == table}
     cols = c.execute("PRAGMA table_info(%s)" % table).fetchall()
     n = 10
+    sets = {}
     for _, name, typ, notnull, _, pk in cols:
         v = c.execute("SELECT %s FROM %s WHERE %s" % (name, table, where)).fetchone()[0]
         if v is not None or name in skip or name in checked or pk:
@@ -284,7 +287,10 @@ def fill_nulls(c, table, where, skip=(), flags=(), bools=()):
         val = (1 if name in bools else n * 7 + 1) if typ == "INTEGER" else (n + 0.25 if typ == "REAL" else "w_" + name)
         if name in flags:
             val = 1
-        c.execute("UPDATE %s SET %s = ? WHERE %s" % (table, name, where), (val,))
+        sets[name] = val
+    # one UPDATE, so a CHECK over several columns (all three counts or none) sees them together
+    if sets:
+        c.execute("UPDATE %s SET %s WHERE %s" % (table, ", ".join("%s = ?" % k for k in sets), where), list(sets.values()))
 
 # numbers as JSON.stringify writes them (the cell's latencyMs, the record's latencyLineMs): what is stored, in the order of
 # the cells, and what the document must hold for each
@@ -325,12 +331,14 @@ def build_records(path):
     c.execute("UPDATE cell SET latency_ms = 2.0 WHERE record_id = 3 AND ord = 0")
     c.execute("UPDATE record SET host_extensions = 1 WHERE record_id = 3")
     c.execute("UPDATE record SET adapter_params = NULL WHERE record_id = 3")
+    # record 1's adapter.params is present: its rows (resp, step, gain) and its content names reach the document
+    c.execute("UPDATE record SET adapter_params = 1 WHERE record_id = 1")
     for rid in (1, 2, 3):
         c.execute("UPDATE record SET layout_scheme = NULL, layout_sha256 = NULL WHERE record_id = ? AND ? <> 1", (rid, rid))
-    fill_nulls(c, "cell", "record_id = 1 AND ord = 0", skip=("rt_other_allocations", "rt_other_locks", "rt_other_syscalls", "latency_ms"), bools=("rt_interposer", "rt_swept", "rt_sweep_applicable", "note_sweep_applicable"))
+    fill_nulls(c, "cell", "record_id = 1 AND ord = 0", skip=("rt_other_allocations", "rt_other_locks", "rt_other_syscalls", "latency_ms"), bools=("rt_interposer", "rt_swept", "rt_sweep_applicable", "note_sweep_applicable"), flags=("rt_events",))
     c.execute("UPDATE cell SET rt_other_allocations = 11, rt_other_locks = 12, rt_other_syscalls = 13 WHERE record_id = 1 AND ord = 0")
     c.execute("UPDATE cell SET rt_own_threads = 2 WHERE record_id = 1 AND ord = 1")   # own threads, and no other-thread counts
-    c.execute("UPDATE cell SET rt_interposer = 0, rt_swept = 0, rt_sweep_applicable = 0, rt_blocks = 0, rt_allocations = 0, rt_locks = 0, rt_syscalls = 0 WHERE record_id = 1 AND ord = 1")
+    c.execute("UPDATE cell SET rt_interposer = 0, rt_swept = 0, rt_sweep_applicable = 0, rt_blocks = 0, rt_allocations = 0, rt_locks = 0, rt_syscalls = 0, rt_events = 1 WHERE record_id = 1 AND ord = 1")
     c.executemany("INSERT INTO record_extension VALUES (1, ?, ?)", [(0, "clap.log"), (1, "clap.params")])
     c.executemany("INSERT INTO cell_event VALUES (1, 0, ?, ?)", [(0, "malloc"), (1, "pthread_mutex_lock")])
     c.executemany("INSERT INTO record_version VALUES (1, ?, ?, ?)", [(0, "omx-clap-host", "1.0"), (0, "other", "2.0"), (1, "omx-clap-host", "1.1")])
@@ -352,7 +360,10 @@ def build_records(path):
                    (1, 0, "omx-clap-host", "in-process", "in-process", "none", "history.no-record", None)])
     c.executemany("INSERT INTO history_blocked VALUES (1, 0, 1, ?, ?)", [(0, "refused"), (1, "hosting.cost.above-ceiling"), (2, "no-deciding-reason")])
     c.executemany("INSERT INTO probe_end VALUES (1, ?, ?, ?, ?, ?)", [(0, "process", "probe.ok", 0, None), (1, "exit", "probe.crashed", None, "SIGSEGV")])
-    c.executemany("INSERT INTO cost_entry VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
+    c.executemany("INSERT INTO cost_entry (record_id, ord, host, rate, quantum) VALUES (1, ?, ?, ?, ?)", [(0, "omx-clap-host", 48000, 256)])
+    fill_nulls(c, "cost_entry", "record_id = 1 AND ord = 0")   # the voices an instrument's entry was taken with (ruling 12)
+    # an instrument's cost at each count of notes held, in ord (ruling 12)
+    c.executemany("INSERT INTO cell_voice_point VALUES (1, 0, ?, ?, ?, 95, ?)", [(0, 1, 11.5752, 11.7705), (1, 16, 11.8682, 12.3027)])
     c.executemany("INSERT INTO reason (reason_id, record_id, verdict_ord, cost_ord, ord, dimension, rating, code) VALUES (?, 1, ?, ?, ?, ?, ?, ?)",
                   [(1, 0, None, 0, "cost", "conditional", "hosting.cost.above-ceiling"), (2, 0, None, 1, "memory", "qualified", "hosting.memory.within-ceiling"),
                    (3, None, 0, 0, "cost", "conditional", "hosting.cost.above-ceiling")])
@@ -431,13 +442,44 @@ def hot_journal(src, dst):
     j = dst + "-journal"
     assert os.path.exists(j) and os.path.getsize(j) > 0, "no hot journal was left"
 
+V1 = os.path.join(HERE, "..", "tools", "testdata", "store-v1", "store.sql")
+
+def at_version_1(src, dst, edit=None):
+    """A user layer at user_version 1, the dated writer's DDL (tools/testdata/store-v1/store.sql, its CREATE statements),
+    holding the rows of `src` in the columns version 1 has: what the reader migrates on open (spec section 3.6)."""
+    with open(V1, encoding="utf-8") as f:
+        ddl = [l for l in f.read().split(";\n") if l.lstrip().startswith("CREATE ")]
+    c = sqlite3.connect(dst)
+    for stmt in ddl:
+        c.execute(stmt)
+    c.execute("ATTACH ? AS src", (src,))
+    tables = [r[0] for r in c.execute("SELECT name FROM main.sqlite_master WHERE type = 'table' ORDER BY rowid")]
+    c.execute("PRAGMA foreign_keys = OFF")
+    for t in tables:
+        cols = [r[0] for r in c.execute("SELECT name FROM pragma_table_info(?, 'main')", (t,))]
+        have = {r[0] for r in c.execute("SELECT name FROM pragma_table_info(?, 'src')", (t,))}
+        cols = [x for x in cols if x in have]
+        c.execute('INSERT INTO main."%s" (%s) SELECT %s FROM src."%s"' % (t, ", ".join(cols), ", ".join(cols), t))
+    c.commit()
+    c.execute("DETACH src")
+    if edit:
+        c.execute(edit)
+    c.execute("PRAGMA user_version = 1")
+    c.commit(); c.close()
+
 def main(out):
     os.makedirs(out, exist_ok=True)
     p = lambda n: os.path.join(out, n)
     build(p("base.sqlite"), 0, BASE)
     build(p("user.sqlite"), 1, USER)
-    build(p("base-v2.sqlite"), 0, BASE, version=2)
-    build(p("user-v2.sqlite"), 1, USER, version=2)
+    at_version_1(p("user.sqlite"), p("user-v1.sqlite"))
+    # the later dated builds wrote the DDL of 2 at user_version 1 (a device's layer): the same rows, at 1
+    shutil.copy(p("user.sqlite"), p("user-v1-later.sqlite"))
+    c = sqlite3.connect(p("user-v1-later.sqlite")); c.execute("PRAGMA user_version = 1"); c.commit(); c.close()
+    at_version_1(p("user.sqlite"), p("user-v1-bad-rating.sqlite"),
+                 "UPDATE verdict SET rating = 'excellent' WHERE record_id = (SELECT min(record_id) FROM verdict)")
+    build(p("base-v3.sqlite"), 0, BASE, version=VERSION + 1)
+    build(p("user-v3.sqlite"), 1, USER, version=VERSION + 1)
     build(p("base-v0.sqlite"), 0, BASE, version=0)
     build(p("base-bad-adapter-code.sqlite"), 0, BASE, adapter_code_override="omx-clap-host.signal-SIGBUS")
     # the hosting columns are checked like any other (section 3.4): in each of the three mixed columns and the hosting-only

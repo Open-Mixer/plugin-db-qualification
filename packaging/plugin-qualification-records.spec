@@ -4,24 +4,25 @@
 # The RPM side of the records: one package, plugin-qualification-records, per architecture, the same package the
 # Debian side builds from debian/. It carries every set of the machine classes packaging/arch-classes gives its
 # architecture, at /usr/share/omx/qualification/<class>/<set>/; plugin-qualify-sync chooses the set of the machine's
-# class and cell. A set is per machine class, per sample rate and per quantum (fedora44-48000-512). The version is the
-# dated one the tag and debian/changelog carry (vYYYYMMDDXX).
+# class and cell. A set is per machine class, per sample rate and per quantum (fedora44-48000-512). The version is
+# 0.MAJOR.MINOR, the one the tag (v<version>) and debian/changelog carry; the date stamp YYYYMMDDXX is the Release
+# (owner 2026-11-24, #81): it orders builds, the version says what is compatible.
 #
 # x86_64 carries the x86-64 class (the fedora44 sets). aarch64 carries the rpi5 class, the same sets the arm64 deb
 # carries: a package that depends on the records installs on Fedora aarch64 too, and a record applies only where the
 # installed plugin's bytes are the measured ones.
 #
-# The block between BEGIN and END per-architecture is written by tools/sets.py spec: each architecture's
-# plugin-qualify floor (packaging/arch-classes) and the older package names it takes over (one package per set, the
-# names derived from records/), and tools/sets.py check holds it to them. The spec is read before %%prep unpacks the
-# tree, so that part is written here; %%install and %%files read the tree.
+# No OpenMixer package is named with a version written by hand: the build installs the lower levels' published
+# packages, the library's runtime dependencies are rpm's generated soname dependencies and the devel package's are the
+# ones rpm generates from plugin-qualification-db.pc; between subpackages of this spec, = %%{version}-%%{release}. The
+# one floor kept is third-party: sqlite 3.37.0, the first with STRICT tables.
 
 %global debug_package %{nil}
 %global qual_dir %{_datadir}/omx/qualification
 
 Name: plugin-qualification-records
-Version: 2026112001
-Release: 1%{?dist}
+Version: 0.1.2
+Release: 2026112702%{?dist}
 Summary: The qualification layer of plugin-db: records of OpenMixer plugin sets
 License: GPL-3.0-or-later
 URL: https://github.com/Open-Mixer/plugin-db-qualification
@@ -33,22 +34,19 @@ BuildRequires: python3
 # the reader (the Makefile): sqlite 3.37.0 is the first with STRICT tables; libomx-domain is the contract loader
 BuildRequires: gcc make pkgconfig binutils
 BuildRequires: sqlite-devel >= 3.37.0
-BuildRequires: libomx-domain-devel >= 3.20.0
+BuildRequires: libomx-domain-devel
 # tools/records-db.py: the base database, its words checked against the owners' domains at the releases that publish them
 BuildRequires: python3-jsonschema
-BuildRequires: plugin-qualify-contract >= 0.20.7
-BuildRequires: plugin-hostd-contract >= 0.20.8
-BuildRequires: plugin-db-contract >= 0.4.7
-BuildRequires: omx-clap-core-contract >= 0.33.1
+# qualification and machine are plugin-hostd's domains, probe plugin-hostd-protocol's
+BuildRequires: plugin-hostd-contract
+BuildRequires: plugin-hostd-protocol-contract
+BuildRequires: plugin-db-contract
+BuildRequires: omx-clap-contract
 
-# BEGIN per-architecture: written by tools/sets.py spec from packaging/arch-classes and records/
-%ifarch x86_64
-Requires: plugin-qualify >= 0.20.7
-%endif
-%ifarch aarch64
-Requires: plugin-qualify >= 0.20.7
-%endif
-# END per-architecture
+# the sync that reads the records, a weak dependency: the records are inert data without it, and plugin-qualify builds
+# on plugin-hostd, which builds on this source's reader, so a hard one would make the records uninstallable until a
+# later layer of the wave is published (the staged install check of a merge to devel)
+Recommends: plugin-qualify
 
 %description
 The qualification layer of the plugin database: the plugin-qualify records of
@@ -70,7 +68,6 @@ and finds the CLAP plugins of /usr/lib64/clap once it says
 %package -n libplugin-qualification-db
 Summary: Reader of the OpenMixer qualification store
 Requires: sqlite-libs >= 3.37.0
-Requires: libomx-domain >= 3.20.0
 
 %description -n libplugin-qualification-db
 The C library that reads the qualification store: the base database of
@@ -83,7 +80,6 @@ Summary: Reader of the OpenMixer qualification store, development files
 Requires: libplugin-qualification-db%{?_isa} = %{version}-%{release}
 Requires: plugin-qualification-db-schema = %{version}-%{release}
 Requires: sqlite-devel >= 3.37.0
-Requires: libomx-domain-devel >= 3.20.0
 
 %description -n libplugin-qualification-db-devel
 The header, the shared library link and plugin-qualification-db.pc, whose
@@ -179,6 +175,7 @@ done
 %license LICENSE
 %dir %{_datadir}/plugin-qualification-db
 %{_datadir}/plugin-qualification-db/qualification.sql
+%{_datadir}/plugin-qualification-db/migrations/
 
 %files -n plugin-qualification-db-write
 %license LICENSE
@@ -188,3 +185,18 @@ done
 %{_mandir}/man1/plugin-qualification-db-write.1*
 
 %changelog
+* Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.2-2026112702
+- The writer takes a reason param's word from QUALIFICATION_MEASUREMENT_
+  UNMEASURED_REASONS too: plugin-qualify 0.21.3 writes the memory reason it
+  could not measure with unmeasuredReason, which the writer refused.
+- The store is user_version 2: the DDL changed after the dated release at
+  the same number. A user layer at 1 is migrated in place by the writer and
+  the reader on open (schema/migrations/1-to-2.sql), a backup beside it.
+- The hosting exception has ended: omx-clap ships its hosting domain, so the
+  reader opens it and checks the hosting columns as every other.
+
+* Fri Nov 27 2026 Pau Aliagas <linuxnow@gmail.com> - 0.1.1-2026112701
+- The amd64 Debian package joins packaging/release-arches: the full matrix
+  serves every package in every cell (owner ruling 2026-11-26), and plugin-
+  hostd's amd64 cells build against libplugin-qualification-db-dev.
+

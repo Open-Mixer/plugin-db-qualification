@@ -113,7 +113,7 @@ printf 'not sqlite' > "$fx/junk.sqlite"
 c=$("$cmd" counts --json --base "$fx/junk.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
 case "$c" in qualification-db.unreadable*) ;; *) note "a junk base printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "a junk base exited $rc"
-c=$("$cmd" check --base "$fx/base-v2.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
+c=$("$cmd" check --base "$fx/base-v3.sqlite" --user '' --contract-dir "$good" 2>&1); rc=$?
 case "$c" in qualification-db.schema-other*) ;; *) note "a base of version 2 printed '$c'" ;; esac
 [ $rc -eq 1 ] || note "a base of version 2 exited $rc"
 if [ "$(id -u)" -ne 0 ]; then
@@ -180,6 +180,34 @@ for l in lines:
         print("  FAIL: --records line of %s is not the record document of the library" % name); bad = 1
 sys.exit(bad)
 PY
+# --records with no cell: every claimant's whole record, one line a set that claims a cell of the key, each set once
+# (#56). The fixtures' two keys are each claimed by two sets, one cell each, so four lines in both orders; the first
+# record of a key alone (two lines) is the bug.
+for order in winner-last winner-first; do
+    "$cmd" query --json --records --base "$fx/base-claimants-$order.sqlite" --user '' --contract-dir "$good" > "$fx/command-claimants-all.out" 2>&1; rc=$?
+    [ $rc -eq 0 ] || note "--records with no cell ($order) exited $rc"
+    python3 -I - "$fx/command-claimants-all.out" "$order" <<'PY' || fail=1
+import json, sys
+lines = [l for l in open(sys.argv[1], encoding="utf-8").read().split("\n") if l]
+order = sys.argv[2]
+want = {("urn:p1", "fedora44-rt-48000-256"): "ref/p1.clap", ("urn:p1", "fedora44-48000-256"): "prov/p1.clap",
+        ("urn:p2", "z-new"): "new/p2.clap", ("urn:p2", "a-old"): "old/p2.clap"}
+bad = 0
+got = []
+for l in lines:
+    o = json.loads(l)
+    k = (o.get("uri"), o.get("set"))
+    got.append(k)
+    if k not in want:
+        print("  FAIL: --records with no cell (%s) printed %s of set %s" % (order, k[0], k[1])); bad = 1
+    elif want[k] not in l:
+        print("  FAIL: --records with no cell (%s): %s of set %s is not that set's whole record" % (order, k[0], k[1])); bad = 1
+if sorted(got) != sorted(want):
+    print("  FAIL: --records with no cell (%s) printed %s, expected each claimant once: %s" % (order, sorted(got), sorted(want))); bad = 1
+sys.exit(bad)
+PY
+done
+
 # --records at a cell: the whole record of the set that claims the cell, with its set (the store spec, section 4). The
 # fixtures hold two keys at two cells each: the sets of one key are a provisional one and a reference one (the
 # reference one claims 48000/256, the provisional one 96000/256), and of the other an older and a newer measurement of

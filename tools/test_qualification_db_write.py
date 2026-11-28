@@ -9,9 +9,10 @@ refusal by its exact name.
 
 The words come from the owners' contract documents. The test assembles a contract directory from the sibling clones
 (TEST ONLY, the writer reads no variable for it): PDQ_SIBLINGS names the directory that holds the clones
-(plugin-qualify, plugin-hostd, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
+(plugin-hostd, plugin-hostd-protocol, plugin-db, omx-clap-core); each domain is read from `contract.d/<domain>/` at PDQ_REF
 (default origin/main); the hosting words come from the data/ of omx-clap-core at the same ref, laid out as its
-`make install-contract` lays them out (<contractdir>/3/omx-clap-core/ and its MANIFEST.json). Without PDQ_SIBLINGS the tests that need the words are
+`make install-contract` lays them out (<contractdir>/3/<package>/ and its MANIFEST.json, <package> the name that tree
+installs under: omx-clap since 0.34.0); tools/sibling_contract.py assembles it. Without PDQ_SIBLINGS the tests that need the words are
 skipped, saying so. The fixture records are records of records/, in the section 3.7 form the rewrite of records/ gives
 them (a CLAP record's relative binary.path and its hostExtensions).
 """
@@ -30,78 +31,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
 import qualification_db as q  # noqa: E402
+from sibling_contract import contract_dir, remove  # noqa: E402
 
 RECORDS = os.path.join(REPO, "records")
 HEADER = os.path.join(REPO, "include", "plugin-qualification-db", "pqdb.h")
-DOMAIN_REPO = {"qualification": "plugin-qualify", "machine": "plugin-hostd", "probe": "plugin-hostd",
-               "plugin-db": "plugin-db"}
-SIBLINGS = os.environ.get("PDQ_SIBLINGS")  # TEST ONLY
-REF = os.environ.get("PDQ_REF", "origin/main")
 X86 = ("x86-64", "fedora44-48000-512")
 LV2 = ("rpi5", "zynthian-vangelis")
-_contract = {}
-
-
-def git_show(clone, ref, path):
-    r = subprocess.run(["git", "-C", clone, "show", f"{ref}:{path}"], capture_output=True)
-    if r.returncode:
-        raise unittest.SkipTest(f"{os.path.basename(clone)} {ref}: {path}: {r.stderr.decode().strip()}")
-    return r.stdout
-
-
-def contract_dir():
-    """The contract directory assembled from the sibling clones, once; skips the test when they are not given. The
-    domains are documents (<domain>/<domain>.json); the hosting words are the package omx-clap-core's data/, installed as
-    `make install-contract` does: <schema major>/omx-clap-core/ with the files as they are and a MANIFEST.json."""
-    if "dir" in _contract:
-        return _contract["dir"]
-    if not SIBLINGS:
-        raise unittest.SkipTest("PDQ_SIBLINGS is not set: no sibling clones to read the owners' words from")
-    root = tempfile.mkdtemp(prefix="pdq-contract-")
-    for dom, repo in DOMAIN_REPO.items():
-        clone = os.path.join(SIBLINGS, repo)
-        if not os.path.isdir(clone):
-            raise unittest.SkipTest(f"{clone}: no such sibling clone")
-        os.makedirs(os.path.join(root, dom))
-        doc = json.loads(git_show(clone, REF, f"contract.d/{dom}/{dom}.json"))
-        if dom == "qualification":
-            # plugin-qualify names the hosts an adapter runs a plugin under (QUALIFICATION_ADAPTER_HOSTS, spec section 3.4)
-            # in its line 3, and the words of the pin verdicts and the history (QUALIFICATION_PIN_VERDICTS, _HISTORY_MOVES, _HISTORY_REASONS,
-            # from plugin-qualify's pins-file.ts and history-adjust.ts); until its domain publishes the items the fixture adds them
-            doc["components"]["schemas"].setdefault("QUALIFICATION_ADAPTER_HOSTS", {
-                "oneOf": [{"const": h} for h in ("omx-clap-host", "mod-host", "jalv")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_PIN_VERDICTS", {
-                "oneOf": [{"const": w} for w in ("in-process", "isolated", "refused")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_BLOCKERS", {
-                "oneOf": [{"const": w} for w in ("refused", "unknown", "no-deciding-reason")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_MOVES", {
-                "oneOf": [{"const": w} for w in ("demote", "promote", "none")]})
-            doc["components"]["schemas"].setdefault("QUALIFICATION_HISTORY_REASONS", {
-                "oneOf": [{"const": "history." + w} for w in ("crashed", "xruns-grouped", "crashed-alone", "steady", "no-record",
-                                                              "no-change", "not-liftable")]})
-        with open(os.path.join(root, dom, dom + ".json"), "w") as f:
-            json.dump(doc, f)
-    core = os.path.join(SIBLINGS, "omx-clap-core")
-    if not os.path.isdir(core):
-        raise unittest.SkipTest(f"{core}: no such sibling clone")
-    names = subprocess.run(["git", "-C", core, "ls-tree", "-r", "--name-only", REF, "data"], capture_output=True, text=True,
-                           check=True).stdout.split("\n")
-    dest = os.path.join(root, "3", "omx-clap-core")
-    for n in sorted(x for x in names if x.endswith(".json")):
-        rel = n[len("data/"):]
-        os.makedirs(os.path.join(dest, os.path.dirname(rel)), exist_ok=True)
-        with open(os.path.join(dest, rel), "wb") as f:
-            f.write(git_show(core, REF, n))
-    version = git_show(core, REF, "VERSION").decode().strip()
-    with open(os.path.join(dest, "MANIFEST.json"), "w") as f:
-        json.dump({"package": "omx-clap-core", "version": version, "schemaMajor": 3, "files": {}}, f)
-    _contract["dir"] = root
-    return root
 
 
 def tearDownModule():
-    if "dir" in _contract:
-        shutil.rmtree(_contract["dir"], ignore_errors=True)
+    remove()
 
 
 def load(path):
@@ -519,33 +458,31 @@ class Put(Layer):
     def test_a_layer_of_another_version_is_refused(self):
         self.put()
         with contextlib.closing(sqlite3.connect(self.db)) as db:
-            db.execute("PRAGMA user_version = 2")
+            db.execute(f"PRAGMA user_version = {q.schema_version() + 1}")
         with self.assertRaises(q.Refusal) as cm:
             self.put()
         self.assertEqual(cm.exception.name, "schema-other")
 
 
 class HostingWords(Layer):
-    """The hosting.* words are the codes of the package omx-clap-core (its data/hosting.json and data/hosting/*.json,
-    items of kind codes), read from the contract directory the package installs into; no hosting domain document."""
+    """The hosting.* words are the items HOSTING_<group>_CODES of omx-clap's domain hosting (<contractdir>/hosting/
+    hosting.json, omx-clap-core's contract.d/hosting), read as every other domain is; the contract package omx-clap,
+    which held them as codes before, is no source of words."""
 
-    def test_the_package_is_recorded_with_its_version(self):
+    def hosting(self, c=None):
+        return load(os.path.join(c or contract_dir(), "hosting", "hosting.json"))
+
+    def test_the_domain_is_recorded_with_its_version(self):
         self.put()
-        manifest = load(os.path.join(contract_dir(), "3", "omx-clap-core", "MANIFEST.json"))
-        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(manifest["version"],)])
-        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = 'omx-clap-core'"), [(0,)])
+        self.assertEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [(self.hosting()["info"]["version"],)])
+        self.assertEqual(self.rows("SELECT count(*) FROM store_domain WHERE domain = 'omx-clap'"), [(0,)])
         self.assertGreater(self.rows("SELECT count(*) FROM word_check WHERE domain = 'hosting'")[0][0], 3)
 
-    def test_a_hosting_code_of_the_package_is_a_word(self):
-        words = set()
-        for n in ("hosting.json",) + tuple("hosting/" + f for f in sorted(os.listdir(os.path.join(contract_dir(), "3", "omx-clap-core", "hosting")))):
-            for item in load(os.path.join(contract_dir(), "3", "omx-clap-core", n)).values():
-                if isinstance(item, dict) and item.get("kind") == "codes":
-                    words.update(c["code"] for c in item["codes"].values())
-        self.assertIn("hosting.clap.extensions-not-covered", words)
+    def test_a_hosting_word_of_the_domain_is_a_word(self):
+        clap = [o["const"] for o in self.hosting()["components"]["schemas"]["HOSTING_CLAP_CODES"]["oneOf"]]
+        self.assertIn("hosting.clap.extensions-not-covered", clap)
         dom = q.Domains(contract_dir())
-        self.assertEqual(set(dom.items[("hosting", "HOSTING_CLAP_CODES")]),
-                         {c["code"] for c in load(os.path.join(contract_dir(), "3", "omx-clap-core", "hosting", "clap.json"))["HOSTING_CLAP_CODES"]["codes"].values()})
+        self.assertEqual(dom.items[("hosting", "HOSTING_CLAP_CODES")], clap)
 
     def test_a_hosting_code_that_is_none_is_refused(self):
         rec = self.edited(lambda r: r["verdicts"][0]["reasons"].append(
@@ -556,25 +493,53 @@ class HostingWords(Layer):
         self.assertEqual(cm.exception.name, "word-unknown")
         self.assertIn("hosting.clap.not-a-code", str(cm.exception))
 
-    def test_a_contract_directory_without_the_package_is_refused_by_name(self):
+    def test_a_memory_reason_of_plugin_qualify_0_21_3_carries_its_unmeasured_reason(self):
+        # plugin-qualify 0.21.3 (hosting-suitability.ts) writes the memory reason it could not measure as
+        # hosting.memory.unmeasured with params {rate, quantum, unmeasuredReason: <a measurement unmeasured reason>}; the
+        # name is a QUALIFICATION_REASON_PARAMS word and the value a QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS word, both of
+        # the installed qualification domain
+        def unmeasured(v):
+            return [x for x in v["reasons"] if x["code"] == "hosting.memory.unmeasured"]
+
+        rec, offer, cls = first_record(LV2, lambda r: any(unmeasured(v) for v in r["verdicts"]))
+        reason = next(x for v in rec["verdicts"] for x in unmeasured(v))
+        reason["params"]["unmeasuredReason"] = "voices-unknown"
+        self.put(rec, offer=offer, cls=cls)
+        self.assertIn(("unmeasuredReason", None, "voices-unknown"),
+                      self.rows("SELECT name, number, word FROM reason_param WHERE name = 'unmeasuredReason'"))
+        reason["params"]["unmeasuredReason"] = "not-a-reason"
+        with self.assertRaises(q.Refusal) as cm:
+            self.put(rec, offer=offer, cls=cls)
+        self.assertEqual(cm.exception.name, "word-unknown")
+        self.assertIn("not-a-reason", str(cm.exception))
+
+    def test_a_contract_directory_without_the_domain_is_refused_by_name(self):
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)
-        shutil.rmtree(os.path.join(c, "3"))
+        shutil.rmtree(os.path.join(c, "hosting"))
         with self.assertRaises(q.Refusal) as cm:
             q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
         self.assertEqual(cm.exception.name, "contract.domain.absent")
-        self.assertIn("omx-clap-core", str(cm.exception))
+        self.assertIn("hosting/hosting.json", str(cm.exception))
         self.assertFalse(os.path.exists(self.db))
 
-    def test_a_hosting_domain_document_is_no_source_of_words(self):
-        """A hosting/hosting.json beside the package is not read: the package's items are the words."""
+    def test_the_package_omx_clap_is_no_source_of_words(self):
+        """The codes laid out as the package omx-clap held them (<contractdir>/omx-clap/hosting.json, items of kind
+        codes) do not stand in for the domain: without hosting/hosting.json the directory is refused."""
         c = os.path.join(self.tmp, "contract")
         shutil.copytree(contract_dir(), c)
-        os.makedirs(os.path.join(c, "hosting"))
-        with open(os.path.join(c, "hosting", "hosting.json"), "w") as f:
-            json.dump({"info": {"version": "9.9.9"}, "components": {"schemas": {}}}, f)
-        q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
-        self.assertNotEqual(self.rows("SELECT version FROM store_domain WHERE domain = 'hosting'"), [("9.9.9",)])
+        items = self.hosting(c)["components"]["schemas"]
+        shutil.rmtree(os.path.join(c, "hosting"))
+        os.makedirs(os.path.join(c, "omx-clap"))
+        with open(os.path.join(c, "omx-clap", "hosting.json"), "w") as f:
+            json.dump({n: {"kind": "codes", "codes": {o["title"]: {"code": o["const"]} for o in it["oneOf"]}}
+                       for n, it in items.items()}, f)
+        with open(os.path.join(c, "omx-clap", "MANIFEST.json"), "w") as f:
+            json.dump({"package": "omx-clap", "version": "0.35.0", "files": {}}, f)
+        with self.assertRaises(q.Refusal) as cm:
+            q.put(self.rec, scope="user", offer=self.offer, host_class=self.cls, contract_dir=c, root=self.root)
+        self.assertEqual(cm.exception.name, "contract.domain.absent")
+        self.assertFalse(os.path.exists(self.db))
 
 
 class Refusals(Layer):
@@ -710,6 +675,161 @@ class Delete(Layer):
 
 
 COMMAND = os.path.join(HERE, "plugin-qualification-db-write")
+
+
+class Migration(unittest.TestCase):
+    """A user layer at user_version 1 (the dated writer's, tools/testdata/store-v1) is migrated in place on open
+    (spec section 3.6): every row kept, every record read back as it was put, the DDL that of a new layer, a backup
+    beside it; a second open changes nothing; a word no item holds is refused by name and the layer left as it was; a
+    word a step renames is renamed, and without the step's line it is refused."""
+
+    FIXTURE = os.path.join(REPO, "tools", "testdata", "store-v1")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="pdq-migration-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.root = os.path.join(self.tmp, "qualification")
+        os.makedirs(self.root)
+        self.db = os.path.join(self.root, "qualification.sqlite")
+        with open(os.path.join(self.FIXTURE, "store.sql"), encoding="utf-8") as f:
+            self.v1 = f.read()
+        self.records = load(os.path.join(self.FIXTURE, "records.json"))
+
+    def layer(self, edit=None):
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            db.executescript(self.v1)
+            if edit:
+                db.executescript(edit)
+                db.commit()
+
+    def dump(self, path=None):
+        with contextlib.closing(sqlite3.connect(path or self.db)) as db:
+            return db.execute("PRAGMA user_version").fetchone()[0], list(db.iterdump())
+
+    def dump_of(self, sql):
+        with contextlib.closing(sqlite3.connect(":memory:")) as db:
+            db.executescript(sql)
+            return db.execute("PRAGMA user_version").fetchone()[0], list(db.iterdump())
+
+    def counts(self, path=None):
+        with contextlib.closing(sqlite3.connect(path or self.db)) as db:
+            names = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")]
+            return {t: db.execute(f'SELECT count(*) FROM "{t}"').fetchone()[0] for t in names}
+
+    def ddl(self, path):
+        with contextlib.closing(sqlite3.connect(path)) as db:
+            return sorted((t, n, sql.replace(f'"{n}"', n)) for t, n, sql in
+                          db.execute("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL"))
+
+    def open_it(self):
+        """the writer opens the layer: a delete of a key it does not hold, which changes no row"""
+        q.delete(scope="user", root=self.root, sha256="0" * 64, format="lv2", uri="urn:none", offer="default",
+                 host_class="rpi5", contract_dir=contract_dir())
+
+    def test_a_layer_at_1_is_migrated_with_every_row_and_record(self):
+        self.layer()
+        before = self.counts()
+        self.open_it()
+        after = self.counts()
+        self.assertEqual(after.pop("cell_voice_point"), 0)
+        self.assertEqual(after.pop("word_check"), before.pop("word_check") + 4)   # the four items 2 reads that 1 did not
+        self.assertEqual(after, before)
+        before = self.counts(self.db + ".user_version-1")
+        self.assertEqual(self.dump()[0], q.schema_version())
+        fresh = os.path.join(self.tmp, "fresh", "qualification.sqlite")
+        rec = self.records[0]
+        q.put(rec["record"], scope="user", offer=rec["offer"], host_class=rec["hostClass"], contract_dir=contract_dir(),
+              root=os.path.dirname(fresh))
+        self.assertEqual(self.ddl(self.db), self.ddl(fresh), "the migrated layer's DDL is not that of a new layer")
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            ex = q.Exporter(db)
+            for i, r in enumerate(self.records, 1):
+                self.assertIsNone(first_difference(without_sentences(r["record"]), ex.export_record(i)), r["file"])
+            self.assertEqual([tuple(r) for r in db.execute("SELECT DISTINCT version FROM store_domain")], [("0.1.0",)])
+            self.assertEqual(tuple(db.execute("SELECT count(*) FROM cell WHERE (rt_events IS NULL) <> (rt_allocations IS NULL)").fetchone()), (0,))
+        self.assertEqual(self.dump(self.db + ".user_version-1"), self.dump_of(self.v1), "the backup is not the layer at 1")
+
+    def test_a_layer_at_1_in_the_later_dated_shape_keeps_every_new_column(self):
+        # the later dated builds wrote the columns of 2 at user_version 1 (the Pi's layer): nothing of them is lost
+        r = copy.deepcopy(self.records[2])
+        rec = r["record"]
+        rec["cost"][0]["voices"] = {"held": 16, "basis": "probe"}
+        rec["measurements"]["grid"][0]["cost"]["voiceCurve"] = [
+            {"held": 1, "median": 11.5752, "percentile": {"p": 95, "value": 11.7705}},
+            {"held": 16, "median": 11.8682, "percentile": {"p": 95, "value": 12.3027}}]
+        q.put(rec, scope="user", offer=r["offer"], host_class=r["hostClass"], contract_dir=contract_dir(), root=self.root)
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            db.execute("PRAGMA user_version = 1")
+        before = self.counts()
+        self.open_it()
+        self.assertEqual(self.dump()[0], q.schema_version())
+        self.assertEqual(self.counts(), before)
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            self.assertIsNone(first_difference(without_sentences(rec), q.Exporter(db).export_record(1)))
+
+    def test_the_migrated_word_check_is_the_writers(self):
+        self.layer()
+        self.open_it()
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            got = sorted(db.execute("SELECT tbl, col, domain, item FROM word_check").fetchall())
+        self.assertEqual(got, sorted(tuple(r) for r in q.Checker(q.Domains(contract_dir())).rows()))
+
+    def test_a_record_of_plugin_qualify_0_21_3_is_then_accepted(self):
+        self.layer()
+        r = copy.deepcopy(self.records[2])
+        reason = next(x for v in r["record"]["verdicts"] for x in v["reasons"] if x["code"] == "hosting.memory.unmeasured")
+        reason["params"]["unmeasuredReason"] = "voices-unknown"
+        q.put(r["record"], scope="user", offer=r["offer"], host_class=r["hostClass"], contract_dir=contract_dir(), root=self.root)
+        self.assertEqual(self.counts()["record"], len(self.records))
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT word FROM reason_param WHERE name = 'unmeasuredReason'").fetchall(), [("voices-unknown",)])
+
+    def test_a_second_open_changes_nothing(self):
+        self.layer()
+        self.open_it()
+        once = self.dump()
+        self.open_it()
+        self.assertEqual(self.dump(), once)
+
+    def test_a_word_no_item_holds_is_refused_by_name_and_the_layer_kept(self):
+        self.layer("UPDATE reason SET code = 'hosting.memory.renamed-away' WHERE code = 'hosting.memory.unmeasured';")
+        before = self.dump()
+        with self.assertRaises(q.Refusal) as cm:
+            self.open_it()
+        self.assertEqual(cm.exception.name, "migration-word-unknown")
+        self.assertIn("reason.code holds the word 'hosting.memory.renamed-away'", str(cm.exception))
+        self.assertEqual(self.dump(), before)
+
+    def test_a_word_the_step_renames_is_renamed_and_without_the_line_refused(self):
+        old = "hosting.memory.renamed-away"
+        self.layer(f"UPDATE reason SET code = '{old}' WHERE code = 'hosting.memory.unmeasured';")
+        steps = os.path.join(self.tmp, "migrations")
+        os.makedirs(steps)
+        with open(os.path.join(REPO, "schema", "migrations", "1-to-2.sql"), encoding="utf-8") as f:
+            script = f.read()
+        line = f"UPDATE v1_reason SET code = 'hosting.memory.unmeasured' WHERE code = '{old}';\n"
+        mark = "-- the words renamed from 1 to 2, one UPDATE a word: none (see the header)\n"
+        self.assertIn(mark, script)
+        checker = q.Checker(q.Domains(contract_dir()))
+        with open(os.path.join(steps, "1-to-2.sql"), "w", encoding="utf-8") as f:
+            f.write(script.replace(mark, mark + line))
+        q.migrate(self.db, 1, 2, checker, migrations=steps)
+        with contextlib.closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM reason WHERE code = ?", (old,)).fetchone(), (0,))
+        os.unlink(self.db)
+        self.layer(f"UPDATE reason SET code = '{old}' WHERE code = 'hosting.memory.unmeasured';")
+        with open(os.path.join(steps, "1-to-2.sql"), "w", encoding="utf-8") as f:
+            f.write(script)
+        with self.assertRaises(q.Refusal) as cm:
+            q.migrate(self.db, 1, 2, checker, migrations=steps)
+        self.assertEqual(cm.exception.name, "migration-word-unknown")
+        self.assertIn(old, str(cm.exception))
+
+    def test_a_layer_of_a_version_no_step_reaches_is_refused(self):
+        self.layer("PRAGMA user_version = 7;")
+        with self.assertRaises(q.Refusal) as cm:
+            self.open_it()
+        self.assertEqual(cm.exception.name, "schema-other")
 
 
 class Command(Layer):

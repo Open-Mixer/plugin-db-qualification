@@ -49,9 +49,8 @@ def main(argv):
         sp.add_argument("--host-class", required=True)
         sp.add_argument("--root", help="TEST ONLY: the directory that holds the layer file, in place of the scope's")
         sp.add_argument("--schema", help="the DDL, in place of the installed one")
-        if verb == "put":
-            sp.add_argument("--contract-dir", help="the installed contract directory: <domain>/<domain>.json")
-        else:
+        sp.add_argument("--contract-dir", help="the installed contract directory: <domain>/<domain>.json")
+        if verb == "delete":
             sp.add_argument("--sha256", required=True)
             sp.add_argument("--format", required=True)
             sp.add_argument("--uri", required=True)
@@ -66,7 +65,7 @@ def main(argv):
                   root=a.root, schema=a.schema)
         else:
             q.delete(scope=a.scope, sha256=a.sha256, format=a.format, uri=a.uri, offer=a.offer, host_class=a.host_class,
-                     root=a.root, schema=a.schema)
+                     root=a.root, schema=a.schema, contract_dir=contract_dir(a.contract_dir))
     except q.Refusal as e:
         print(f"{NAME}: refused: {e}", file=sys.stderr)
         return 1

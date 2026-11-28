@@ -73,11 +73,9 @@ column against the owner's installed domain. Nothing is copied into this reposit
 - `machine` and `probe`: plugin-hostd.
 - plugin-db's own domain: the plugin formats.
 
-The hosting words are the one exception, until omx-clap-core publishes a `hosting` domain.
-They are the codes of the installed omx-clap-core contract package
-(`hosting.json` and `hosting/*.json` under its contract directory). The writer reads them from there and refuses a hosting
-word that package does not hold. The store records them as the domain `hosting`, at that package's version. The reader
-passes over the hosting columns this pass.
+The hosting words are omx-clap's `hosting` domain (`<contractdir>/hosting/hosting.json`, which omx-clap-contract ships), read
+as every other domain: the writer refuses a hosting word the domain does not hold, and the store records the domain at its
+version. The reader checks the hosting columns against it as every other column (the spec's hosting exception has ended).
 
 The contract directory is the one omx-contract installs. The writer takes `--contract-dir`, then `OMX_CONTRACT_PATH`,
 then the `contractdir` of `libomx-domain.pc`.
@@ -96,8 +94,8 @@ spec: `path-absolute`, `binary-not-in-files`, `key-not-the-binary`, `files-unord
 
 ## Building
 
-The reader is built with `make` and tested with `make check`. It needs a C compiler, `sqlite3` 3.37.0 or later and
-`libomx-domain` from omx-contract 3.20.0 or later, found by `pkg-config`. `make install DESTDIR=... PREFIX=/usr`
+The reader is built with `make` and tested with `make check`. It needs a C compiler, `sqlite3` 3.37.0 or later (the first with
+`STRICT` tables) and `libomx-domain` from omx-contract, found by `pkg-config`. `make install DESTDIR=... PREFIX=/usr`
 installs the library, the command, the header, the `.pc`, the DDL and the writer.
 
 The base is built by `tools/records-db.py --records records --out qualification.sqlite --contract-dir <dir>`. The
@@ -118,7 +116,10 @@ the base holds no openmixer-console verdict. The record files keep them; the bas
 
 ## Packaging rules
 
-- A package states its dependencies as floors. No upper limit is set anywhere.
+- No OpenMixer package is named with a version written by hand: no floor and no ceiling. The build installs the lower
+  levels' published packages; the libraries' runtime dependencies are generated (soname, and on RPM the `.pc` file's),
+  and the only versioned relations to this source's own packages are `=` between them. A third-party floor stays where
+  it is an API fact of that project: sqlite 3.37.0, the first with `STRICT` tables.
 - No package of this source has Provides, Replaces, Breaks, Conflicts or Obsoletes. Not on another package of this
   source, and not on the older per-set package names. Those names are pruned from the channel. `tools/sets.py check` and
   `tools/test_no_relations.py` refuse a relation.
@@ -127,9 +128,12 @@ the base holds no openmixer-console verdict. The record files keep them; the bas
 ## Release
 
 A tag `v<version>` runs `.github/workflows/release.yml`. It builds the packages for the architectures
-`packaging/release-arches` names and publishes them into the OpenMixer channel. The version is the date and the day's
-serial, `YYYYMMDDXX`, for example `2026103001`. A number is never used twice. The tag, the spec's `Version` and the top
-`debian/changelog` entry are the same number, and `tools/sets.py check` holds them together.
+`packaging/release-arches` names and publishes them into the OpenMixer channel. The version is `0.MAJOR.MINOR`, as
+every OpenMixer package's until 1.0: MAJOR moves on a change a consumer must follow, MINOR on a compatible one (new
+records are one). The date and the day's serial, `YYYYMMDDXX`, is the RPM `Release`, so a build is `0.1.0-2026112601`.
+The tag (`v0.1.0`), the spec's `Version` and the top `debian/changelog` entry are the same version, and
+`tools/sets.py check` holds them together and refuses a dated `Version` or a `Release` that is not the stamp. A Debian
+native source carries no revision, so the deb is the bare version.
 
 A manual run with `publish=false` builds everything and publishes nothing.
 
@@ -143,14 +147,14 @@ tools/sets.py import <class> <set> <out-dir> --provenance <file>
 ```
 
 The import adds `records/<class>/<set>/` and runs `tools/check-records.py` on it. It refuses a set that already exists
-(`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then run
-`tools/sets.py spec`, and release the records package under a new date version.
+(`set-exists`), an unknown class, and any file or set that fails the check; a refusal leaves the tree as it was. Then release
+the records package under a new MINOR version with that day's stamp.
 
 `tools/build-package.sh` builds such a set from a run's qualification directories:
 
 ```
 tools/build-package.sh --from-run <run> --provenance provenance.json \
-    --version <YYYYMMDDXX> --host-class <class> --set <set>
+    --version <0.MAJOR.MINOR> --release <YYYYMMDDXX> --host-class <class> --set <set>
 ```
 
 Every `b<rate>-<quantum>/qualification` of the run becomes the set `<set>-<rate>-<quantum>`. `provenance.json` holds what

@@ -1,10 +1,15 @@
 """The development packages carry what plugin-qualification-db.pc requires.
 
 pkg-config --cflags and --libs on the reader resolve every module of the
-.pc file's Requires.private, so the -dev (deb) and -devel (rpm) package
-must pull each module's own development package, at the floor the build
-uses. A module with no development package named here fails the test, so
-a new Requires.private entry cannot be added without its packaging.
+.pc file's Requires.private, so the -dev (deb) package must pull each
+module's own development package. On RPM, rpm generates the -devel
+package's pkgconfig(<module>) requirements from the .pc file itself, so
+the spec types none for an OpenMixer module. No OpenMixer relation
+carries a hand-written version (devel wave 2026-11-24); a third-party
+module keeps its floor (sqlite 3.37.0, STRICT tables), the same in
+Build-Depends/BuildRequires and in the development package. A module with no development package named here
+fails the test, so a new Requires.private entry cannot be added without
+its packaging.
 """
 import os
 import re
@@ -17,6 +22,8 @@ DEV = {
     "sqlite3": ("libsqlite3-dev", "sqlite-devel"),
     "libomx-domain": ("libomx-domain-dev", "libomx-domain-devel"),
 }
+# third-party modules: their floor is an API fact of that project and stays (kept: third-party)
+THIRD_PARTY = {"sqlite3"}
 
 
 def read(path):
@@ -40,14 +47,13 @@ def deb_field(stanza_start, field):
     return " ".join(m.group(1).split()) if m else ""
 
 
-def floor(rel, name):
-    m = re.search(re.escape(name) + r"\s*\(>=\s*([^)\s]+)\)", rel)
-    return m.group(1) if m else None
+def names(rel):
+    return [x.strip().split()[0] for x in rel.split(",") if x.strip()]
 
 
-def rpm_lines(prefix):
-    return [l.strip() for l in read("packaging/plugin-qualification-records.spec").splitlines()
-            if l.startswith(prefix)]
+def entry(rel, name):
+    """The entry of <name> in a relation field, as written ("libsqlite3-dev (>= 3.37.0)", "libomx-domain-dev")."""
+    return next((x.strip() for x in rel.split(",") if x.strip().split()[0] == name), None)
 
 
 def rpm_dev_requires():
@@ -70,23 +76,29 @@ class DevRequires(unittest.TestCase):
         bdep = deb_field("Source:", "Build-Depends")
         for mod in pc_modules():
             pkg = DEV[mod][0]
-            want = floor(bdep, pkg)
-            self.assertIsNotNone(want, f"{pkg}: not in Build-Depends with a floor")
-            self.assertEqual(floor(dep, pkg), want,
-                             f"libplugin-qualification-db-dev does not Depend on {pkg} (>= {want}), "
-                             f"which the .pc file's {mod} needs")
+            want = entry(bdep, pkg)
+            self.assertIsNotNone(want, f"{pkg}: not in Build-Depends")
+            self.assertEqual(entry(dep, pkg), want,
+                             f"libplugin-qualification-db-dev does not Depend on {want}, which the .pc file's {mod} needs")
+            if mod not in THIRD_PARTY:
+                self.assertEqual(want, pkg, f"{want}: an OpenMixer package is named with no version")
 
     def test_rpm_devel_requires(self):
+        """An OpenMixer module is not typed (rpm generates pkgconfig(<module>) from the .pc); a third-party one carries
+        the BuildRequires floor."""
         req = rpm_dev_requires()
-        breq = rpm_lines("BuildRequires:")
+        breq = [l.split(":", 1)[1].strip() for l in read("packaging/plugin-qualification-records.spec").splitlines()
+                if l.startswith("BuildRequires:")]
         for mod in pc_modules():
             pkg = DEV[mod][1]
-            b = [l for l in breq if re.search(r"\b" + re.escape(pkg) + r"\s*>=", l)]
-            self.assertTrue(b, f"{pkg}: not in BuildRequires with a floor")
-            want = re.search(re.escape(pkg) + r"\s*>=\s*(\S+)", b[0]).group(1)
-            self.assertIn(f"{pkg} >= {want}", req,
-                          f"libplugin-qualification-db-devel does not Require {pkg} >= {want}, "
-                          f"which the .pc file's {mod} needs")
+            b = [l for l in breq if l.split()[0] == pkg]
+            self.assertEqual(len(b), 1, f"{pkg}: not in BuildRequires")
+            typed = [r for r in req if r.split()[0] == pkg]
+            if mod in THIRD_PARTY:
+                self.assertEqual(typed, b, f"libplugin-qualification-db-devel does not Require {b[0]}")
+            else:
+                self.assertEqual(b, [pkg], f"{b[0]}: an OpenMixer package is named with no version")
+                self.assertEqual(typed, [], f"libplugin-qualification-db-devel types {pkg}: rpm generates pkgconfig({mod})")
 
 
 if __name__ == "__main__":

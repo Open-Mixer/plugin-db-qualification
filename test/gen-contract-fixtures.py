@@ -5,7 +5,7 @@
 loader reads (<dir>/<domain>/<last segment>.json), holding the words the fixture stores use. They are committed;
 this script is how they were made and how to change them. Three directories:
 
-  contract-good              every domain, the words the stores hold, qualification at 1.1.0
+  contract-good              every domain (hosting too), the words the stores hold, qualification at 1.1.0
   contract-no-conditional    the same, but the rating word `conditional` is not in QUALIFICATION_MEASUREMENT_VERDICT_RATINGS
   contract-old               the same as good, but qualification at 1.0.0 (a store checked against 1.1.0 is too new for it)
 """
@@ -13,6 +13,12 @@ import json, os, re, sys
 
 WORDS = {
     "plugin-db": ("1.0.0", {"PLUGIN_DB_ADDRESS_FORMATS": ["clap", "lv2"]}),
+    # omx-clap's hosting domain (omx-clap-core's contract.d/hosting): the three of its HOSTING_<group>_CODES items the
+    # fixture stores name, each holding words of the published item, at the published version
+    "hosting": ("0.1.0", {
+        "HOSTING_COST_CODES": ["hosting.cost.above-ceiling", "hosting.cost.within-ceiling"],
+        "HOSTING_MEMORY_CODES": ["hosting.memory.above-ceiling", "hosting.memory.within-ceiling"],
+        "HOSTING_LATENCY_CODES": ["hosting.latency.resolved", "hosting.latency.unmeasured"]}),
     "machine": ("1.0.0", {
         "MACHINE_ARCHES": ["aarch64", "x86_64"],
         "MACHINE_FAMILIES": ["cortex-a76", "zen4"],
@@ -42,7 +48,10 @@ WORDS = {
         "QUALIFICATION_VERDICT_HOSTINGS": ["isolated", "in-process"],
         "QUALIFICATION_VERDICT_ARMS": ["declaration", "run"],
         "QUALIFICATION_ADAPTER_CODE_KINDS": ["resp", "signal", "no-jack-client"],
-        "QUALIFICATION_MEMORY_BOUND_OUTCOMES": ["probe.oom"]}),
+        "QUALIFICATION_MEMORY_BOUND_OUTCOMES": ["probe.oom"],
+        # the two items a migrated user layer (schema/migrations/1-to-2.sql) adds to word_check
+        "QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS": ["voices-unknown", "not-attempted"],
+        "QUALIFICATION_MEASUREMENT_VOICE_BASES": ["declared", "probe"]}),
 }
 
 def camel(w):
@@ -59,13 +68,13 @@ def doc(domain, version, items):
                       for i, w in enumerate(words)]}
     return {"$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": "https://openmixer.org/contract/" + domain,
+            "x-omx-contract": "0.23",
             "info": {"title": "The %s fixture" % domain, "version": version, "x-owner": "fixture",
                      "x-stability": "experimental"},
             "components": {"schemas": schemas}}
 
 def write(root, variant):
-    # no hosting domain: this pass the hosting codes stay in omx-clap-core's data/hosting*.json (the store's hosting
-    # exception); the reader skips them, and hosting-skip-ends fails if a hosting domain document is written here
+    # every domain the fixture stores name, hosting among them (the hosting exception of section 3.4 has ended)
     for domain, (version, items) in WORDS.items():
         items = {k: list(v) for k, v in items.items()}
         if variant == "no-conditional" and domain == "qualification":

@@ -10,7 +10,6 @@ builder (tools/records-db.py) imports.
 The module reads no environment variable and knows no list of words: the words come from the contract directory the
 caller passes.
 """
-import glob
 import json
 import os
 import pwd
@@ -25,15 +24,15 @@ ROOT = os.path.dirname(HERE)
 SCHEMA_SQL = os.path.join(HERE, "qualification.sql")
 if not os.path.exists(SCHEMA_SQL):
     SCHEMA_SQL = os.path.join(ROOT, "schema", "qualification.sql")
+# the migrations, <from>-to-<to>.sql: beside the DDL (plugin-qualification-db-schema's migrations/), in schema/ of a checkout
+MIGRATIONS = os.path.join(os.path.dirname(SCHEMA_SQL), "migrations")
 RECORD_SCHEMA = "plugin-qualify.qualification-record/1"
 DOMAINS = ("qualification", "machine", "probe", "plugin-db", "hosting")
-# the first four are domain documents: <contractdir>/<domain>/<domain>.json. `hosting` is the one exception (the owner froze
-# vocabulary moves on 2026-11-19): its words are the codes of the package omx-clap-core (its data/hosting.json and
-# data/hosting/*.json, items of kind codes), installed by its `make install-contract` as
-# <contractdir>/<schema major>/omx-clap-core/; store_domain holds hosting at the version of that package's MANIFEST.json.
-HOSTING = "hosting"
-HOSTING_PACKAGE = "omx-clap-core"
-DOCUMENT_DOMAINS = tuple(d for d in DOMAINS if d != HOSTING)
+# every one is a domain document: <contractdir>/<domain>/<domain>.json, at its info.version. `hosting` is omx-clap's domain
+# (omx-clap-core's contract.d/hosting, shipped by omx-clap-contract since 0.35.0): its items HOSTING_<group>_CODES hold the
+# hosting.* words as each one's const, as every other domain does. The contract package omx-clap (<contractdir>/omx-clap/,
+# its data/hosting.json of items of kind codes, which held them before) is no source of words, and nothing falls back to it.
+DOCUMENT_DOMAINS = DOMAINS
 
 
 class Refusal(Exception):
@@ -104,12 +103,15 @@ class Arr:
 
 
 class Map:
-    """An object of named values: rows of (name, number | word) or (name, value)."""
+    """An object of named values: rows of (name, number | word) or (name, value). `named` maps a name the map can hold
+    that is no value of its rows to a node of its own (a Leaf, a Sentence): the adapter pass's content, a name list,
+    and its problem, prose (section 9, ruling 12). Exported after the rows, in the order of `named`."""
 
     def __init__(self, table, by=(("record_id", "record_id"),), always=False, flag=None, kind="param", cols=("name", "version"),
-                 const=None):
+                 const=None, named=None):
         self.table, self.by, self.always, self.flag, self.kind, self.cols = table, tuple(by), always, flag, kind, cols
         self.const = const or {}
+        self.named = named or {}
         self.req = always
 
 
@@ -165,6 +167,12 @@ def _cell():
                 "capacity": O(c, "voices_capacity", "int"),
                 "held": O(c, "voices_held", "int"),
             }),
+            "voiceCurve": Arr("cell_voice_point", Obj({
+                "held": L("cell_voice_point", "held", "int"),
+                "median": L("cell_voice_point", "median", "real"),
+                "percentile": Obj({"p": L("cell_voice_point", "percentile_p", "int"),
+                                   "value": L("cell_voice_point", "percentile_value", "real")}, req=True),
+            }), by=(("record_id", "record_id"), ("cell_ord", "ord"))),
         }),
         "memory": Obj({
             "afterInstantiateKb": O(c, "mem_after_instantiate_kb", "int"),
@@ -187,9 +195,10 @@ def _cell():
             "swept": L(c, "rt_swept", "bool"),
             "sweepApplicable": L(c, "rt_sweep_applicable", "bool"),
             "blocks": L(c, "rt_blocks", "int"),
-            "allocations": L(c, "rt_allocations", "int"),
-            "locks": L(c, "rt_locks", "int"),
-            "syscalls": L(c, "rt_syscalls", "int"),
+            # all three or none (the DDL's CHECK): a cell whose sweep did not count carries none
+            "allocations": O(c, "rt_allocations", "int"),
+            "locks": O(c, "rt_locks", "int"),
+            "syscalls": O(c, "rt_syscalls", "int"),
             "threadViolations": O(c, "rt_thread_violations", "int"),
             "processErrors": O(c, "rt_process_errors", "int"),
             "ownThreads": O(c, "rt_own_threads", "int"),
@@ -199,7 +208,7 @@ def _cell():
                 "syscalls": O(c, "rt_other_syscalls", "int"),
             }),
             "events": Arr("cell_event", Leaf("cell_event", "event", "text", True),
-                          by=(("record_id", "record_id"), ("cell_ord", "ord")), always=True),
+                          by=(("record_id", "record_id"), ("cell_ord", "ord")), flag=(c, "rt_events")),
         }, anchor=("cell", "rt_interposer")),
         "noteSweep": Obj({
             "applicable": O(c, "note_sweep_applicable", "bool"),
@@ -315,6 +324,11 @@ def _record():
             "host": L("cost_entry", "host"),
             "rate": L("cost_entry", "rate", "int"),
             "quantum": L("cost_entry", "quantum", "int"),
+            "voices": Obj({
+                "basis": O("cost_entry", "voices_basis"),
+                "capacity": O("cost_entry", "voices_capacity", "int"),
+                "held": O("cost_entry", "voices_held", "int"),
+            }),
             "reasons": _reasons("cost_ord"),
         }), always=True),
         "tiers": Obj({
@@ -357,7 +371,9 @@ def _record():
             "code": O(r, "adapter_code"),
             "measuredAt": O(r, "adapter_measured_at"),
             "versions": Map("record_version", kind="text", cols=("name", "version"), const={"rejudged": 0}),
-            "params": Map("adapter_param", flag=(r, "adapter_params")),
+            "params": Map("adapter_param", flag=(r, "adapter_params"), named={
+                "content": O(r, "adapter_content"), "loaded": O(r, "adapter_loaded"), "refused": O(r, "adapter_refused"),
+                "problem": Sentence()}),
             "cells": Arr("adapter_cell", Obj({
                 "rate": L("adapter_cell", "rate", "int"),
                 "quantum": L("adapter_cell", "quantum", "int"),
@@ -422,6 +438,8 @@ _PROBE_OUT = [("probe", "PROBE_OUTCOMES"), _q("MEMORY_BOUND_OUTCOMES")]
 _RATING = [_q("MEASUREMENT_VERDICT_RATINGS")]
 _DIM = [_q("MEASUREMENT_DIMENSIONS")]
 _PROFILE = [_q("HOST_PROFILES")]
+# a param word is a figure word, or the unmeasured reason of a figure that was not measured (unmeasuredReason)
+_PARAM_WORDS = [_q("REASON_PARAM_WORDS"), _q("MEASUREMENT_UNMEASURED_REASONS")]
 
 WORDS = {
     ("plugin", "format"): [("plugin-db", "PLUGIN_DB_ADDRESS_FORMATS")],
@@ -475,13 +493,14 @@ WORDS = {
     ("reason_param", "name"): [_q("REASON_PARAMS")],
     ("adapter_param", "name"): [_q("REASON_PARAMS")],
     ("adapter_cell_param", "name"): [_q("REASON_PARAMS")],
-    ("reason_param", "word"): [_q("REASON_PARAM_WORDS")],
-    ("adapter_param", "word"): [_q("REASON_PARAM_WORDS")],
-    ("adapter_cell_param", "word"): [_q("REASON_PARAM_WORDS")],
+    ("reason_param", "word"): _PARAM_WORDS,
+    ("adapter_param", "word"): _PARAM_WORDS,
+    ("adapter_cell_param", "word"): _PARAM_WORDS,
     ("tier", "tier"): [_q("RECORD_TIERS")],
     ("cell", "latency_unmeasured_reason"): [_q("MEASUREMENT_UNMEASURED_REASONS")],
     ("cell", "mem_unmeasured_reason"): [_q("MEASUREMENT_UNMEASURED_REASONS")],
     ("cell", "voices_basis"): [_q("MEASUREMENT_VOICE_BASES")],
+    ("cost_entry", "voices_basis"): [_q("MEASUREMENT_VOICE_BASES")],
     ("cell", "mem_basis"): [_q("MEASUREMENT_VOICE_BASES")],
     ("cell", "mem_limit_mechanism"): [_q("MEMORY_LIMIT_MECHANISMS")],
     ("cell", "note_sweep_dialect"): [_q("NOTE_SWEEP_DIALECTS")],
@@ -516,30 +535,6 @@ class Domains:
                 raise Refusal("contract.domain.invalid", f"{path}: {e}") from e
             for name, item in schemas.items():
                 self.items[(dom, name)] = [o["const"] for o in item.get("oneOf", []) if "const" in o]
-        self._hosting(contract_dir)
-
-    def _hosting(self, contract_dir):
-        """The package's own files: <contractdir>/<schema major>/omx-clap-core/{hosting.json, hosting/*.json, MANIFEST.json}.
-        An item of kind codes holds its words as the `code` of each of its `codes`; the version is the MANIFEST's."""
-        found = sorted(glob.glob(os.path.join(glob.escape(contract_dir), "[0-9]*", HOSTING_PACKAGE, "MANIFEST.json")))
-        if not found:
-            raise Refusal("contract.domain.absent", f"{contract_dir}: the package {HOSTING_PACKAGE} is not in the contract "
-                          f"directory (<schema major>/{HOSTING_PACKAGE}/MANIFEST.json): the hosting words are its codes")
-        if len(found) > 1:
-            raise Refusal("contract.domain.invalid", f"{found[0]} and {found[1]}: the package {HOSTING_PACKAGE} is installed twice")
-        pkg = os.path.dirname(found[0])
-        try:
-            with open(found[0], encoding="utf-8") as f:
-                self.version[HOSTING] = json.load(f)["version"]
-            files = [os.path.join(pkg, "hosting.json")] + sorted(glob.glob(os.path.join(glob.escape(pkg), "hosting", "*.json")))
-            for path in files:
-                with open(path, encoding="utf-8") as f:
-                    doc = json.load(f)
-                for name, item in doc.items():
-                    if isinstance(item, dict) and item.get("kind") == "codes":
-                        self.items[(HOSTING, name)] = [c["code"] for c in item["codes"].values()]
-        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
-            raise Refusal("contract.domain.invalid", f"{pkg}: {e}") from e
 
     def resolve(self, column_items):
         """[(domain, item)] of a column, the hosting pattern expanded; refused when an item is not in its domain."""
@@ -718,6 +713,9 @@ class Emitter:
             scope.rows[node.flag[0]][node.flag[1]] = 1
         for name, val in v.items():
             p = f"{path}.{name}"
+            if name in node.named:
+                self.emit(node.named[name], val, scope, p)
+                continue
             cols = dict(node.const)
             if node.kind == "param":
                 cols["name"] = name
@@ -850,8 +848,123 @@ def layer_path(scope, root=None):
     return os.path.join(pwd.getpwuid(os.geteuid()).pw_dir, USER_LAYER)
 
 
-def _open_layer(path, version):
-    """An existing layer, opened read-write with foreign keys on, and checked: a store of this version, a user layer."""
+def migration(got, version, migrations=None):
+    """The script that takes a store from user_version `got` to `version`, or None: one step, <got>-to-<version>.sql."""
+    path = os.path.join(migrations or MIGRATIONS, f"{got}-to-{version}.sql")
+    return path if os.path.isfile(path) else None
+
+
+def stored_words(db, checker):
+    """[(table, column, word)] of every word the layer holds that none of its column's items holds, in order."""
+    tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    out = []
+    for (tbl, col) in sorted(WORDS):
+        if tbl not in tables:
+            continue
+        for (w,) in db.execute(f'SELECT DISTINCT "{col}" FROM "{tbl}" WHERE "{col}" IS NOT NULL ORDER BY 1'):
+            if not (isinstance(w, str) and checker.ok(tbl, col, w)):
+                out.append((tbl, col, w))
+    return out
+
+
+def migrate(path, got, version, checker, schema=None, migrations=None):
+    """The layer at user_version `got` taken to `version` in place, in one transaction, after a backup copy beside it
+    (<layer>.user_version-<got>, SQLite's backup). Every table T moves aside to v1_T, gains the columns of the new T it
+    lacks, the step's script runs over the v1_ tables, the DDL runs, every row is copied column by column and the v1_
+    tables are dropped; the foreign keys and every word are checked against the installed domains (`checker`) before
+    COMMIT. A word none of its column's items holds, which the step does not rename, is refused by name
+    (migration-word-unknown) and the layer is left as it was; so is a store with no step to `version` (schema-other),
+    and a table of the old layer the new DDL has no place for (schema-refused)."""
+    script = migration(got, version, migrations)
+    if script is None:
+        raise Refusal("schema-other", f"{path}: user_version {got}, this writer writes {version} and has no migration from {got}")
+    with open(script, encoding="utf-8") as f:
+        step = f.read()
+    with open(schema or SCHEMA_SQL, encoding="utf-8") as f:
+        ddl = f.read()
+    new = sqlite3.connect(":memory:")
+    new.executescript(ddl)
+    tables = [r[0] for r in new.execute("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid")]
+    cols = {t: [(r[1], r[2]) for r in new.execute(f'PRAGMA table_info("{t}")')] for t in tables}
+    new.close()
+    db = sqlite3.connect(path, isolation_level=None)
+    try:
+        backup = sqlite3.connect(f"{path}.user_version-{got}")
+        try:
+            db.backup(backup)
+        finally:
+            backup.close()
+        db.execute("PRAGMA foreign_keys = OFF")
+        db.execute("PRAGMA legacy_alter_table = ON")
+        db.execute("BEGIN EXCLUSIVE")
+        try:
+            if db.execute("PRAGMA user_version").fetchone()[0] != got:   # another writer migrated it meanwhile
+                db.execute("ROLLBACK")
+                return
+            for kind, name in db.execute("SELECT type, name FROM sqlite_master WHERE type IN ('index', 'trigger') "
+                                         "AND sql IS NOT NULL").fetchall():
+                db.execute(f'DROP {kind.upper()} "{name}"')
+            old = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
+            for t in old:
+                db.execute(f'ALTER TABLE "{t}" RENAME TO "v1_{t}"')
+            for t in tables:
+                if t not in old:
+                    continue
+                have = {r[1] for r in db.execute(f'PRAGMA table_info("v1_{t}")')}
+                for c, ty in cols[t]:
+                    if c not in have:
+                        db.execute(f'ALTER TABLE "v1_{t}" ADD COLUMN "{c}" {ty}')
+            for stmt in _statements(step):
+                db.execute(stmt)
+            left = [t for t in old if t not in tables and
+                    db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (f"v1_{t}",)).fetchone()]
+            if left:
+                raise Refusal("schema-refused", f"{path}: the migration from {got} has no place for the table {left[0]}")
+            for stmt in _statements(ddl):
+                db.execute(stmt)
+            for t in tables:
+                if t in old:
+                    names = ", ".join(f'"{c}"' for c, _ in cols[t])
+                    db.execute(f'INSERT INTO "{t}" ({names}) SELECT {names} FROM "v1_{t}"')
+            for t in old:
+                db.execute(f'DROP TABLE "v1_{t}"')
+            bad = db.execute("PRAGMA foreign_key_check").fetchall()
+            if bad:
+                raise Refusal("schema-refused", f"{path}: the migration from {got} leaves foreign keys unmet: {bad[:3]}")
+            unknown = stored_words(db, checker)
+            if unknown:
+                t, c, w = unknown[0]
+                raise Refusal("migration-word-unknown", f"{path}: {t}.{c} holds the word {w!r}, which no item of "
+                              f"{checker.describe(t, c)} holds and no migration from {got} renames")
+            db.execute(f"PRAGMA user_version = {version}")
+            db.execute("COMMIT")
+        except BaseException:
+            if db.in_transaction:
+                db.execute("ROLLBACK")
+            raise
+    except sqlite3.DatabaseError as e:
+        raise Refusal("schema-refused", f"{path}: the migration from {got}: {e}") from e
+    finally:
+        db.close()
+
+
+def _statements(sql):
+    """The complete statements of a script, in order (sqlite3.complete_statement splits them)."""
+    out, buf = [], ""
+    for line in sql.splitlines(keepends=True):
+        buf += line
+        if sqlite3.complete_statement(buf):
+            if buf.strip():
+                out.append(buf)
+            buf = ""
+    if buf.strip() and not all(l.strip().startswith("--") or not l.strip() for l in buf.splitlines()):
+        raise Refusal("schema-unreadable", f"an incomplete statement: {buf.strip()[:60]!r}")
+    return out
+
+
+def _open_layer(path, version, checker=None, schema=None):
+    """An existing layer, opened read-write with foreign keys on, and checked: a store of this version, a user layer. A
+    layer of an older version that a migration takes to this one is migrated first (migrate)."""
     try:
         db = sqlite3.connect(path, isolation_level=None)
         db.execute("PRAGMA foreign_keys = ON")
@@ -859,6 +972,10 @@ def _open_layer(path, version):
         if got == 0:
             db.close()
             raise Refusal("not-a-store", f"{path}: user_version 0: not a qualification store")
+        if got != version and 0 < got < version and checker is not None and migration(got, version):
+            db.close()
+            migrate(path, got, version, checker, schema)
+            return _open_layer(path, version)
         if got != version:
             db.close()
             raise Refusal("schema-other", f"{path}: user_version {got}, this writer writes {version}")
@@ -914,7 +1031,7 @@ def put(rec, *, scope, offer, host_class, contract_dir, root=None, schema=None):
     extra = dict(set_id=None, host_class=host_class, offer=offer, name=pf[: -len(suffix)])
     outdir = os.path.dirname(os.path.abspath(path))
     if os.path.exists(path):
-        db = _open_layer(path, version)
+        db = _open_layer(path, version, checker, schema)
         try:
             db.execute("BEGIN IMMEDIATE")
             try:
@@ -979,15 +1096,17 @@ def _write(cur, domains, checker, rows, p, extra, label):
         raise Refusal("schema-refused", f"{label}: {e}") from e
 
 
-def delete(*, scope, sha256, format, uri, offer, host_class, root=None, schema=None):
+def delete(*, scope, sha256, format, uri, offer, host_class, root=None, schema=None, contract_dir=None):
     """The layer's record of a shadow key, in one transaction. A key the layer does not hold, and a layer that is not
-    there, are no error and change nothing. Nothing is deleted from the base: it is no layer of a scope."""
+    there, are no error and change nothing. Nothing is deleted from the base: it is no layer of a scope. A layer of an
+    older version is migrated first, its words checked against `contract_dir`'s domains."""
     if not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256):
         raise Refusal("field-type", f"--sha256: {sha256!r} is not 64 lower-case hex digits")
     path = layer_path(scope, root)
     if not os.path.exists(path):
         return
-    db = _open_layer(path, schema_version(schema or SCHEMA_SQL))
+    checker = Checker(Domains(contract_dir)) if contract_dir else None
+    db = _open_layer(path, schema_version(schema or SCHEMA_SQL), checker, schema)
     try:
         db.execute("BEGIN IMMEDIATE")
         try:
@@ -1083,5 +1202,9 @@ class Exporter:
                     out[r["name"]] = r["number"] if r["number"] is not None else r["word"]
                 else:
                     out[r[node.cols[0]]] = r[node.cols[1]]
+            for k, child in node.named.items():
+                v = self.build(child, scope, parent)
+                if v is not ABSENT:
+                    out[k] = v
             return out
         raise TypeError(node)

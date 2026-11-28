@@ -47,7 +47,7 @@ static void field(const char *name, const char *v, int *first)
     *first = 0;
 }
 
-typedef struct { pqdb *db; int bad; int records; char last[600]; } printer;
+typedef struct { pqdb *db; int bad; int records; char last[600]; char sets[4096]; size_t sets_len; } printer;
 
 static int print_verdict(const char *host, const pqdb_verdict *v, void *ctx)
 {
@@ -104,16 +104,42 @@ static int print_result(const pqdb_result *r, void *ctx)
     return 0;
 }
 
-/* one line a record: the results of one record are cells of one shadow key, in a row; at a cell, the record that claims it */
+/* whether the record of set at the current key is printed already; otherwise it is noted as printed. The sets of one
+   key are a few (one a tier and a measurement); a key whose set names outgrow the note is refused, never cut short. */
+static int record_seen(printer *p, const char *set)
+{
+    size_t n = strlen(set);
+    for (const char *s = p->sets; s < p->sets + p->sets_len; s += strlen(s) + 1)
+        if (strcmp(s, set) == 0)
+            return 1;
+    if (p->sets_len + n + 1 > sizeof p->sets)
+        return -1;
+    memcpy(p->sets + p->sets_len, set, n + 1);
+    p->sets_len += n + 1;
+    return 0;
+}
+
+/* one line a record: the results of one shadow key are in a row, a cell each, from the record that claims it (section 4);
+   with no cell, each set that claims a cell of the key is printed once, so no claimant is hidden behind the first (#56) */
 static int print_record(const pqdb_result *r, void *ctx)
 {
     printer *p = ctx;
     char key[600], *json = NULL;
     pqdb_error e;
+    int seen;
     snprintf(key, sizeof key, "%s/%s/%s/%s/%s/%s", r->layer, r->sha256, r->format, r->uri, r->offer, r->host_class);
-    if (strcmp(key, p->last) == 0)
+    if (strcmp(key, p->last) != 0) {
+        snprintf(p->last, sizeof p->last, "%s", key);
+        p->sets_len = 0;
+    }
+    seen = record_seen(p, r->set ? r->set : "");
+    if (seen > 0)
         return 0;
-    snprintf(p->last, sizeof p->last, "%s", key);
+    if (seen < 0) {
+        fprintf(stderr, "qualification-db.unreadable %s: more claimant sets than the command holds for one key\n", r->uri);
+        p->bad = 1;
+        return 0;
+    }
     if (pqdb_record_json(p->db, r, &json, &e) != 0) {
         fprintf(stderr, "%s %s\n", e.code ? e.code : "qualification-db.unreadable", e.message);
         p->bad = 1;

@@ -1,3 +1,72 @@
+plugin-db-qualification (0.1.2) unstable; urgency=medium
+
+  * The writer takes a reason param's word from
+    QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS too: plugin-qualify 0.21.3
+    writes the memory reason it could not measure with unmeasuredReason,
+    which the writer refused.
+  * The store is user_version 2: the DDL changed after the dated release at
+    the same number. A user layer at 1 is migrated in place by the writer
+    and the reader on open (schema/migrations/1-to-2.sql), a backup beside it.
+  * The hosting exception has ended: omx-clap ships its hosting domain, so
+    the reader opens it and checks the hosting columns as every other.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Fri, 27 Nov 2026 09:30:00 +0100
+
+plugin-db-qualification (0.1.1) unstable; urgency=medium
+
+  * The amd64 Debian package joins packaging/release-arches: the full matrix
+    serves every package in every cell (owner ruling 2026-11-26), and
+    plugin-hostd's amd64 cells build against libplugin-qualification-db-dev.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Fri, 27 Nov 2026 03:25:32 +0100
+
+plugin-db-qualification (0.1.0) unstable; urgency=medium
+
+  * The version is 0.MAJOR.MINOR, as every OpenMixer package's until 1.0;
+    the date stamp moves to the RPM Release, 0.1.0-2026112601 (#81). The
+    records and the reader are those of 2026112401. A Debian native source
+    carries no revision, so the deb is 0.1.0 and its date is this entry's.
+  * The reader's symbols are versioned from 0.1.0.
+  * tools/build-package.sh takes --version <0.MAJOR.MINOR> and
+    --release <YYYYMMDDXX>; tools/sets.py check refuses a spec whose Version
+    is not 0.MAJOR.MINOR or whose Release is not YYYYMMDDXX%{?dist}.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Thu, 26 Nov 2026 22:00:00 +0100
+
+plugin-db-qualification (2026112401) unstable; urgency=medium
+
+  * plugin-qualification-db-write reads the hosting words from the contract
+    package omx-clap, <contractdir>/3/omx-clap/, where omx-clap 0.34.0
+    installs them; it refused every put on an install of that release with
+    contract.domain.absent, so plugin-qualify-sync stored nothing (#78).
+    The name before 0.34.0, omx-clap-core, is not read.
+  * The records package builds against omx-clap-contract 0.34.0 or later,
+    and reads qualification and machine from plugin-hostd-contract 0.21.0
+    or later and probe from plugin-hostd-protocol-contract 0.8.0 or later;
+    plugin-qualify-contract, which conflicts with plugin-hostd-contract
+    0.21.1, is no build dependency.
+  * The fedora44 measuring Job's provenance names omx-clap-libs and
+    omx-clap-contract.
+  * The writer's and the base build's tests read each domain from its owner
+    (plugin-hostd, plugin-hostd-protocol) through one fixture module.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Tue, 24 Nov 2026 14:38:00 +0100
+
+plugin-db-qualification (2026112201) unstable; urgency=medium
+
+  * The record check reads the provenance words from the `qualification`
+    domain, plugin-hostd's, and the build requires plugin-hostd-contract
+    0.21.0, not plugin-qualify-contract; the omx-clap contract package
+    (omx-clap-contract 0.34.0) replaces omx-clap-core's.
+  * The records depend on plugin-qualify 0.21.0 or later on every
+    architecture (#58).
+  * Correction to the 2026112001 entry: the rpi5 wrong winner
+    (zynthian-vangelis taken at the 48000/256 and 96000/256 cells) ends
+    with plugin-qualify 0.21.0, the chain release, not 0.20.8, which was
+    cancelled as a release.
+
+ -- Pau Aliagas <linuxnow@gmail.com>  Sat, 21 Nov 2026 12:00:00 +0100
+
 plugin-db-qualification (2026112001) unstable; urgency=medium
 
   * An absent base is an empty base layer (#36): the reader opens with no

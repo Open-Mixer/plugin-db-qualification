@@ -13,6 +13,7 @@ pc=$root$libdir/pkgconfig/plugin-qualification-db.pc
 schema=$(PKG_CONFIG_PATH=$root$libdir/pkgconfig pkg-config --variable=schema plugin-qualification-db 2>&1)
 [ "$schema" = "/usr/share/plugin-qualification-db/qualification.sql" ] || note "pkg-config --variable=schema gave '$schema'"
 cmp -s "$root/usr/share/plugin-qualification-db/qualification.sql" schema/qualification.sql || note "the installed DDL is not schema/qualification.sql"
+cmp -s "$root/usr/share/plugin-qualification-db/migrations/1-to-2.sql" schema/migrations/1-to-2.sql || note "the installed migration is not schema/migrations/1-to-2.sql"
 [ -f "$root/usr/include/plugin-qualification-db/pqdb.h" ] || note "no header"
 [ -f "$root/usr/share/man/man1/plugin-qualification-db.1" ] || note "no manual page"
 for w in 'records' 'scope' 'binary\\-path' 'layer' 'counts' 'key\\-mismatch\|key-mismatch'; do

@@ -34,9 +34,9 @@ The evidence:
 - plugin-db's store (`/var/lib/plugin-db`, `$XDG_STATE_HOME/plugin-db`) holds a machine's own layers as one JSON file
   per layer and per entry, and names no place for shipped records. It is a different store with its own grammar; the
   judged layer plugin-qualify writes into it is derived from a record, not the record.
-- plugin-qualify PRODUCES the records and OWNS THEIR WORDS: the record format `plugin-qualify.qualification-record/1`
-  (`src/qualification-record.ts`) and the `qualification` domain (`contract.d/qualification/qualification.json`,
-  `info.x-owner: plugin-qualify`), shipped in `plugin-qualify-contract`. It holds no record data of its own beyond test
+- plugin-qualify PRODUCES the records and owns their format `plugin-qualify.qualification-record/1`
+  (`src/qualification-record.ts`); the `qualification` domain of their words is plugin-hostd's
+  (`contract.d/qualification/qualification.json`, `info.x-owner: plugin-hostd`), shipped in `plugin-hostd-contract`. It holds no record data of its own beyond test
   fixtures.
 
 The spec is this repository's first design spec; each is named by its date and topic.
@@ -47,7 +47,7 @@ The spec is this repository's first design spec; each is named by its date and t
 | --- | --- | --- | --- |
 | record fields and their meaning | plugin-qualify (it writes each record) | plugin-qualify, in its record format | plugin-qualify |
 | words a record holds (ratings, reasons, dimensions, bases) | plugin-qualify | plugin-qualify, in a minor of the `qualification` domain | `qualification` (plugin-qualify) |
-| hosting codes in reasons (`hosting.*`) | omx-clap-core's hosting tables, copied by plugin-qualify | omx-clap-core | omx-clap-core's installed `data/hosting*.json` this pass, its `hosting` domain after it (precondition 5 and its exception) |
+| hosting codes in reasons (`hosting.*`) | omx-clap's hosting tables, copied by plugin-qualify | omx-clap | omx-clap's `hosting` domain (precondition 5; its exception has ended) |
 | probe outcomes, steps, reasons and signals (`probe.*`) | plugin-hostd's probe | plugin-hostd | the `probe` domain (plugin-hostd), read directly (precondition 4) |
 | the outcome of plugin-qualify's own memory bound (`probe.oom`) | plugin-qualify | plugin-qualify | `qualification` (plugin-qualify) |
 | adapter codes (`<host>.<kind>[-<parameter>]`) | plugin-qualify (it composes them) | plugin-qualify | `qualification`: the host profiles and the kinds; a signal parameter is a `probe` word |
@@ -265,6 +265,9 @@ CREATE TABLE record (
   adapter_code     TEXT CHECK (adapter_code IS NULL OR WORD(adapter_code)),
   adapter_measured_at TEXT,
   adapter_params   INTEGER CHECK (adapter_params IS NULL OR adapter_params IN (0, 1)),   -- NULL: no adapter object; 1: adapter.params present
+  adapter_content  TEXT,                   -- adapter.params.content: the content parameters an instrument declares, as written (names, space-separated)
+  adapter_loaded   TEXT,                   -- adapter.params.loaded: the ones the host took, as written
+  adapter_refused  TEXT,                   -- adapter.params.refused: the ones it did not take, each with the host's answer, as written
   -- memory pass
   memory_run_measured_at TEXT, memory_run_id TEXT, memory_run_runner TEXT, memory_run_child TEXT,
   -- rejudgement
@@ -326,6 +329,8 @@ CREATE TABLE cost_entry (                  -- cost[]
   host      TEXT NOT NULL CHECK (WORD(host)),
   rate      INTEGER NOT NULL,
   quantum   INTEGER NOT NULL,
+  voices_basis    TEXT CHECK (voices_basis IS NULL OR WORD(voices_basis)),   -- cost[].voices: the notes an instrument's entry was taken with
+  voices_capacity INTEGER, voices_held INTEGER,
   PRIMARY KEY (record_id, ord)
 ) STRICT;
 
@@ -400,10 +405,13 @@ CREATE TABLE cell (                        -- measurements.grid[]
   rt_thread_violations INTEGER, rt_process_errors INTEGER,
   rt_own_threads INTEGER,                  -- threads the plugin started itself (judged under hosting.rt-safety.own-threads); NULL: not taken
   rt_other_allocations INTEGER, rt_other_locks INTEGER, rt_other_syscalls INTEGER,   -- what threads other than the audio thread did; all three or none
+  rt_events INTEGER CHECK (rt_events IS NULL OR rt_events = 1),   -- 1: rtSafety.events is present (cell_event, possibly empty); NULL: absent
   note_sweep_applicable INTEGER CHECK (note_sweep_applicable IN (0, 1)),
   note_sweep_dialect TEXT CHECK (note_sweep_dialect IS NULL OR WORD(note_sweep_dialect)),
   note_sweep_allocations INTEGER, note_sweep_locks INTEGER, note_sweep_syscalls INTEGER,
   CHECK ((rt_other_allocations IS NULL) = (rt_other_locks IS NULL) AND (rt_other_locks IS NULL) = (rt_other_syscalls IS NULL)),
+  CHECK ((rt_allocations IS NULL) = (rt_locks IS NULL) AND (rt_locks IS NULL) = (rt_syscalls IS NULL)),   -- the audio thread's counts: all three or none
+  CHECK ((rt_events IS NULL) = (rt_allocations IS NULL)),   -- the interposer's tally: its events and its counts together, or neither
   PRIMARY KEY (record_id, ord),
   UNIQUE (record_id, rate, quantum)
 ) STRICT;
@@ -413,6 +421,16 @@ CREATE TABLE cell_event (                  -- measurements.grid[].rtSafety.event
   cell_ord  INTEGER NOT NULL,
   ord       INTEGER NOT NULL,
   event     TEXT NOT NULL,                 -- a symbol name as the interposer wrote it
+  PRIMARY KEY (record_id, cell_ord, ord),
+  FOREIGN KEY (record_id, cell_ord) REFERENCES cell (record_id, ord) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE cell_voice_point (            -- measurements.grid[].cost.voiceCurve[]: an instrument's cost at each count of notes held
+  record_id INTEGER NOT NULL,
+  cell_ord  INTEGER NOT NULL,
+  ord       INTEGER NOT NULL,
+  held      INTEGER NOT NULL,              -- the notes held
+  median    REAL NOT NULL, percentile_p INTEGER NOT NULL, percentile_value REAL NOT NULL,
   PRIMARY KEY (record_id, cell_ord, ord),
   FOREIGN KEY (record_id, cell_ord) REFERENCES cell (record_id, ord) ON DELETE CASCADE
 ) STRICT;
@@ -611,30 +629,32 @@ their owners before change 2 merges:
    older rendered layout, `contract.d/3/plugin-db`) to a `plugin-db` domain, its one source, which the loader opens.
 3. **plugin-hostd: `MACHINE_FAMILIES`** in its `machine` domain (the CPU families the probe writes).
 4. **plugin-hostd: a `probe` domain** with the probe's reasons, outcomes, steps and signals, which the probe reads.
-5. **omx-clap-core: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
-   one source. Not in this pass: see the exception below.
+5. **omx-clap: a `hosting` domain** with its hosting codes, moved from `data/hosting*.json` to the domain as their
+   one source. Published: see the exception below, which has ended.
 
-**The hosting exception, this pass only (owner ruling, 2026-11-19).** omx-contract's domain render emits index macros
-only, while omx-clap-core's consumers need the hosting code strings, their sentences and the TypeScript module that
-`data/hosting*.json` renders today. So this pass omx-clap-core keeps `data/hosting*.json` as the one source of the
-hosting codes, and there is no `hosting` domain:
+**The hosting exception, ended (owner ruling of 2026-11-19; ended 2026-11-27).** omx-contract's domain render emitted
+index macros only, while omx-clap's consumers needed the hosting code strings, their sentences and the TypeScript module
+that `data/hosting*.json` rendered. So for one pass omx-clap kept `data/hosting*.json` as the one source of the hosting
+codes, there was no `hosting` domain, and the C reader did not open `hosting` and passed over every word beginning
+`hosting.`. omx-clap now ships its `hosting` domain (omx-clap-core's `contract.d/hosting`, `omx-clap-contract` 0.35.0 and
+later; on omx-clap-core's main from 0.36.0), so the exception is removed and `hosting` is read as every other domain:
 
-- **The writer** reads the hosting words from the installed omx-clap-core contract package (each `kind: codes` item of
-  `<contractdir>/3/omx-clap-core/hosting.json` and `hosting/*.json` (the schema major 3), as omx-contract's installer lays
-  it out; its words are the `code` of each entry), refuses a hosting word none of them holds exactly as for any other
-  column, writes the `store_domain` row `hosting` at that package's version (its `MANIFEST.json` `version`), and fills `word_check` for the hosting columns as for the others.
-- **The C reader** does not open `hosting` and does not check the hosting words: libomx-domain opens domain documents
-  only. A column whose only items are `hosting` items is not checked; in a column that also has other owners' items
-  (`verdict.deciding`, `tier.deciding`, `reason.code`), only a word beginning `hosting.` is passed over, and every
-  other word must be in one of the column's other items. Every other column is checked at open as below. A store's
-  hosting words are therefore checked once, by the writer, against the package it was built with.
-- **Its end.** Right after this pass, an omx-contract change lets a domain render the code strings, sentences and
-  TypeScript module, omx-clap-core moves the hosting codes to its `hosting` domain with byte-identical rendered
-  output, and the reader checks the hosting columns like every other column; this exception is then removed. The check
-  `hosting-skip-ends` holds the end: it fails when omx-clap-core's main ships a `hosting` domain document, or a
-  contract directory the tests read holds one, while the reader still skips the hosting words.
+- **The writer** reads the hosting words from omx-clap's `hosting` domain document, `<contractdir>/hosting/hosting.json`
+  (its items `HOSTING_<group>_CODES`, each word a `const`), as it reads every other domain; it refuses a hosting word
+  none of them holds, writes the `store_domain` row `hosting` at the domain's `info.version`, and fills `word_check` for
+  the hosting columns as for the others. The contract package `omx-clap` (`data/hosting*.json`, items of kind `codes`),
+  which held them before, is read no more and is no fallback; the contract directory has no schema-major level.
+- **The C reader** opens `hosting` from `store_domain` like any domain and checks the hosting columns at open like every
+  other column: a hosting word that none of the column's items holds is refused (`qualification-db.word-unknown`), in a
+  column whose only items are `hosting` items and in the mixed columns (`verdict.deciding`, `tier.deciding`,
+  `reason.code`, `history_blocked.code`) alike. A column holds up to 64 items (the hosting pattern expands to every
+  `HOSTING_<group>_CODES` item, 19 today).
+- **The check that held its end stays.** `hosting-skip-ends` fails when omx-clap's main ships a `hosting` domain
+  document while the reader holds `hosting_exception`; with the exception gone it passes, and it refuses the exception's
+  return.
 
-Change 2's build floors are the contract packages that ship these. Until they are released, change 2 stays red. The
+Change 2 builds against the contract packages that ship these, named with no version (the build installs the
+published packages). Until they are released, change 2 stays red. The
 item names below are proposed; each owner's change names them.
 
 The writer reads each domain from the installed contract directory (as docs/runtime-data.md says for Python: the
@@ -645,47 +665,47 @@ its column's items holds, naming the record file, the JSON path and the word.
 | column(s) | owner | domain | item | today |
 | --- | --- | --- | --- | --- |
 | `plugin.format` | plugin-db | `plugin-db` | `PLUGIN_DB_ADDRESS_FORMATS` (`clap`, `lv2`) | published by the plugin-db precondition; today only in `data/db.json` |
-| `record_set.host_class`, `record.host_class` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_CLASSES` (`rpi5`, `x86-64`) | added; the existing `QUALIFICATION_MACHINE_CLASSES` holds `desk`, `raspberry-pi-4`, `raspberry-pi-5`, words no record holds |
-| `record_set.tier` | plugin-qualify | `qualification` | `QUALIFICATION_SET_TIERS` (`reference`, `provisional`, `hardware`) | added |
-| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
-| `record.adapter_host` | plugin-qualify | `qualification` | `QUALIFICATION_ADAPTER_HOSTS`: the hosts an adapter runs a plugin under (`omx-clap-host`, `mod-host`, `jalv`), not the judge's profiles; plugin-qualify names its words | added |
-| `set_setting.key` | plugin-qualify | `qualification` | `QUALIFICATION_SYNC_SETTINGS` (plugin-qualify-sync's setting keys) | added |
-| `record.offer` | plugin-qualify | `qualification` | `QUALIFICATION_OFFERS` (`default`, `custom`) | added |
-| `record.pkg_format` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_FORMATS` (`deb`, `rpm`) | added (the `package` object) |
-| `record.pkg_distro` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_DISTROS` (`trixie`, `fc44`, `fc45`, ...) | added (the `package` object) |
-| `record.pkg_arch` | plugin-qualify | `qualification` | `QUALIFICATION_PACKAGE_ARCHES` (`arm64`, `amd64`, `all`, `aarch64`, `x86_64`, `noarch`) | added (the `package` object) |
+| `record_set.host_class`, `record.host_class` | plugin-hostd | `qualification` | `QUALIFICATION_HOST_CLASSES` (`rpi5`, `x86-64`) | added; the existing `QUALIFICATION_MACHINE_CLASSES` holds `desk`, `raspberry-pi-4`, `raspberry-pi-5`, words no record holds |
+| `record_set.tier` | plugin-hostd | `qualification` (plugin-hostd's domain) | `QUALIFICATION_SET_TIERS` (`reference`, `provisional`, `hardware`) | added |
+| `record_set.host_profile`, `verdict.host`, `cost_entry.host`, `tier.host` | plugin-hostd | `qualification` | `QUALIFICATION_HOST_PROFILES` (`omx-clap-host`, `openmixer-console`, ...) | added |
+| `record.adapter_host` | plugin-hostd | `qualification` | `QUALIFICATION_ADAPTER_HOSTS`: the hosts an adapter runs a plugin under (`omx-clap-host`, `mod-host`, `jalv`), not the judge's profiles; plugin-qualify names its words | added |
+| `set_setting.key` | plugin-hostd | `qualification` | `QUALIFICATION_SYNC_SETTINGS` (plugin-qualify-sync's setting keys) | added |
+| `record.offer` | plugin-hostd | `qualification` | `QUALIFICATION_OFFERS` (`default`, `custom`) | added |
+| `record.pkg_format` | plugin-hostd | `qualification` | `QUALIFICATION_PACKAGE_FORMATS` (`deb`, `rpm`) | added (the `package` object) |
+| `record.pkg_distro` | plugin-hostd | `qualification` | `QUALIFICATION_PACKAGE_DISTROS` (`trixie`, `fc44`, `fc45`, ...) | added (the `package` object) |
+| `record.pkg_arch` | plugin-hostd | `qualification` | `QUALIFICATION_PACKAGE_ARCHES` (`arm64`, `amd64`, `all`, `aarch64`, `x86_64`, `noarch`) | added (the `package` object) |
 | `record.mc_arch` | plugin-hostd | `machine` | `MACHINE_ARCHES` | exists (1.0.0) |
 | `record.mc_core_band` | plugin-hostd | `machine` | `MACHINE_CORE_BANDS` | exists |
 | `record.mc_clock_band` | plugin-hostd | `machine` | `MACHINE_CLOCK_BANDS` | exists |
 | `record.mc_family` | plugin-hostd | `machine` | `MACHINE_FAMILIES` | added by plugin-hostd in the same wave |
 | `record.probe_reason` | plugin-hostd | `probe` | `PROBE_REASONS` (`on-request`, ...) | added (precondition 4) |
-| `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd, plugin-qualify | `probe`, `qualification` | `PROBE_OUTCOMES` (the probe's: `probe.ok`, `probe.crashed`, `probe.memory-limit`, ...) and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (`probe.oom`, which plugin-qualify writes when its own RLIMIT_DATA bound ends a run) | added (preconditions 4 and 1) |
+| `record.probe_outcome`, `cell.outcome`, `probe_end.outcome`, `memory_run_cell.outcome` | plugin-hostd | `probe`, `qualification` | `PROBE_OUTCOMES` (the probe's: `probe.ok`, `probe.crashed`, `probe.memory-limit`, ...) and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (`probe.oom`, which plugin-qualify writes when its own RLIMIT_DATA bound ends a run) | added (preconditions 4 and 1) |
 | `probe_end.step` | plugin-hostd | `probe` | `PROBE_STEPS` | added (precondition 4) |
 | `probe_end.signal` | plugin-hostd | `probe` | `PROBE_SIGNALS` (`SIGSEGV`, `SIGABRT`, ...) | added (precondition 4) |
-| `record.adapter_code`, `adapter_cell.code` | plugin-qualify | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_ADAPTER_HOSTS`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
-| `verdict.rating`, `tier.rating`, `reason.rating` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
-| `verdict.hosting`, `tier_offered.tier` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`, `in-process`: the hosting paths, as `verdict.hosting` and `tiers.offeredOn[]` write them) | added |
-| `verdict.arm` | plugin-qualify | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
-| `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap-core, plugin-hostd, plugin-qualify | `hosting`, `probe`, `qualification` | the `HOSTING_*` codes items, `PROBE_OUTCOMES`, `QUALIFICATION_MEMORY_BOUND_OUTCOMES`, and an adapter code checked in parts: today's values come from all of them | added (preconditions 1, 4 and 5) |
-| `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap-core | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
-| `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
-| `reason_param.name`, `adapter_param.name`, `adapter_cell_param.name` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...; the adapter params' keys `notes`, `peak`, `quantum`, `rate`, `resp`, `step` are in it too) | added |
-| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-qualify | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`) | added |
-| `tier.tier` | plugin-qualify | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
-| `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
-| `cell.voices_basis`, `cell.mem_basis` | plugin-qualify | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
-| `cell.mem_limit_mechanism` | plugin-qualify | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
-| `cell.note_sweep_dialect` | plugin-qualify | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
-| `run_step.step` | plugin-qualify | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
-| `run_step.result` | plugin-qualify, plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...), `PROBE_OUTCOMES` and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (a step ends `probe.oom` when plugin-qualify's own bound stops it) | added |
-| `run_step.code` | plugin-qualify | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
-| `rejudged_owe.code` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
-| `rejudged_owe.measurement` | plugin-qualify | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
-| `history_verdict.host` | plugin-qualify | `qualification` | `QUALIFICATION_HOST_PROFILES` | exists |
-| `history_verdict.measured`, `.adjusted` | plugin-qualify | `qualification` | `QUALIFICATION_PIN_VERDICTS` (the `PIN_VERDICTS` of `pins-file.ts`: `in-process`, `isolated`, `refused`) | added |
-| `history_verdict.move` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_MOVES` (`demote`, `promote`, `none`) | added |
-| `history_verdict.reason` | plugin-qualify | `qualification` | `QUALIFICATION_HISTORY_REASONS` (`history.crashed`, `history.steady`, `history.no-record`, ...: `HISTORY_REASON`) | added |
-| `history_blocked.code` | plugin-qualify, omx-clap-core, plugin-hostd | `qualification`, `hosting`, `probe` | `QUALIFICATION_HISTORY_BLOCKERS` (the words `blockers()` of `history-adjust.ts` writes that are no reason code: `refused`, `unknown`, `no-deciding-reason`; plugin-qualify names them) and the items of `reason.code` | added |
+| `record.adapter_code`, `adapter_cell.code` | plugin-hostd | `qualification`, `probe` | an adapter code, checked in parts (below): `QUALIFICATION_ADAPTER_HOSTS`, `QUALIFICATION_ADAPTER_CODE_KINDS` (`resp`, `signal`, `no-jack-client`, `silent-under-note`, ...) and, for `signal`, `PROBE_SIGNALS` | added (preconditions 1 and 4) |
+| `verdict.rating`, `tier.rating`, `reason.rating` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_VERDICT_RATINGS` | exists (1.1.0) |
+| `verdict.hosting`, `tier_offered.tier` | plugin-hostd | `qualification` | `QUALIFICATION_VERDICT_HOSTINGS` (`isolated`, `in-process`: the hosting paths, as `verdict.hosting` and `tiers.offeredOn[]` write them) | added |
+| `verdict.arm` | plugin-hostd | `qualification` | `QUALIFICATION_VERDICT_ARMS` (`declaration`, `run`) | added |
+| `verdict.deciding`, `tier.deciding`, `reason.code` | omx-clap, plugin-hostd | `hosting`, `probe`, `qualification` | the `HOSTING_*` codes items, `PROBE_OUTCOMES`, `QUALIFICATION_MEMORY_BOUND_OUTCOMES`, and an adapter code checked in parts: today's values come from all of them | added (preconditions 1, 4 and 5) |
+| `not_measured.code`, `unmeasured.code`, `cell.latency_code` | omx-clap | `hosting` | the `HOSTING_*` codes items | added (precondition 5) |
+| `reason.dimension`, `unmeasured.dimension`, `not_measured.dimension` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_DIMENSIONS` | exists; the move adds `memory`, `hostAdmission` and `memoryGrowth` (`not_measured.dimension` holds the last) |
+| `reason_param.name`, `adapter_param.name`, `adapter_cell_param.name` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAMS` (`rate`, `quantum`, `blocks`, ...; the adapter params' keys `notes`, `peak`, `quantum`, `rate`, `resp`, `step` are in it too) | added |
+| `reason_param.word`, `adapter_param.word`, `adapter_cell_param.word` | plugin-hostd | `qualification` | `QUALIFICATION_REASON_PARAM_WORDS` (`yes`, `perInstance`, `add`, `remove`: `step` names the mod-host command that did not answer, `add` or `remove`), and `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` (the word of `unmeasuredReason`, why a memory figure was not measured) | added; `remove` added for plugin-qualify#169 (section 9, ruling 12); the unmeasured reasons added for plugin-qualify 0.21.3's `hosting.memory.unmeasured` |
+| `tier.tier` | plugin-hostd | `qualification` | `QUALIFICATION_RECORD_TIERS` (`inProcess`, `isolated`: the keys of `tiers`) | added |
+| `cell.latency_unmeasured_reason`, `cell.mem_unmeasured_reason` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_UNMEASURED_REASONS` | exists; it holds every value of both columns today (`voices-unknown`, `probe-error`, `not-attempted`, ...). `QUALIFICATION_RESOURCE_UNMEASURED_REASONS` (`unmeasured-on-class`, `limit-exceeded`) is the resource budget's, and no record holds its words |
+| `cell.voices_basis`, `cost_entry.voices_basis`, `cell.mem_basis` | plugin-hostd | `qualification` | `QUALIFICATION_MEASUREMENT_VOICE_BASES` | exists |
+| `cell.mem_limit_mechanism` | plugin-hostd | `qualification` | `QUALIFICATION_MEMORY_LIMIT_MECHANISMS` (`rlimit-data`) | added |
+| `cell.note_sweep_dialect` | plugin-hostd | `qualification` | `QUALIFICATION_NOTE_SWEEP_DIALECTS` (`midi`, `clap`) | added |
+| `run_step.step` | plugin-hostd | `qualification` | `QUALIFICATION_RUN_STEPS` (`scan`, `describe`, `probe`, `rt-safety`, `isolated`, `pool`) | added |
+| `run_step.result` | plugin-hostd | `qualification`, `probe` | `QUALIFICATION_STEP_RESULTS` (`ok`, `safe`, `unsafe`, `refused`, `not-asked`, ...), `PROBE_OUTCOMES` and `QUALIFICATION_MEMORY_BOUND_OUTCOMES` (a step ends `probe.oom` when plugin-qualify's own bound stops it) | added |
+| `run_step.code` | plugin-hostd | `qualification` | `QUALIFICATION_STEP_CODES` (`isolated.not-added`, `pool.not-watched`, ...) | added |
+| `rejudged_owe.code` | plugin-hostd | `qualification` | `QUALIFICATION_REJUDGE_OWES` | added |
+| `rejudged_owe.measurement` | plugin-hostd | `qualification` | `QUALIFICATION_REJUDGE_MEASUREMENTS` | added |
+| `history_verdict.host` | plugin-hostd | `qualification` | `QUALIFICATION_HOST_PROFILES` | exists |
+| `history_verdict.measured`, `.adjusted` | plugin-hostd | `qualification` | `QUALIFICATION_PIN_VERDICTS` (the `PIN_VERDICTS` of `pins-file.ts`: `in-process`, `isolated`, `refused`) | added |
+| `history_verdict.move` | plugin-hostd | `qualification` | `QUALIFICATION_HISTORY_MOVES` (`demote`, `promote`, `none`) | added |
+| `history_verdict.reason` | plugin-hostd | `qualification` | `QUALIFICATION_HISTORY_REASONS` (`history.crashed`, `history.steady`, `history.no-record`, ...: `HISTORY_REASON`) | added |
+| `history_blocked.code` | plugin-hostd, omx-clap | `qualification`, `hosting`, `probe` | `QUALIFICATION_HISTORY_BLOCKERS` (the words `blockers()` of `history-adjust.ts` writes that are no reason code: `refused`, `unknown`, `no-deciding-reason`; plugin-qualify names them) and the items of `reason.code` | added |
 
 An adapter code is written `<host>.<kind>` or `<host>.<kind>-<parameter>` and stored as written. Its check splits it:
 `<host>` is a word of `QUALIFICATION_ADAPTER_HOSTS`, `<kind>` a word of `QUALIFICATION_ADAPTER_CODE_KINDS`, and the
@@ -735,6 +755,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `verdicts[].reasons[].dimension`, `.rating`, `.code` | `reason.*` with `verdict_ord` = the verdict's `ord` |
 | `verdicts[].reasons[].params.<name>` | `reason_param.name`, `.number` or `.word` |
 | `cost[].host`, `.rate`, `.quantum` | `cost_entry.*` |
+| `cost[].voices.basis`, `.capacity`, `.held` | `cost_entry.voices_basis`, `.voices_capacity`, `.voices_held` (NULL when absent) |
 | `cost[].reasons[]` and their `params` | `reason`, `reason_param` with `cost_ord` = the cost entry's `ord` |
 | `tiers.inProcess.*`, `tiers.isolated.*` (`host`, `measured`, `qualified`, `rating`, `deciding`, `runsAlone`) | `tier` row with `tier` = `inProcess` or `isolated` |
 | `tiers.offeredOn[]` | `tier_offered.tier` |
@@ -743,12 +764,13 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `measurements.grid[].latencyMs` | `cell.latency_ms` (NULL when absent): stored as written, never recomputed from the frames, and read back as the shortest decimal that gives the same double (as `JSON.stringify` writes it) |
 | `measurements.grid[].cost.median`, `.percentile.p`, `.percentile.value`, `.blocks`, `.warmupBlocks` | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value`, `.cost_blocks`, `.cost_warmup_blocks` |
 | `measurements.grid[].cost.voices.basis`, `.capacity`, `.held` | `cell.voices_basis`, `.voices_capacity`, `.voices_held` |
+| `measurements.grid[].cost.voiceCurve[].held`, `.median`, `.percentile.p`, `.percentile.value` | `cell_voice_point.held`, `.median`, `.percentile_p`, `.percentile_value`, in `ord` |
 | `measurements.grid[].memory.afterInstantiateKb`, `.afterActivateKb`, `.atRestKb`, `.secondInstanceKb`, `.firstInstanceKb`, `.perInstanceKb`, `.notesHeldKb`, `.basis`, `.unmeasuredReason` | `cell.mem_after_instantiate_kb`, `.mem_after_activate_kb`, `.mem_at_rest_kb`, `.mem_second_instance_kb`, `.mem_first_instance_kb`, `.mem_per_instance_kb`, `.mem_notes_held_kb`, `.mem_basis`, `.mem_unmeasured_reason` |
 | `measurements.grid[].memoryLimit.bytes`, `.mechanism` | `cell.mem_limit_bytes`, `.mem_limit_mechanism` |
-| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`) |
+| `measurements.grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls`, `.threadViolations`, `.processErrors`, `.ownThreads` | `cell.rt_*` of the same names (`ownThreads` as `rt_own_threads`); `allocations`, `locks` and `syscalls` all three or none, and `events` with them: a cell whose interposer ran and whose sweep did not count carries neither (the probe output's counts and events are optional; one cell of the reference sets of #67) |
 | `measurements.grid[].rtSafety.otherThreads.allocations`, `.locks`, `.syscalls` | `cell.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (the record's grid carries the probe point's names for these counts) |
 | `hostExtensions[]` (a CLAP record's; the probe output's `offer.clapExtensions`, section 6.2) | `record_extension.extension`; presence: `record.host_extensions` |
-| `measurements.grid[].rtSafety.events[]` | `cell_event.event` |
+| `measurements.grid[].rtSafety.events[]` | `cell_event.event`; presence: `cell.rt_events` (1 when the list is present, possibly empty; NULL when absent) |
 | `measurements.grid[].noteSweep.applicable`, `.dialect`, `.allocations`, `.locks`, `.syscalls` | `cell.note_sweep_*` |
 | `measurements.unmeasured[].dimension`, `.code`, `.rate`, `.quantum` | `unmeasured.*` |
 | `measurements.behaviour.lifecycle.cycles`, `.failed`, `.instantiated` | `record.lifecycle_*` |
@@ -762,6 +784,7 @@ Every leaf of `plugin-qualify.qualification-record/1` as today's records hold it
 | `adapter.admitted`, `.host`, `.measured`, `.code`, `.measuredAt` | `record.adapter_*` |
 | `adapter.versions.<name>` | `record_version` with `rejudged` = 0 |
 | `adapter.params.<name>` | `adapter_param.name`, `.number` or `.word`; presence: `record.adapter_params` (NULL with no `adapter` object, 1 when `params` is present, 0 when absent) |
+| `adapter.params.content`, `.loaded`, `.refused` | `record.adapter_content`, `.adapter_loaded`, `.adapter_refused`: names as written, not words (an instrument's content parameters, plugin-qualify's `contentParams`); read back after the other params, in this order |
 | `adapter.cells[].rate`, `.quantum`, `.admitted`, `.measured`, `.code` | `adapter_cell.*` |
 | `adapter.cells[].params.<name>` | `adapter_cell_param.name`, `.number` or `.word`; presence: `adapter_cell.params` |
 | `memoryRun.measuredAt`, `.runId`, `.tool.runner`, `.tool.child` | `record.memory_run_measured_at`, `.memory_run_id`, `.memory_run_runner`, `.memory_run_child` |
@@ -806,6 +829,8 @@ migration writes NULL in all six for every one of the 12,953 records:
 - `measurements.grid[].memory.unmeasuredDetail` (`mem_unmeasured_reason` is stored);
 - `measurements.unmeasured[].detail` (`code` and `dimension` are stored);
 - `binary.unpinnable` (its presence is stored as `record.unpinnable` = 1);
+- `adapter.params.problem` (why the level under a held note could not be read; `record.adapter_code`,
+  `omx-clap-host.level-unmeasured`, is stored);
 - `tiers.dimmed` (a joined string `<host>: <deciding>; ...`, each part of which is in `tier` and `verdict`);
 - of each `provenance.json`: `image`, `board`, `kernel`, `realtime`, `jack`, `grid`, `tierNote`, `settings.note`,
   `sources`, `repositories`.
@@ -816,23 +841,41 @@ lists (section 9, ruling 1).
 
 ### 3.6 `user_version`
 
-`PRAGMA user_version = 1` for this schema, set by the writer as the last statement of a build. The rule:
+`PRAGMA user_version = 2` for this schema, set by the writer as the last statement of a build. The rule:
 
-- There is ONE version, `PQDB_SCHEMA_VERSION` (1). It is written in two places, the header line of
-  `schema/qualification.sql` (`user_version 1`), which the writer reads, and `pqdb.h`, which the reader compiles; a
-  test holds the two equal. Any change of the DDL after a release is +1. No release carries a store yet (changes 2
-  and 3 release with the consumer switch, section 9, ruling 8), so the DDL of section 3.7's amendment is version 1, and
-  no store of an earlier shape exists to refuse. This holds only if no release of this repository ships a store before
-  the code of this amendment lands (section 9, ruling 10; section 10): that code must land before this pass's
-  release of this repository, or the DDL is version 2. A reader reads exactly its version; there is no range
-  and no reader of an older version.
-- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` (`schema-other`, naming the
-  file, its version and the reader's); a base and a user layer at different versions (`schema-mismatch`, naming both
-  files and both versions, checked first); 0, a file that is no store (`not-a-store`).
-- The base database is never upgraded: each build writes it new, at the writer's version. A package whose base is at a
-  new version depends on the reader at the floor that reads it.
-- The user layer is not upgraded in place in this pass: there is one version. A later version states its own rule,
-  with the owner (section 10).
+- There is ONE version, `PQDB_SCHEMA_VERSION` (2). It is written in two places, the header line of
+  `schema/qualification.sql` (`user_version 2`), which the writer reads, and `pqdb.h`, which the reader compiles; a
+  test holds the two equal. Any change of the DDL after a release is +1.
+- Version 1 is every layer the dated packages wrote: a device's user layer is at 1. The DDL of v2026112401 then
+  gained `cell_voice_point`, `record.adapter_content`, `.adapter_loaded`, `.adapter_refused`, `cost_entry.voices_basis`,
+  `.voices_capacity`, `.voices_held`, `cell.rt_events` and two table CHECKs of `cell` at the same number, and the later
+  dated builds wrote that DDL at 1 too; so the release of 0.1.x is version 2 (section 9, ruling 10 foresaw it).
+- The reader refuses, by name: a file whose `user_version` is not `PQDB_SCHEMA_VERSION` and that no migration takes
+  to it (`schema-other`, naming the file, its version and the reader's); a base and a user layer at different versions
+  (`schema-mismatch`, naming both files and both versions, checked after a user layer's migration); 0, a file that is
+  no store (`not-a-store`).
+- The base database is never upgraded: each build writes it new, at the writer's version, from `records/`. A package
+  whose base is at a new version depends on the reader at the floor that reads it.
+- **The user layer is migrated in place** (owner, 2026-11-27: migrate, do not measure again). A migration is one step,
+  `schema/migrations/<from>-to-<to>.sql`, installed beside the DDL (`migrations/`) and compiled into the reader. The
+  writer, on a put or a delete, and the reader, on open, find the user layer below the current version, copy it to
+  `<layer>.user_version-<from>` (SQLite's backup), and migrate it in ONE transaction with foreign keys off. The part
+  every step shares is the runner's: it drops the layer's indexes and triggers, renames every table T to `v1_T` and
+  adds to it each column of the current T it lacks (NULL in every row); the step then runs over the `v1_` tables (it
+  fills what a new column says of the old rows and renames words); the current DDL runs; every row is copied, column
+  by column, and the `v1_` tables are dropped. So a layer at 1 in either dated shape keeps every row and every column
+  it holds. Before COMMIT the foreign keys are checked and every stored word is checked against the installed
+  domains; a word none of its column's items holds, which the step does not rename, is refused by name
+  (`migration-word-unknown` from the writer, `word-unknown` from the reader) and the layer is left as it was; so is a
+  table of the old layer the current DDL has no place for. A store already at the current version is not touched, so
+  a second open changes nothing.
+- **1 to 2 renames no word.** The words every word column's items held at version 1 (the domains of plugin-hostd,
+  plugin-hostd-protocol, plugin-db and omx-clap-core at 2026-11-24, `qualification` 1.4.0, `machine` 1.1.0, `probe`
+  1.0.0, `plugin-db` 1.0.0, the omx-clap package's codes 0.34.1) are all words of the same items at 2; 2 only adds
+  words. The step names every domain at 0.1.0 in `store_domain` (every domain started again at 0.1.0, owner
+  2026-11-25, and the words of 1 are words of each at 0.1.0), adds the four `word_check` items 2 reads that 1 did
+  not, and sets `cell.rt_events` to 1 where the audio thread's counts are (version 1 wrote `rtSafety.events` with
+  them, always).
 
 ### 3.7 Binary identity, the key's SHA-256 and the pin
 
@@ -1155,9 +1198,8 @@ int  pqdb_verdicts(const pqdb *db, const pqdb_result *r, int (*each)(const char 
     passed through when the domain cannot be opened.
 - **Word check at open.** `pqdb_open` opens each domain of `store_domain` through omx-contract's loader
   (`omx_domain_open(domain, floor)`), then for each column of `word_check` reads its distinct words and looks each up
-  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. This pass the
-  `hosting` row and its columns are skipped (section 3.4, the hosting exception); `hosting-skip-ends` fails once a
-  `hosting` domain exists and the skip is still there.
+  in the column's items (`omx_domain_word`). It is done once, at open; no lookup checks a word again. The `hosting`
+  row and its columns are checked as the others (section 3.4: the hosting exception has ended).
 - **Concurrency.** The base is opened `file:<path>?mode=ro&immutable=1`: no lock, no journal, nothing written. A package
   upgrade renames a new file over it; an open handle keeps reading the old one until it is closed. The user layer is
   opened `mode=ro` with `busy_timeout` 250 ms; it uses the rollback journal (`journal_mode` `DELETE`), not WAL, because a
@@ -1281,7 +1323,7 @@ function that does; a field the table says nothing decides is carried into the j
 | `grid[].latency.declaredFrames`, `.measuredFrames` | the CLAP line's `latency`; no reason | `cell.latency_declared_frames`, `.latency_measured_frames` |
 | `grid[].cost.median`, `.percentile.p`, `.percentile.value` | `gridCostReadings`, `hostingCostReasons` (only `p` = 95 counts; the core fraction is computed from `value` and `rate`) | `cell.cost_median`, `.cost_percentile_p`, `.cost_percentile_value` |
 | `grid[].cost.voices.held`, `.basis`, `.capacity` | `costOf` (kept beside the cost) | `cell.voices_held`, `.voices_basis`, `.voices_capacity` |
-| `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` not stored, and not read |
+| `grid[].cost.blocks`, `.warmupBlocks`, `.voiceCurve` | nothing | `cell.cost_blocks`, `.cost_warmup_blocks`; `voiceCurve` as `cell_voice_point` rows (section 9, ruling 12), read by no verdict |
 | `grid[].rtSafety.interposer`, `.swept`, `.sweepApplicable`, `.blocks`, `.allocations`, `.locks`, `.syscalls` | `rtSafetyOfProbeOutput`, `rtSafetyReasons`, `processCalls` | `cell.rt_interposer`, `.rt_swept`, `.rt_sweep_applicable`, `.rt_blocks`, `.rt_allocations`, `.rt_locks`, `.rt_syscalls` |
 | `grid[].rtSafety.threadViolations`, `.processErrors` | `clapRtReasons` | `cell.rt_thread_violations`, `.rt_process_errors` |
 | `grid[].rtSafety.ownThreads`, `.otherThreads.allocations`, `.locks`, `.syscalls` | not read on plugin-qualify's `main`; read by the judge once plugin-qualify#119 merges (`hosting.rt-safety.own-threads` is conditional, and the other-thread counts are a figure, never the verdict) | NEW: `cell.rt_own_threads`, `.rt_other_allocations`, `.rt_other_locks`, `.rt_other_syscalls` (NULL where not taken; the three counts all or none; the record's grid carries the probe point's names for them). Records of today hold none |
@@ -1310,14 +1352,14 @@ probe judge over every record of `records/`.
 
 ## 7. Packaging
 
-| package | ships | built how | new dependencies (floors only) |
+| package | ships | built how | new dependencies (no OpenMixer version written by hand) |
 | --- | --- | --- | --- |
-| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualify-contract (>= <the release of the precondition 1 minor>~)`, `plugin-hostd-contract (>= <the release carrying MACHINE_FAMILIES>~)`, `plugin-db-contract (>= <the release publishing its formats as a domain item>~)`, `omx-clap-core-contract (>= <the release publishing the `hosting` domain>~)`, `pkg-config` and the contract directory's path (the `contractdir` variable of `libomx-domain.pc`, which the reader's Build-Depends already carry); RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same four contract floors. Run time: none |
-| `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` at the floor its symbols file gives (`${shlibs:Depends}`), and the same three contract floors |
+| `plugin-qualification-records` (change 2) | `/usr/share/omx/qualification/qualification.sqlite` beside today's files | generated at package build by `tools/records-db.py` from `records/`, for the classes of the architecture | Build-Depends: `python3:native` (with its `sqlite3` module), `python3-jsonschema:native`, `libsqlite3-0 (>= 3.37.0)`, `plugin-hostd-contract`, `plugin-hostd-protocol-contract`, `plugin-db-contract`, `omx-clap-contract`, `pkg-config` and the contract directory's path (the `contractdir` variable of `libomx-domain.pc`, which the reader's Build-Depends already carry); RPM BuildRequires: `python3`, `python3-jsonschema`, `sqlite-libs >= 3.37.0`, and the same four contract packages (no `plugin-qualify-contract`: its `qualification` domain moved to `plugin-hostd-contract`, and the two conflict on the domain's files). Run time: none |
+| `libplugin-qualification-db0` (change 3) | the C library | built from `src/` | `libsqlite3-0 (>= 3.37.0)` stated explicitly (RPM: `sqlite-libs >= 3.37.0`), `libomx-domain0` from `${shlibs:Depends}` (RPM: the generated soname dependency) |
 | `libplugin-qualification-db-dev` (change 3) | header, `.so`, `.pc` (its `schema` variable names the DDL of `plugin-qualification-db-schema`) | | `libplugin-qualification-db0 (= ${binary:Version})`, `plugin-qualification-db-schema (= ${source:Version})` |
 | `plugin-qualification-db` (change 3) | the command | | `${shlibs:Depends}` |
 | `plugin-qualification-db-schema` (change 3, with the writer) | the DDL, at `<datadir>/plugin-qualification-db/qualification.sql`, one copy; architecture independent | | none; `libplugin-qualification-db-dev` and `plugin-qualification-db-write` depend on it, and the `.pc`'s `schema` variable names its file |
-| `plugin-qualification-db-write` (change 3, with the writer) | `tools/qualification_db.py` and the command `plugin-qualification-db-write` (`put`, `delete`, section 6.1), the module that builds the base | | `python3`, `python3-jsonschema`, `libsqlite3-0 (>= 3.37.0)`, the three contract floors, `plugin-qualification-db-schema (= ${source:Version})`; RPM: the same names |
+| `plugin-qualification-db-write` (change 3, with the writer) | `tools/qualification_db.py` and the command `plugin-qualification-db-write` (`put`, `delete`, section 6.1), the module that builds the base | | `python3`, `python3-jsonschema`, `libsqlite3-0 (>= 3.37.0)`, `plugin-qualification-db-schema (= ${source:Version})`; RPM: the same names |
 
 **Generated, not committed.** Today's records are text (JSON, 248 MB unpacked), reviewed as text and never rewritten.
 A committed database would be a second copy of them that a diff cannot show and that can drift from `records/`.
@@ -1327,7 +1369,8 @@ held by the round-trip test. `sets.py check` and `tools/check-records.py` stay t
 **SQLite floor.** 3.37.0 is the first SQLite with `STRICT` tables, which every table of section 3.3 is. It is stated
 as an explicit floor in both formats, at build and at run time: `libsqlite3-0 (>= 3.37.0)` and `sqlite-libs >= 3.37.0`.
 
-No version ceiling is added anywhere.
+The SQLite floor is third-party and stays. No OpenMixer package is named with a version written by hand (devel wave
+2026-11-24), and no version ceiling is added anywhere.
 
 ## 8. Red-first tests
 
@@ -1351,8 +1394,8 @@ makes it fail.
 7. **Sentence not stored.** No TEXT value in the database holds a field of the sentence list (search for their exact
    strings from the fixtures). Fails when a detail is written into a column.
 8. **Store info.** `user_version` = `PQDB_SCHEMA_VERSION`, `store_info.user_layer` = 0, one `store_domain` row per
-   domain at its installed `info.version` (`hosting` at the installed omx-clap-core contract package's version, this
-   pass), and a `word_check` row for every word column of section 3.4. Fails when any
+   domain at its installed `info.version` (`hosting` at omx-clap's `hosting` domain's
+   version), and a `word_check` row for every word column of section 3.4. Fails when any
    is missing, a word column has no item, or the pragma is not set last.
 9. **Refusals leave nothing.** An absent contract directory (`contract.dir.absent`), a probe file whose SHA-256 differs
    from the record's, an empty object, and a second claim on one key and cell from two sets of one tier each refuse by
@@ -1408,6 +1451,12 @@ makes it fail.
     `hostExtensions` (a probe that ended before the offer) is stored with `host_extensions` NULL, which the row judge
     reads as `[]`; C6b holds byte-equal on all 254 such records of `records/`. Fails when presence of an empty list is lost, or the all-or-none `CHECK` is
     dropped.
+26. **The instrument fields and the adapter's content (#72).** A fixture record with `cost[].voices`
+    `{"held": 16, "basis": "probe"}`, a cell whose `cost.voiceCurve` holds two points, a cell whose `rtSafety` carries no
+    counts and no events, and `adapter.params` with `content`, `loaded`, `refused` and `problem` reads back exactly, `problem` absent
+    (a sentence); a cell with one of the three audio-thread counts only is refused by the schema, and an adapter cell's
+    `params.content` is refused as `word-unknown` (only the record's adapter pass carries content). Fails when a column
+    or the table is dropped, or when the content is written as a word.
 
 ### Change 3: the reader
 
@@ -1576,6 +1625,16 @@ Decided by the owner (2026-11-19):
     lands, so that code lands before this pass's release of this repository.
 11. **DECIDED (%7, ruling (a)): rejudge works from rows only.** Probe bytes are never kept beside the store. Any field
     the judge needs gets a column, including `ownThreads` and `otherThreads` (section 6.2).
+
+12. **DECIDED (plugin-db-qualification#72, plugin-qualify#169, 2026-11-24): every field plugin-qualify 0.20.6 writes
+    is mapped.** The three reference sets of #67 carried fields no column held, and one refused record refuses the base.
+    A measured figure is data, so it is stored, never dropped by the reader: `cost[].voices` as `cost_entry.voices_*`
+    (the cell's columns, one level up), `cost.voiceCurve[]` as `cell_voice_point` rows. A params map holds figures
+    (numbers and the domain's words); the adapter pass's `content`, `loaded` and `refused` are names (parameter URIs),
+    so they get columns of their own and no domain word, and `problem` is prose, a sentence (ruling 1). The audio
+    thread's counts and its events are optional as the probe output has them, present together or not at all. `remove` beside `add` is the
+    owner's word (plugin-hostd's `qualification` domain), not a store exception. The record files are not edited: the
+    store's mapping and the domain change, so a record plugin-qualify wrote builds as it is.
 
 The records a device already holds in its `qualification_dir` are not migrated, imported or read by the switch: the
 sync measures a plugin that the base does not hold, and the old files stay on the device unread. No program converts

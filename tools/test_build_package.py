@@ -22,9 +22,11 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-# the version the spec carries today: a build at it changes nothing in debian/ the test does not expect
+# the version and release the spec carries today: a build at them changes nothing the test does not expect
 with open(os.path.join(ROOT, "packaging", "plugin-qualification-records.spec")) as _f:
-    VERSION = next(l.split()[1] for l in _f if l.startswith("Version:"))
+    _spec = _f.read().splitlines()
+VERSION = next(l.split()[1] for l in _spec if l.startswith("Version:"))
+RELEASE = next(l.split()[1].split("%")[0] for l in _spec if l.startswith("Release:"))
 DATA = os.path.join(HERE, "testdata")
 RUN = os.path.join(DATA, "run")
 CELLS = {"48000-512": "48000/512", "96000-256": "96000/256"}
@@ -36,6 +38,24 @@ spec.loader.exec_module(check)
 spec = importlib.util.spec_from_file_location("sets", os.path.join(HERE, "sets.py"))
 sets = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sets)
+
+
+_gspec = importlib.util.spec_from_file_location("golden_domain", os.path.join(HERE, "golden_domain.py"))
+golden = importlib.util.module_from_spec(_gspec)
+_gspec.loader.exec_module(golden)
+_DOMAIN = []
+
+
+def setUpModule():
+    """the golden domain, where the record check reads it (OMX_CONTRACT_PATH): the tests read no installed one"""
+    tmp = tempfile.TemporaryDirectory()
+    _DOMAIN.append(tmp)
+    os.environ["OMX_CONTRACT_PATH"] = golden.write_domain(tmp.name)
+
+
+def tearDownModule():
+    os.environ.pop("OMX_CONTRACT_PATH", None)
+    _DOMAIN.pop().cleanup()
 
 
 class BuildPackage(unittest.TestCase):
@@ -52,22 +72,22 @@ class BuildPackage(unittest.TestCase):
         os.makedirs(self.other)
         with open(os.path.join(self.other, "provenance.json"), "w") as f:
             f.write("{}\n")
-        # the tree as it starts: no x86-64 set and the arm64 deb the only format released, the spec's block written for that
+        # the tree as it starts: no x86-64 set and the arm64 deb the only format released
         ra = os.path.join(self.tree, "packaging", "release-arches")
         with open(ra) as f:
             head = [l for l in f if l.startswith("#")]
         with open(ra, "w") as f:
             f.write("".join(head) + "deb arm64\nrpm\n")
-        self.assertEqual(sets.main(["spec"], root=self.tree), 0)
         self.debian = self.snapshot("debian")
 
     def tearDown(self):
         self.tmp.cleanup()
 
-    def build(self, *args, version=VERSION, rc=0):
+    def build(self, *args, version=VERSION, release=RELEASE, rc=0):
         env = dict(os.environ, PATH=DATA + os.pathsep + os.environ["PATH"])
         r = subprocess.run(["bash", os.path.join(self.tree, "tools", "build-package.sh"), *args,
-                            "--provenance", os.path.join(DATA, "provenance.json"), "--version", version],
+                            "--provenance", os.path.join(DATA, "provenance.json"), "--version", version,
+                            "--release", release],
                            capture_output=True, text=True, env=env)
         self.assertEqual(r.returncode, rc, r.stdout + r.stderr)
         return r
@@ -141,27 +161,30 @@ class BuildPackage(unittest.TestCase):
                          ["zynthian-vangelis", "zynthian-vangelis-48000-512", "zynthian-vangelis-96000-256"])
         for suffix, cell in CELLS.items():
             self.assert_cell_set("rpi5", f"zynthian-vangelis-{suffix}", cell, f"b{suffix}")
-        # no stanza and no install file: the arm64 package carries records/rpi5/ whole. The spec's aarch64 block
-        # gains the new sets' names and nothing else moves
+        # no stanza and no install file: the arm64 package carries records/rpi5/ whole, and the spec does not move
         self.assertEqual(self.snapshot("debian"), self.debian)
         spec = self.spec_text()
         self.assertNotRegex(spec, r"(?m)^(Provides|Obsoletes|Conflicts):")
         self.assertEqual(spec, spec_before)
         self.assertEqual(os.listdir(self.other), ["provenance.json"])
         self.assertEqual(sets.problems(self.tree), [])
-        out = subprocess.run(["python3", os.path.join(self.tree, "tools", "sets.py"), "substvars", "arm64"],
-                             capture_output=True, text=True, check=True).stdout
-        # the floor is packaging/arch-classes' value for arm64, not a number written here
-        floor = [c["from"] for c in sets.arch_classes(self.tree) if c["deb"] == "arm64"]
-        self.assertEqual(len(floor), 1)
-        self.assertEqual(out, f"qualify:Depends=plugin-qualify (>= {floor[0]}~)\n")
 
     def test_the_version_goes_where_it_lives(self):
-        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101")
-        self.assertIn("\nVersion: 2026120101\n", self.spec_text())
-        self.assertTrue(self.read("debian", "changelog").startswith("plugin-db-qualification (2026120101) unstable"))
-        self.assertIn("debian/changelog: the top entry now names 2026120101", r.stderr)
+        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="0.2.0",
+                       release="2026120101")
+        self.assertIn("\nVersion: 0.2.0\nRelease: 2026120101%{?dist}\n", self.spec_text())
+        self.assertTrue(self.read("debian", "changelog").startswith("plugin-db-qualification (0.2.0) unstable"))
+        self.assertIn("debian/changelog: the top entry now names 0.2.0", r.stderr)
         self.assertEqual(sets.problems(self.tree), [])
+
+    def test_a_dated_version_or_an_undated_release_is_refused(self):
+        """#81: the date stamp is --release, never --version; nothing is written on a refusal."""
+        spec_before = self.spec_text()
+        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", version="2026120101", rc=2)
+        self.assertIn("--version 2026120101 is not 0.MAJOR.MINOR", r.stderr)
+        r = self.build("--from-run", RUN, "--set", "fedora44", "--host-class", "x86-64", release="1", rc=2)
+        self.assertIn("--release 1 is not YYYYMMDDXX", r.stderr)
+        self.assertEqual(self.spec_text(), spec_before)
 
     def test_a_class_with_no_architecture_is_refused(self):
         r = self.build("--from-run", RUN, "--set", "bullseye", "--host-class", "pi4", rc=2)
